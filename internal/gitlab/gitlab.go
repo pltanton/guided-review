@@ -139,11 +139,15 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 			return nil, fmt.Errorf("decode discussions: %w", err)
 		}
 		for _, d := range page {
-			if len(d.Notes) == 0 || d.Notes[0].System || strings.TrimSpace(htmlComment.ReplaceAllString(d.Notes[0].Body, "")) == "" {
+			if len(d.Notes) == 0 || d.Notes[0].System {
 				continue
 			}
 			first := d.Notes[0]
-			disc := Discussion{ID: d.ID, Author: first.Author.Username, Body: first.Body, Replies: len(d.Notes) - 1, Resolved: first.Resolved}
+			body := strings.TrimSpace(htmlComment.ReplaceAllString(first.Body, ""))
+			if body == "" {
+				continue
+			}
+			disc := Discussion{ID: d.ID, Author: first.Author.Username, Body: body, Replies: len(d.Notes) - 1, Resolved: first.Resolved}
 			if p := first.Position; p != nil {
 				switch {
 				case p.NewLine != nil:

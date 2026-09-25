@@ -380,3 +380,18 @@ func TestFilesPanel(t *testing.T) {
 		t.Fatalf("click on a.go → %+v", m.current())
 	}
 }
+
+func TestResolvedDiscussionsHidden(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Discussions = []state.Discussion{
+		{Author: "a", Body: "open one", File: "a.go", Line: 1},
+		{Author: "b", Body: "done one", File: "a.go", Line: 1, Resolved: true},
+	}
+	var texts []string
+	for _, n := range m.notes() {
+		texts = append(texts, n.Text)
+	}
+	if !reflect.DeepEqual(texts, []string{"open one"}) {
+		t.Fatalf("notes = %v", texts)
+	}
+}

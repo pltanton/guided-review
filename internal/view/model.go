@@ -163,11 +163,11 @@ func (m *model) notes() []Note {
 	}
 	out = append(out, m.pendingNotes()...)
 	for _, d := range m.review.Discussions {
-		if d.File == "" || d.OldLine {
+		if d.File == "" || d.OldLine || d.Resolved {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
-		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body, Dim: d.Resolved})
+		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body})
 	}
 	return out
 }
