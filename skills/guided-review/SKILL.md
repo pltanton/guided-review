@@ -118,6 +118,10 @@ steps:
    `--suggestion` is the full replacement text for the lines; use it only for a nit
    or minor with an obvious fix.
 
+   An event can carry an earlier step's id: the human is looking back at it in the
+   viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
+   and do not move the current step; they return to it themselves.
+
 4. After a blocker gr prints the stale steps. `gr say` once: «дальше смотрим
    независимые (N шагов) или завершаем?» and wait.
 5. If the human writes in the terminal chat instead, handle it the same way, then

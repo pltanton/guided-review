@@ -2,8 +2,6 @@ package view
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/aplotnikov/guided-review/internal/inbox"
 )
 
 const wheelStep = 3
@@ -29,7 +27,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			if msg.Y < len(side) {
 				switch e := side[msg.Y]; {
 				case e.step != "":
-					m.emit(inbox.Event{Kind: inbox.KindGoto, Step: e.step})
+					m.showStep(e.step)
 				case e.file != "":
 					m.jumpToFile(e.file)
 				}

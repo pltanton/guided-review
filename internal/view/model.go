@@ -69,6 +69,7 @@ type model struct {
 
 	focusFiles bool
 	fileCursor int
+	viewStep   string
 
 	composing   bool
 	composeKind string
@@ -113,7 +114,13 @@ func (m *model) reload() {
 		prev = m.step.ID
 	}
 	m.review, m.err = r, nil
-	m.step = r.Step(r.Current)
+	target := r.Current
+	if m.viewStep != "" && m.viewStep != r.Current && r.Step(m.viewStep) != nil {
+		target = m.viewStep
+	} else {
+		m.viewStep = ""
+	}
+	m.step = r.Step(target)
 	if m.step == nil {
 		m.rows, m.split, m.list = nil, nil, nil
 		return
@@ -343,6 +350,39 @@ func (m *model) jumpToFile(file string) {
 	}
 }
 
+func (m *model) showStep(id string) {
+	st := m.review.Step(id)
+	if st == nil {
+		return
+	}
+	m.viewStep = id
+	if id == m.review.Current {
+		m.viewStep = ""
+	}
+	m.step = st
+	m.visual, m.cursor, m.offset, m.context = false, 0, 0, defaultContext
+	if m.src != nil {
+		m.rebuild(true)
+	}
+}
+
+func (m *model) shiftStep(d int) {
+	if m.step == nil {
+		return
+	}
+	if i := m.review.StepIndex(m.step.ID) + d; i >= 0 && i < len(m.review.Steps) {
+		m.showStep(m.review.Steps[i].ID)
+	}
+}
+
+func (m *model) next() {
+	if m.viewStep != "" {
+		m.status = "viewing an earlier step: esc to return, then >"
+		return
+	}
+	m.emit(inbox.Event{Kind: inbox.KindNext})
+}
+
 func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	files := m.stepFiles()
 	switch msg.String() {
@@ -434,7 +474,16 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.visual = !m.visual
 		m.anchor = m.cursor
 	case "esc":
-		m.visual = false
+		switch {
+		case m.visual:
+			m.visual = false
+		case m.viewStep != "":
+			m.showStep(m.review.Current)
+		}
+	case "H":
+		m.shiftStep(-1)
+	case "L":
+		m.shiftStep(1)
 	case "c", "enter":
 		m.startCompose(inbox.KindMessage)
 	case "S":
@@ -442,7 +491,7 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case "?":
 		m.explain()
 	case ">":
-		m.emit(inbox.Event{Kind: inbox.KindNext})
+		m.next()
 	case "e":
 		return m.openEditor()
 	case "a":

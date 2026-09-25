@@ -138,8 +138,8 @@ func TestMouse(t *testing.T) {
 		t.Fatalf("drag selection = %q %q %v", file, lines, ok)
 	}
 	m.Update(tea.MouseMsg{X: 1, Y: 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
-	if len(*sent) != 1 || (*sent)[0] != (inbox.Event{Kind: inbox.KindGoto, Step: "s2"}) {
-		t.Fatalf("plan click sent %+v", *sent)
+	if len(*sent) != 0 || m.step.ID != "s2" || m.review.Current != "s1" {
+		t.Fatalf("plan click must preview s2 locally: sent %+v step %s current %s", *sent, m.step.ID, m.review.Current)
 	}
 }
 
@@ -397,5 +397,38 @@ func TestResolvedDiscussionsHidden(t *testing.T) {
 	}
 	if !reflect.DeepEqual(texts, []string{"open one"}) {
 		t.Fatalf("notes = %v", texts)
+	}
+}
+
+func TestStepPreview(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Steps[0].Status = state.StatusDone
+	m.review.Current = "s2"
+	m.step = &m.review.Steps[1]
+	m.Update(key("H"))
+	if m.step.ID != "s1" || m.review.Current != "s2" || m.review.Steps[0].Status != state.StatusDone {
+		t.Fatalf("H: step %s current %s", m.step.ID, m.review.Current)
+	}
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "viewing s1 · current is s2") {
+		t.Fatalf("preview banner missing:\n%s", out)
+	}
+	m.Update(key(">"))
+	if len(*sent) != 0 {
+		t.Fatalf("> in preview must not send: %+v", *sent)
+	}
+	m.Update(key("c"))
+	typeText(m, "late thought")
+	m.Update(key("enter"))
+	if len(*sent) != 1 || (*sent)[0].Step != "s1" {
+		t.Fatalf("message in preview must carry s1: %+v", *sent)
+	}
+	m.Update(key("L"))
+	if m.step.ID != "s2" || m.viewStep != "" {
+		t.Fatalf("L back to current: step %s view %q", m.step.ID, m.viewStep)
+	}
+	m.Update(key("H"))
+	m.Update(key("esc"))
+	if m.step.ID != "s2" {
+		t.Fatalf("esc must return to current, got %s", m.step.ID)
 	}
 }

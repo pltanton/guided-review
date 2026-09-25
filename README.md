@@ -50,7 +50,7 @@ Optional `.review.yaml` in the repository root:
 | `?` | ask the agent to explain the selection or the line |
 | `>` | next step |
 | `S` | skip the step with a reason |
-| click a step in the plan | go to it |
+| `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
 | `s` | split / unified diff |
 | `p` | show/hide the plan |
 | `m` | mouse capture on/off (off lets the terminal select text) |

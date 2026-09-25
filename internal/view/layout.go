@@ -32,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  f files  {/} file  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -44,7 +44,7 @@ type button struct {
 
 func footerButtons() []button {
 	return []button{
-		{"✓ next", ">", func(m *model) { m.emit(inbox.Event{Kind: inbox.KindNext}) }},
+		{"✓ next", ">", func(m *model) { m.next() }},
 		{"✎ message", "c", func(m *model) { m.startCompose(inbox.KindMessage) }},
 		{"? explain", "?", func(m *model) { m.explain() }},
 		{"↷ skip", "S", func(m *model) { m.startCompose(inbox.KindSkip) }},
@@ -108,6 +108,9 @@ func (m *model) header() []string {
 		title += fmt.Sprintf("  round %d", m.review.Round)
 	}
 	lines := []string{boldStyle.Render(title)}
+	if m.viewStep != "" {
+		lines = append(lines, hotStyle.Render(fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)))
+	}
 	if st.Note != "" {
 		lines = append(lines, dimStyle.Render(st.Note))
 	}
@@ -289,6 +292,9 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		}
 		if st.ID == m.review.Current {
 			glyph, style = "▶", cursorStyle
+		}
+		if m.viewStep != "" && m.step != nil && st.ID == m.step.ID {
+			glyph, style = "◆", hotStyle
 		}
 		line := fmt.Sprintf("%s %s %s", glyph, st.ID, st.Title)
 		if len(st.Hotspots) > 0 {
