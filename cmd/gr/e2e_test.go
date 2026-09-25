@@ -84,3 +84,64 @@ func TestInitMR(t *testing.T) {
 	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
 	assertContains(t, out, "review mr-7", "MR !7 Add guard")
 }
+
+const goodPlan = `summary: negative amounts are rejected
+boilerplate: [wire.go]
+steps:
+  - id: s1
+    title: Transfer guard
+    kind: logic
+    hunks: [{file: api/transfer.go}]
+    hotspots: [{cat: money, q: "0 for a negative amount — expected?"}]
+  - id: s2
+    title: Guard follow-up
+    kind: logic
+    hunks: [{file: api/transfer.go, lines: 7-8}]
+    depends_on: [s1]
+`
+
+func TestReviewLoop(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+
+	_, err := h.run("steps:\n  - id: s1\n    title: x\n    kind: logic\n    hunks: [{file: api/transfer.go, lines: 1-2}]\n", "plan", "set")
+	if err == nil || !strings.Contains(err.Error(), "not covered: api/transfer.go:4-6") || !strings.Contains(err.Error(), "not covered: wire.go:1-3") {
+		t.Fatalf("want coverage rejection, got %v", err)
+	}
+
+	out := h.mustRun(goodPlan, "plan", "set")
+	assertContains(t, out, "plan accepted: 2 steps", "s1 1/2 [pending] logic · Transfer guard", "hotspot money")
+
+	out = h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4-6", "--severity", "blocker", "reject", "negative", "amounts")
+	assertContains(t, out, "comment #1 blocker api/transfer.go:4-6", "stale (depend on a blocked step): s2")
+
+	out = h.mustRun("", "comment", "list")
+	assertContains(t, out, "#1 blocker s1 api/transfer.go:4-6  reject negative amounts")
+
+	_, err = h.run("", "status", "--gate")
+	if err == nil {
+		t.Fatal("gate must fail with s1 pending")
+	}
+
+	out = h.mustRun("", "step", "next")
+	assertContains(t, out, "all steps reviewed")
+
+	out = h.mustRun("", "status", "--gate")
+	assertContains(t, out, "✓ s1", "~ s2", "core 1/2 reviewed (0 skipped, 1 stale)", "hotspots 1/1", "boilerplate 1 files", "generated 1 files", "1 blocker", "gate: passed")
+
+	out = h.mustRun("", "step", "goto", "s2")
+	assertContains(t, out, "s2 2/2 [stale]")
+}
+
+func TestStepSkip(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	if _, err := h.run("", "step", "skip"); err == nil {
+		t.Fatal("skip without reason must fail")
+	}
+	out := h.mustRun("", "step", "skip", "--reason", "trivial")
+	assertContains(t, out, "s2 2/2 [pending]")
+	out = h.mustRun("", "step", "show", "s1")
+	assertContains(t, out, "[skipped]", "skipped: trivial")
+}
