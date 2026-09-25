@@ -107,6 +107,7 @@ func AddComment(r *state.Review, c state.Comment) (state.Comment, Impact, error)
 	if c.SHA == "" {
 		c.SHA = r.HeadSHA
 	}
+	c.Round = max(r.Round, 1)
 	for _, existing := range r.Comments {
 		c.ID = max(c.ID, existing.ID)
 	}

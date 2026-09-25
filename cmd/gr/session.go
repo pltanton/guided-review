@@ -43,7 +43,7 @@ func loadReview(ctx context.Context, dir string) (session, *state.Review, error)
 }
 
 func (s session) diffFiles(ctx context.Context, r *state.Review) ([]diff.File, error) {
-	raw, err := s.repo.Diff(ctx, r.BaseSHA, r.HeadSHA)
+	raw, err := s.repo.Diff(ctx, r.DiffBase(), r.HeadSHA)
 	if err != nil {
 		return nil, err
 	}

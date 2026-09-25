@@ -60,8 +60,8 @@ func (m *model) reload() {
 		m.review, m.step, m.rows, m.err = nil, nil, nil, err
 		return
 	}
-	if m.src == nil || m.src.base != r.BaseSHA || m.src.head != r.HeadSHA {
-		m.src = newGitSource(m.ctx, m.repo, r.BaseSHA, r.HeadSHA)
+	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
+		m.src = newGitSource(m.ctx, m.repo, r.DiffBase(), r.HeadSHA)
 	}
 	prev := ""
 	if m.step != nil {

@@ -192,3 +192,52 @@ func TestNotesAndResolve(t *testing.T) {
 	out = h.mustRun("", "comment", "list")
 	assertContains(t, out, "#1 nit s1 api/transfer.go:5  x  [resolved]")
 }
+
+func TestReReviewFixup(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5", "--severity", "major", "return an error")
+	h.mustRun("", "step", "next")
+
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+
+	out := h.mustRun("", "init")
+	assertContains(t, out, "round 2: fixups since", "open comments from earlier rounds: 1", "#1 major api/transfer.go:5  return an error", "wire.go  [modified]  4")
+	if strings.Contains(out, "api/transfer.go  [") {
+		t.Fatalf("round 2 must only show the fixup diff:\n%s", out)
+	}
+	_, err := h.run("steps:\n  - id: r1\n    title: x\n    kind: logic\n    hunks: [{file: api/transfer.go}]\n", "plan", "set")
+	if err == nil || !strings.Contains(err.Error(), "not in diff") {
+		t.Fatalf("round 2 plan over an unchanged file must be rejected, got %v", err)
+	}
+	out = h.mustRun("steps:\n  - id: r1\n    title: fixup\n    kind: logic\n    hunks: [{file: wire.go}]\n", "plan", "set")
+	assertContains(t, out, "plan accepted: 1 steps")
+	h.mustRun("", "comment", "resolve", "1")
+	out = h.mustRun("", "status")
+	assertContains(t, out, "round 2")
+}
+
+func TestReReviewRebase(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+
+	h.repo.Git("checkout", "-q", "main")
+	h.repo.Write("other.go", "package api\n")
+	h.repo.Commit("upstream")
+	h.repo.Git("checkout", "-q", "feature")
+	h.repo.Git("rebase", "-q", "main")
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 2\n")
+	h.repo.Git("commit", "-q", "-a", "--amend", "--no-edit")
+
+	out := h.mustRun("", "init")
+	assertContains(t, out, "round 2: rebased, changed files: wire.go")
+	_, err := h.run("steps:\n  - id: r1\n    title: x\n    kind: logic\n    hunks: [{file: api/transfer.go}]\n", "plan", "set")
+	if err == nil || !strings.Contains(err.Error(), "not covered: wire.go") {
+		t.Fatalf("want wire.go coverage error, got %v", err)
+	}
+	out = h.mustRun("steps:\n  - id: r1\n    title: wire\n    kind: logic\n    hunks: [{file: wire.go}]\n", "plan", "set")
+	assertContains(t, out, "plan accepted: 1 steps")
+}

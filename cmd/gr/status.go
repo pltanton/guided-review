@@ -35,6 +35,9 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 		fmt.Fprintf(w, "MR !%d %s\n", r.MR.IID, r.MR.Title)
 	}
 	fmt.Fprintf(w, "code: %s\n", codeDir(s, r))
+	if r.Round > 1 {
+		fmt.Fprintf(w, "round %d\n", r.Round)
+	}
 	printDiscussions(w, r)
 	if len(r.Steps) == 0 {
 		fmt.Fprintln(w, "no plan yet: pipe a plan to gr plan set")

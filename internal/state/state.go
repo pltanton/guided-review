@@ -39,20 +39,25 @@ var (
 )
 
 type Review struct {
-	ID          string       `yaml:"id"`
-	Source      string       `yaml:"source"`
-	BaseSHA     string       `yaml:"base_sha"`
-	StartSHA    string       `yaml:"start_sha,omitempty"`
-	HeadSHA     string       `yaml:"head_sha"`
-	MR          *MR          `yaml:"mr,omitempty"`
-	Worktree    string       `yaml:"worktree,omitempty"`
-	Domain      string       `yaml:"domain,omitempty"`
-	Files       []File       `yaml:"files"`
-	Summary     string       `yaml:"summary,omitempty"`
-	Steps       []Step       `yaml:"steps,omitempty"`
-	Current     string       `yaml:"current,omitempty"`
-	Comments    []Comment    `yaml:"comments,omitempty"`
-	Discussions []Discussion `yaml:"discussions,omitempty"`
+	ID           string       `yaml:"id"`
+	Source       string       `yaml:"source"`
+	BaseSHA      string       `yaml:"base_sha"`
+	StartSHA     string       `yaml:"start_sha,omitempty"`
+	HeadSHA      string       `yaml:"head_sha"`
+	MR           *MR          `yaml:"mr,omitempty"`
+	Worktree     string       `yaml:"worktree,omitempty"`
+	Round        int          `yaml:"round,omitempty"`
+	PrevHeadSHA  string       `yaml:"prev_head_sha,omitempty"`
+	RoundBaseSHA string       `yaml:"round_base_sha,omitempty"`
+	RoundRebased bool         `yaml:"round_rebased,omitempty"`
+	RoundFiles   []string     `yaml:"round_files,omitempty"`
+	Domain       string       `yaml:"domain,omitempty"`
+	Files        []File       `yaml:"files"`
+	Summary      string       `yaml:"summary,omitempty"`
+	Steps        []Step       `yaml:"steps,omitempty"`
+	Current      string       `yaml:"current,omitempty"`
+	Comments     []Comment    `yaml:"comments,omitempty"`
+	Discussions  []Discussion `yaml:"discussions,omitempty"`
 }
 
 type Discussion struct {
@@ -126,6 +131,13 @@ type Comment struct {
 	Suggestion string   `yaml:"suggestion,omitempty"`
 	Round      int      `yaml:"round,omitempty"`
 	Resolved   bool     `yaml:"resolved,omitempty"`
+}
+
+func (r *Review) DiffBase() string {
+	if r.RoundBaseSHA != "" {
+		return r.RoundBaseSHA
+	}
+	return r.BaseSHA
 }
 
 func (r *Review) Step(id string) *Step {

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/aplotnikov/guided-review/internal/classify"
@@ -64,6 +65,12 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		if err != nil {
 			return err
 		}
+		var roundFiles []diff.File
+		if r.HeadSHA != t.head {
+			if roundFiles, err = startRound(ctx, s.repo, r, t); err != nil {
+				return err
+			}
+		}
 		r.Worktree = worktree
 		if err := syncDiscussions(ctx, e.glab, r); err != nil {
 			return err
@@ -73,6 +80,10 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		}
 		if err := s.store.SetCurrent(t.id); err != nil {
 			return err
+		}
+		if roundFiles != nil {
+			printRound(e.stdout, r, roundFiles, codeDir(s, r))
+			return nil
 		}
 		fmt.Fprintf(e.stdout, "review %s already exists, resuming (--force to start over)\ncode: %s\n\n", t.id, codeDir(s, r))
 		return cmdStatus(ctx, e, nil)
@@ -254,34 +265,130 @@ func sanitizeID(s string) string {
 }
 
 func buildReview(ctx context.Context, repo gitx.Repo, t target) (*state.Review, []diff.File, error) {
-	raw, err := repo.Diff(ctx, t.base, t.head)
+	cfg, err := config.Load(repo.Dir)
 	if err != nil {
 		return nil, nil, err
 	}
-	files, err := diff.Parse(raw)
+	files, stateFiles, err := reviewFiles(ctx, repo, cfg, t.base, t.head)
+	if err != nil {
+		return nil, nil, err
+	}
+	r := &state.Review{ID: t.id, Source: t.source, BaseSHA: t.base, StartSHA: t.start, HeadSHA: t.head, MR: t.mr, Domain: cfg.Domain, Files: stateFiles}
+	return r, files, nil
+}
+
+func reviewFiles(ctx context.Context, repo gitx.Repo, cfg config.Config, base, head string) ([]diff.File, []state.File, error) {
+	files, err := parseDiff(ctx, repo, base, head)
 	if err != nil {
 		return nil, nil, err
 	}
 	if len(files) == 0 {
 		return nil, nil, errors.New("no changes between base and head")
 	}
-	cfg, err := config.Load(repo.Dir)
-	if err != nil {
-		return nil, nil, err
-	}
 	attrs, _ := os.ReadFile(filepath.Join(repo.Dir, ".gitattributes"))
 	cls := classify.New(classify.DefaultPatterns, cfg.Generated, classify.GitattributesPatterns(string(attrs)))
-
-	r := &state.Review{ID: t.id, Source: t.source, BaseSHA: t.base, StartSHA: t.start, HeadSHA: t.head, MR: t.mr, Domain: cfg.Domain}
+	var out []state.File
 	for _, f := range files {
 		tier := state.TierCore
-		if cls.Generated(f.Path) || f.Status != diff.Deleted && !f.Binary && hasMarker(ctx, repo, t.head, f.Path) {
+		if cls.Generated(f.Path) || f.Status != diff.Deleted && !f.Binary && hasMarker(ctx, repo, head, f.Path) {
 			tier = state.TierGenerated
 		}
 		added, deleted := f.Stat()
-		r.Files = append(r.Files, state.File{Path: f.Path, OldPath: f.OldPath, Status: string(f.Status), Tier: tier, Added: added, Deleted: deleted})
+		out = append(out, state.File{Path: f.Path, OldPath: f.OldPath, Status: string(f.Status), Tier: tier, Added: added, Deleted: deleted})
 	}
-	return r, files, nil
+	return files, out, nil
+}
+
+func parseDiff(ctx context.Context, repo gitx.Repo, base, head string) ([]diff.File, error) {
+	raw, err := repo.Diff(ctx, base, head)
+	if err != nil {
+		return nil, err
+	}
+	return diff.Parse(raw)
+}
+
+func startRound(ctx context.Context, repo gitx.Repo, r *state.Review, t target) ([]diff.File, error) {
+	cfg, err := config.Load(repo.Dir)
+	if err != nil {
+		return nil, err
+	}
+	old := r.HeadSHA
+	r.Round = max(r.Round, 1) + 1
+	r.PrevHeadSHA = old
+	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles = "", false, nil
+	if repo.IsAncestor(ctx, old, t.head) {
+		r.RoundBaseSHA = old
+	} else {
+		prev, err := parseDiff(ctx, repo, r.BaseSHA, old)
+		if err != nil {
+			return nil, err
+		}
+		cur, err := parseDiff(ctx, repo, t.base, t.head)
+		if err != nil {
+			return nil, err
+		}
+		r.RoundRebased = true
+		r.RoundFiles = changedPatches(prev, cur)
+	}
+	r.BaseSHA, r.StartSHA, r.HeadSHA = t.base, t.start, t.head
+	files, stateFiles, err := reviewFiles(ctx, repo, cfg, r.DiffBase(), r.HeadSHA)
+	if err != nil {
+		return nil, err
+	}
+	r.Files = stateFiles
+	r.Steps, r.Current, r.Summary = nil, "", ""
+	return files, nil
+}
+
+func changedPatches(prev, cur []diff.File) []string {
+	sig := func(f diff.File) string {
+		var b strings.Builder
+		for _, h := range f.Hunks {
+			for _, l := range h.Lines {
+				b.WriteByte(l.Kind)
+				b.WriteString(l.Text)
+				b.WriteByte('\n')
+			}
+		}
+		return b.String()
+	}
+	before := map[string]string{}
+	for _, f := range prev {
+		before[f.Path] = sig(f)
+	}
+	var changed []string
+	for _, f := range cur {
+		if old, ok := before[f.Path]; !ok || old != sig(f) {
+			changed = append(changed, f.Path)
+		}
+	}
+	return changed
+}
+
+func printRound(w io.Writer, r *state.Review, files []diff.File, code string) {
+	fmt.Fprintf(w, "review %s  %s..%s\ncode: %s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA), code)
+	if r.RoundRebased {
+		fmt.Fprintf(w, "round %d: rebased, changed files: %s\n", r.Round, strings.Join(r.RoundFiles, " "))
+	} else {
+		fmt.Fprintf(w, "round %d: fixups since %s\n", r.Round, short(r.PrevHeadSHA))
+	}
+	var open []state.Comment
+	for _, c := range r.Comments {
+		if !c.Resolved {
+			open = append(open, c)
+		}
+	}
+	fmt.Fprintf(w, "open comments from earlier rounds: %d\n", len(open))
+	for _, c := range open {
+		fmt.Fprintf(w, "  #%d %s %s:%s  %s\n", c.ID, c.Severity, c.File, c.Lines, c.Body)
+	}
+	printDiscussions(w, r)
+	fmt.Fprintln(w)
+	if r.RoundRebased {
+		files = slices.DeleteFunc(files, func(f diff.File) bool { return !slices.Contains(r.RoundFiles, f.Path) })
+	}
+	printHunks(w, r, files)
+	fmt.Fprintln(w, "\nnext: check open comments against the new code, then pipe a plan for this round to `gr plan set`")
 }
 
 func hasMarker(ctx context.Context, repo gitx.Repo, sha, path string) bool {

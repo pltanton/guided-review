@@ -97,3 +97,8 @@ func (r Repo) WorktreeRemove(ctx context.Context, path string) error {
 	_, err := r.Run(ctx, "worktree", "remove", "--force", path)
 	return err
 }
+
+func (r Repo) IsAncestor(ctx context.Context, ancestor, rev string) bool {
+	_, err := r.Run(ctx, "merge-base", "--is-ancestor", ancestor, rev)
+	return err == nil
+}

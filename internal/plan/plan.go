@@ -99,7 +99,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		fail("depends_on cycle: %s", strings.Join(c, " → "))
 	}
 	for _, f := range files {
-		if boilerplate[f.Path] {
+		if boilerplate[f.Path] || r.RoundRebased && !slices.Contains(r.RoundFiles, f.Path) {
 			continue
 		}
 		if rf := r.File(f.Path); rf != nil && rf.Tier == state.TierGenerated {
