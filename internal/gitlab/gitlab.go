@@ -96,6 +96,7 @@ type Discussion struct {
 	Replies  int
 	File     string
 	Line     int
+	OldLine  bool
 	Resolved bool
 }
 
@@ -145,7 +146,7 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 				case p.NewLine != nil:
 					disc.File, disc.Line = p.NewPath, *p.NewLine
 				case p.OldLine != nil:
-					disc.File, disc.Line = p.OldPath, *p.OldLine
+					disc.File, disc.Line, disc.OldLine = p.OldPath, *p.OldLine, true
 				}
 			}
 			result = append(result, disc)

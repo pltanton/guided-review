@@ -74,7 +74,7 @@ func TestFetchDiscussions(t *testing.T) {
 	want := []gitlab.Discussion{
 		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57},
 		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true},
-		{ID: "d4", Author: "dan", Body: "on removed line", File: "api/b.go", Line: 12},
+		{ID: "d4", Author: "dan", Body: "on removed line", File: "api/b.go", Line: 12, OldLine: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)

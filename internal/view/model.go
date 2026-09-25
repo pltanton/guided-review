@@ -10,46 +10,68 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aplotnikov/guided-review/internal/gitx"
+	"github.com/aplotnikov/guided-review/internal/inbox"
 	"github.com/aplotnikov/guided-review/internal/state"
 )
 
-const defaultContext = 3
-
-var (
-	addStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	delStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	hotStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
-	dimStyle    = lipgloss.NewStyle().Faint(true)
-	fileStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
-	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+const (
+	defaultContext = 3
+	minSplitWidth  = 80
+	minPlanWidth   = 90
+	maxPlanWidth   = 32
+	messageLines   = 5
 )
 
 type reloadMsg struct{}
 
 type editorDoneMsg struct{ err error }
 
+type item struct {
+	File      string
+	Line      int
+	HunkStart bool
+	Note      bool
+}
+
 type model struct {
-	ctx     context.Context
-	store   state.Store
-	repo    gitx.Repo
-	src     *gitSource
-	review  *state.Review
-	step    *state.Step
-	rows    []Row
-	cursor  int
-	offset  int
-	width   int
-	height  int
-	context int
-	err     error
+	ctx    context.Context
+	store  state.Store
+	repo   gitx.Repo
+	src    *gitSource
+	review *state.Review
+	step   *state.Step
+	rows   []Row
+	split  []SplitRow
+	list   []item
+	events []inbox.Event
+
+	cursor, offset int
+	width, height  int
+	context        int
+
+	splitView, showPlan, mouse bool
+	visual, dragging           bool
+	anchor                     int
+
+	composing   bool
+	composeKind string
+	input       []rune
+
+	send   func(inbox.Event) error
+	status string
+	err    error
 }
 
 func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
-	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext}
+	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true}
+	m.send = func(e inbox.Event) error {
+		if m.review == nil {
+			return state.ErrNoReview
+		}
+		return inbox.Append(m.store.ReviewDir(m.review.ID), e)
+	}
 	m.reload()
 	return m
 }
@@ -57,12 +79,13 @@ func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 func (m *model) reload() {
 	r, err := m.store.LoadCurrent()
 	if err != nil {
-		m.review, m.step, m.rows, m.err = nil, nil, nil, err
+		m.review, m.step, m.rows, m.split, m.list, m.err = nil, nil, nil, nil, nil, err
 		return
 	}
 	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
 		m.src = newGitSource(m.ctx, m.repo, r.DiffBase(), r.HeadSHA)
 	}
+	m.events, _ = inbox.All(m.store.ReviewDir(r.ID))
 	prev := ""
 	if m.step != nil {
 		prev = m.step.ID
@@ -70,49 +93,113 @@ func (m *model) reload() {
 	m.review, m.err = r, nil
 	m.step = r.Step(r.Current)
 	if m.step == nil {
-		m.rows = nil
+		m.rows, m.split, m.list = nil, nil, nil
 		return
 	}
 	changed := m.step.ID != prev
 	if changed {
-		m.context, m.cursor, m.offset = defaultContext, 0, 0
+		m.context, m.cursor, m.offset, m.visual = defaultContext, 0, 0, false
 	}
 	m.rebuild(changed)
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	var keep Row
-	if m.cursor < len(m.rows) {
-		keep = m.rows[m.cursor]
-	}
-	rows, err := BuildRows(m.src, *m.step, m.context, nil)
+	rows, err := BuildRows(m.src, *m.step, m.context, m.notes())
 	if err != nil {
 		m.err = err
 		return
 	}
+	keep := m.current()
 	m.rows = rows
+	m.split = pairRows(rows)
+	m.relist()
 	switch {
 	case jumpToHunk:
-		m.cursor = firstFocus(rows)
+		m.cursor = firstFocus(m.list)
 	case keep.File != "":
-		for i, r := range rows {
-			if r.File == keep.File && r.Line == keep.Line && r.Kind == keep.Kind {
-				m.cursor = i
-				break
-			}
-		}
+		m.focus(keep)
 	}
 	m.clamp()
 }
 
-func firstFocus(rows []Row) int {
-	for i, r := range rows {
-		if r.HunkStart {
+func (m *model) notes() []Note {
+	var out []Note
+	for _, a := range m.step.Annotations {
+		out = append(out, Note{File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true})
+	}
+	for _, h := range m.step.Hotspots {
+		if h.Line > 0 {
+			out = append(out, Note{File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true})
+		}
+	}
+	round := max(m.review.Round, 1)
+	for _, c := range m.review.Comments {
+		start, _, err := state.ParseLines(c.Lines)
+		if err != nil || start == 0 || max(c.Round, 1) != round {
+			continue
+		}
+		out = append(out, Note{File: c.File, Line: start, Kind: "comment", Text: fmt.Sprintf("%s: %s", c.Severity, c.Body), Dim: c.Resolved})
+	}
+	for _, d := range m.review.Discussions {
+		if d.File == "" || d.OldLine {
+			continue
+		}
+		body, _, _ := strings.Cut(d.Body, "\n")
+		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Text: "@" + d.Author + ": " + body, Dim: d.Resolved})
+	}
+	return out
+}
+
+func (m *model) useSplit() bool {
+	return m.splitView && m.mainWidth() >= minSplitWidth
+}
+
+func (m *model) relist() {
+	keep := m.current()
+	m.list = m.list[:0]
+	if m.useSplit() {
+		for _, r := range m.split {
+			if r.Full != nil {
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.Kind == RowNote})
+				continue
+			}
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
+		}
+	} else {
+		for _, r := range m.rows {
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.Kind == RowNote})
+		}
+	}
+	if keep.File != "" {
+		m.focus(keep)
+	}
+	m.clamp()
+}
+
+func (m *model) current() item {
+	if m.cursor < len(m.list) {
+		return m.list[m.cursor]
+	}
+	return item{}
+}
+
+func (m *model) focus(it item) {
+	for i, x := range m.list {
+		if x.File == it.File && x.Line == it.Line && x.Note == it.Note {
+			m.cursor = i
+			return
+		}
+	}
+}
+
+func firstFocus(list []item) int {
+	for i, it := range list {
+		if it.HunkStart {
 			return i
 		}
 	}
-	for i, r := range rows {
-		if r.Line > 0 {
+	for i, it := range list {
+		if it.Line > 0 {
 			return i
 		}
 	}
@@ -125,54 +212,92 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.clamp()
+		m.relist()
 	case reloadMsg:
 		m.reload()
 	case editorDoneMsg:
 		m.err = msg.err
+	case tea.MouseMsg:
+		return m, m.handleMouse(msg)
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
-			return m, tea.Quit
-		case "j", "down":
-			m.move(1)
-		case "k", "up":
-			m.move(-1)
-		case "ctrl+d":
-			m.move(m.bodyHeight() / 2)
-		case "ctrl+u":
-			m.move(-m.bodyHeight() / 2)
-		case "g", "home":
-			m.cursor = 0
-			m.clamp()
-		case "G", "end":
-			m.cursor = len(m.rows) - 1
-			m.clamp()
-		case "]":
-			if i := m.nextHunk(m.cursor); i >= 0 {
-				m.cursor = i
-				m.clamp()
-			}
-		case "[":
-			if i := m.prevHunk(m.cursor); i >= 0 {
-				m.cursor = i
-				m.clamp()
-			}
-		case "tab":
-			if m.step != nil {
-				m.context += 10
-				m.rebuild(false)
-			}
-		case "shift+tab":
-			if m.step != nil {
-				m.context = defaultContext
-				m.rebuild(false)
-			}
-		case "e":
-			return m, m.openEditor()
+		if m.composing {
+			m.handleCompose(msg)
+			return m, nil
 		}
+		return m, m.handleKey(msg)
 	}
 	return m, nil
+}
+
+func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
+	m.status = ""
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return tea.Quit
+	case "j", "down":
+		m.move(1)
+	case "k", "up":
+		m.move(-1)
+	case "ctrl+d":
+		m.move(m.bodyHeight() / 2)
+	case "ctrl+u":
+		m.move(-m.bodyHeight() / 2)
+	case "g", "home":
+		m.cursor = 0
+		m.clamp()
+	case "G", "end":
+		m.cursor = len(m.list) - 1
+		m.clamp()
+	case "]":
+		m.jump(1, func(it item) bool { return it.HunkStart })
+	case "[":
+		m.jump(-1, func(it item) bool { return it.HunkStart })
+	case "n":
+		m.jump(1, func(it item) bool { return it.Note })
+	case "N":
+		m.jump(-1, func(it item) bool { return it.Note })
+	case "tab":
+		if m.step != nil {
+			m.context += 10
+			m.rebuild(false)
+		}
+	case "shift+tab":
+		if m.step != nil {
+			m.context = defaultContext
+			m.rebuild(false)
+		}
+	case "s":
+		m.splitView = !m.splitView
+		m.relist()
+		if m.splitView && !m.useSplit() {
+			m.status = "too narrow for split: widen the pane or hide the plan (p)"
+		}
+	case "p":
+		m.showPlan = !m.showPlan
+		m.relist()
+	case "m":
+		m.mouse = !m.mouse
+		if m.mouse {
+			return tea.EnableMouseCellMotion
+		}
+		return tea.DisableMouse
+	case "v":
+		m.visual = !m.visual
+		m.anchor = m.cursor
+	case "esc":
+		m.visual = false
+	case "c", "enter":
+		m.startCompose(inbox.KindMessage)
+	case "S":
+		m.startCompose(inbox.KindSkip)
+	case "?":
+		m.explain()
+	case ">":
+		m.emit(inbox.Event{Kind: inbox.KindNext})
+	case "e":
+		return m.openEditor()
+	}
+	return nil
 }
 
 func (m *model) move(d int) {
@@ -180,8 +305,18 @@ func (m *model) move(d int) {
 	m.clamp()
 }
 
+func (m *model) jump(dir int, match func(item) bool) {
+	for i := m.cursor + dir; i >= 0 && i < len(m.list); i += dir {
+		if match(m.list[i]) {
+			m.cursor = i
+			m.clamp()
+			return
+		}
+	}
+}
+
 func (m *model) clamp() {
-	m.cursor = max(0, min(m.cursor, len(m.rows)-1))
+	m.cursor = max(0, min(m.cursor, len(m.list)-1))
 	body := m.bodyHeight()
 	if m.cursor < m.offset {
 		m.offset = m.cursor
@@ -192,129 +327,16 @@ func (m *model) clamp() {
 	m.offset = max(0, m.offset)
 }
 
-func (m *model) nextHunk(from int) int {
-	for i := from + 1; i < len(m.rows); i++ {
-		if m.rows[i].HunkStart {
-			return i
-		}
-	}
-	return -1
-}
-
-func (m *model) prevHunk(from int) int {
-	for i := from - 1; i >= 0; i-- {
-		if m.rows[i].HunkStart {
-			return i
-		}
-	}
-	return -1
-}
-
-func (m *model) header() []string {
-	if m.step == nil {
-		return nil
-	}
-	st := m.step
-	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, m.review.StepIndex(st.ID)+1, len(m.review.Steps), st.Kind, st.Title)
-	if st.Status != state.StatusPending {
-		title += " [" + string(st.Status) + "]"
-	}
-	var cats []string
-	for _, h := range st.Hotspots {
-		cats = append(cats, h.Cat)
-	}
-	if len(cats) > 0 {
-		title += "  " + hotStyle.Render("⚑ "+strings.Join(cats, " "))
-	}
-	lines := []string{lipgloss.NewStyle().Bold(true).Render(title)}
-	if st.Note != "" {
-		lines = append(lines, dimStyle.Render(st.Note))
-	}
-	for _, h := range st.Hotspots {
-		lines = append(lines, hotStyle.Render("⚑ ")+h.Q)
-	}
-	if st.MayChange {
-		lines = append(lines, delStyle.Render("may change after earlier comments"))
-	}
-	return append(lines, dimStyle.Render(strings.Repeat("─", max(m.width, 1))))
-}
-
-func (m *model) bodyHeight() int {
-	return max(m.height-len(m.header())-1, 1)
-}
-
-func (m *model) View() string {
-	if m.width == 0 {
-		return ""
-	}
-	if m.review == nil {
-		msg := "waiting for gr init…"
-		if m.err != nil {
-			msg = m.err.Error()
-		}
-		return dimStyle.Render(msg)
-	}
-	if m.step == nil {
-		return dimStyle.Render(fmt.Sprintf("review %s: waiting for gr plan set…", m.review.ID))
-	}
-	var b strings.Builder
-	for _, l := range m.header() {
-		b.WriteString(ansi.Truncate(l, m.width, "…"))
-		b.WriteByte('\n')
-	}
-	body := m.bodyHeight()
-	for i := m.offset; i < m.offset+body; i++ {
-		if i < len(m.rows) {
-			b.WriteString(m.renderRow(i))
-		}
-		b.WriteByte('\n')
-	}
-	footer := dimStyle.Render("j/k move  ]/[ hunk  tab more context  e editor  q quit")
-	if m.err != nil {
-		footer = delStyle.Render(m.err.Error())
-	}
-	b.WriteString(ansi.Truncate(footer, m.width, "…"))
-	return b.String()
-}
-
-func (m *model) renderRow(i int) string {
-	r := m.rows[i]
-	cursor := " "
-	if i == m.cursor {
-		cursor = cursorStyle.Render("▶")
-	}
-	var s string
-	switch r.Kind {
-	case RowFile:
-		s = fileStyle.Render(r.Text)
-	case RowGap:
-		s = dimStyle.Render("      ⋯")
-	default:
-		marker, num, text := " ", fmt.Sprintf("%4d", r.Line), r.Text
-		switch r.Kind {
-		case RowAdded:
-			marker = addStyle.Render("+")
-		case RowRemoved:
-			marker, num, text = delStyle.Render("-"), "    ", delStyle.Render(r.Text)
-		}
-		if r.Hotspot {
-			marker = hotStyle.Render("⚑")
-		}
-		s = marker + dimStyle.Render(num+" │ ") + text
-	}
-	return ansi.Truncate(cursor+s, m.width, "")
-}
-
 func (m *model) openEditor() tea.Cmd {
-	if m.cursor >= len(m.rows) || m.rows[m.cursor].File == "" {
+	it := m.current()
+	if it.File == "" {
 		return nil
 	}
-	r := m.rows[m.cursor]
 	dir := m.repo.Dir
 	if m.review != nil && m.review.Worktree != "" {
 		dir = m.review.Worktree
 	}
-	cmd := editorCmd(dir, r.File, max(r.Line, 1))
+	cmd := editorCmd(dir, it.File, max(it.Line, 1))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorDoneMsg{err} })
 }
 

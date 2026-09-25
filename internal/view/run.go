@@ -24,7 +24,7 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo) error {
 	if err := watchTree(w, store.Dir); err != nil {
 		return err
 	}
-	p := tea.NewProgram(newModel(ctx, store, repo), tea.WithAltScreen(), tea.WithContext(ctx))
+	p := tea.NewProgram(newModel(ctx, store, repo), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
 	go forward(w, p)
 	_, err = p.Run()
 	if ctx.Err() != nil {

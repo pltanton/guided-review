@@ -77,6 +77,7 @@ type Discussion struct {
 	Replies  int    `yaml:"replies,omitempty"`
 	File     string `yaml:"file,omitempty"`
 	Line     int    `yaml:"line,omitempty"`
+	OldLine  bool   `yaml:"old_line,omitempty"`
 	Resolved bool   `yaml:"resolved,omitempty"`
 }
 
