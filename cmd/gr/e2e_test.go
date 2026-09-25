@@ -98,12 +98,22 @@ func TestInitMR(t *testing.T) {
 	h := newHarness(t)
 	base := h.repo.Git("rev-parse", "main")
 	head := h.repo.Git("rev-parse", "HEAD")
+	discussions := `[{"id":"d1","notes":[{"body":"why 0 and not an error?","author":{"username":"alice"},"system":false,"resolvable":true,
+		"position":{"new_path":"api/transfer.go","new_line":5,"old_path":"api/transfer.go"}}]},
+		{"id":"d2","notes":[{"body":"please add a test","author":{"username":"bob"},"system":false,"resolvable":true}]}]`
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if strings.Contains(args[len(args)-1], "/discussions") {
+			return []byte(discussions), nil
+		}
 		return []byte(fmt.Sprintf(`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
 			"diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`, base, base, head)), nil
 	}
 	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
-	assertContains(t, out, "review mr-7", "MR !7 Add guard")
+	assertContains(t, out, "review mr-7", "MR !7 Add guard", "MR discussions: 2 unresolved", "@bob: please add a test", "@alice api/transfer.go:5: why 0 and not an error?")
+
+	discussions = `[]`
+	out = h.mustRun("", "sync")
+	assertContains(t, out, "MR discussions: 0 unresolved")
 }
 
 const goodPlan = `summary: negative amounts are rejected

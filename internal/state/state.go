@@ -39,19 +39,30 @@ var (
 )
 
 type Review struct {
-	ID       string    `yaml:"id"`
-	Source   string    `yaml:"source"`
-	BaseSHA  string    `yaml:"base_sha"`
-	StartSHA string    `yaml:"start_sha,omitempty"`
-	HeadSHA  string    `yaml:"head_sha"`
-	MR       *MR       `yaml:"mr,omitempty"`
-	Worktree string    `yaml:"worktree,omitempty"`
-	Domain   string    `yaml:"domain,omitempty"`
-	Files    []File    `yaml:"files"`
-	Summary  string    `yaml:"summary,omitempty"`
-	Steps    []Step    `yaml:"steps,omitempty"`
-	Current  string    `yaml:"current,omitempty"`
-	Comments []Comment `yaml:"comments,omitempty"`
+	ID          string       `yaml:"id"`
+	Source      string       `yaml:"source"`
+	BaseSHA     string       `yaml:"base_sha"`
+	StartSHA    string       `yaml:"start_sha,omitempty"`
+	HeadSHA     string       `yaml:"head_sha"`
+	MR          *MR          `yaml:"mr,omitempty"`
+	Worktree    string       `yaml:"worktree,omitempty"`
+	Domain      string       `yaml:"domain,omitempty"`
+	Files       []File       `yaml:"files"`
+	Summary     string       `yaml:"summary,omitempty"`
+	Steps       []Step       `yaml:"steps,omitempty"`
+	Current     string       `yaml:"current,omitempty"`
+	Comments    []Comment    `yaml:"comments,omitempty"`
+	Discussions []Discussion `yaml:"discussions,omitempty"`
+}
+
+type Discussion struct {
+	ID       string `yaml:"id"`
+	Author   string `yaml:"author"`
+	Body     string `yaml:"body"`
+	Replies  int    `yaml:"replies,omitempty"`
+	File     string `yaml:"file,omitempty"`
+	Line     int    `yaml:"line,omitempty"`
+	Resolved bool   `yaml:"resolved,omitempty"`
 }
 
 type MR struct {

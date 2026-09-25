@@ -88,3 +88,68 @@ func FetchMR(ctx context.Context, run Runner, ref MRRef) (MR, error) {
 	}
 	return mr, nil
 }
+
+type Discussion struct {
+	ID       string
+	Author   string
+	Body     string
+	Replies  int
+	File     string
+	Line     int
+	Resolved bool
+}
+
+type apiDiscussion struct {
+	ID    string    `json:"id"`
+	Notes []apiNote `json:"notes"`
+}
+
+type apiNote struct {
+	Body   string `json:"body"`
+	System bool   `json:"system"`
+	Author struct {
+		Username string `json:"username"`
+	} `json:"author"`
+	Resolved bool         `json:"resolved"`
+	Position *apiPosition `json:"position"`
+}
+
+type apiPosition struct {
+	NewPath string `json:"new_path"`
+	NewLine *int   `json:"new_line"`
+	OldPath string `json:"old_path"`
+	OldLine *int   `json:"old_line"`
+}
+
+func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion, error) {
+	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?per_page=100", url.PathEscape(ref.Project), ref.IID)
+	out, err := run(ctx, "api", "--hostname", ref.Host, "--paginate", path)
+	if err != nil {
+		return nil, err
+	}
+	var result []Discussion
+	dec := json.NewDecoder(bytes.NewReader(out))
+	for dec.More() {
+		var page []apiDiscussion
+		if err := dec.Decode(&page); err != nil {
+			return nil, fmt.Errorf("decode discussions: %w", err)
+		}
+		for _, d := range page {
+			if len(d.Notes) == 0 || d.Notes[0].System {
+				continue
+			}
+			first := d.Notes[0]
+			disc := Discussion{ID: d.ID, Author: first.Author.Username, Body: first.Body, Replies: len(d.Notes) - 1, Resolved: first.Resolved}
+			if p := first.Position; p != nil {
+				switch {
+				case p.NewLine != nil:
+					disc.File, disc.Line = p.NewPath, *p.NewLine
+				case p.OldLine != nil:
+					disc.File, disc.Line = p.OldPath, *p.OldLine
+				}
+			}
+			result = append(result, disc)
+		}
+	}
+	return result, nil
+}

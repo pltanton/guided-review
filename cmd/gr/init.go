@@ -25,6 +25,7 @@ type target struct {
 	base, start, head string
 	branch            string
 	mr                *state.MR
+	ref               *gitlab.MRRef
 }
 
 func cmdInit(ctx context.Context, e env, args []string) error {
@@ -64,6 +65,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 			return err
 		}
 		r.Worktree = worktree
+		if err := syncDiscussions(ctx, e.glab, r); err != nil {
+			return err
+		}
 		if err := s.store.Save(r); err != nil {
 			return err
 		}
@@ -78,6 +82,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	r.Worktree = worktree
+	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+		return err
+	}
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
@@ -190,7 +197,8 @@ func resolveTarget(ctx context.Context, repo gitx.Repo, glab gitlab.Runner, arg,
 		return target{
 			id: fmt.Sprintf("mr-%d", ref.IID), source: arg, branch: mr.SourceBranch,
 			base: mr.DiffRefs.BaseSHA, start: mr.DiffRefs.StartSHA, head: mr.DiffRefs.HeadSHA,
-			mr: &state.MR{URL: mr.WebURL, Host: ref.Host, Project: ref.Project, IID: ref.IID, Title: mr.Title},
+			mr:  &state.MR{URL: mr.WebURL, Host: ref.Host, Project: ref.Project, IID: ref.IID, Title: mr.Title},
+			ref: &ref,
 		}, nil
 	case strings.Contains(arg, ".."):
 		a, b, _ := strings.Cut(arg, "..")
@@ -289,7 +297,65 @@ func printInit(w io.Writer, r *state.Review, files []diff.File, code string) {
 	if r.Domain != "" {
 		fmt.Fprintf(w, "domain: %s\n", r.Domain)
 	}
+	printDiscussions(w, r)
 	fmt.Fprintln(w)
 	printHunks(w, r, files)
 	fmt.Fprintln(w, "\nnext: pipe a plan (YAML) to `gr plan set`")
+}
+
+func syncDiscussions(ctx context.Context, glab gitlab.Runner, r *state.Review) error {
+	if r.MR == nil {
+		return nil
+	}
+	ds, err := gitlab.FetchDiscussions(ctx, glab, gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID})
+	if err != nil {
+		return err
+	}
+	r.Discussions = r.Discussions[:0]
+	for _, d := range ds {
+		r.Discussions = append(r.Discussions, state.Discussion(d))
+	}
+	return nil
+}
+
+func cmdSync(ctx context.Context, e env) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	if r.MR == nil {
+		return errors.New("not a merge request review: nothing to sync")
+	}
+	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+		return err
+	}
+	if err := s.store.Save(r); err != nil {
+		return err
+	}
+	printDiscussions(e.stdout, r)
+	return nil
+}
+
+func printDiscussions(w io.Writer, r *state.Review) {
+	if r.MR == nil {
+		return
+	}
+	var open []state.Discussion
+	for _, d := range r.Discussions {
+		if !d.Resolved {
+			open = append(open, d)
+		}
+	}
+	fmt.Fprintf(w, "MR discussions: %d unresolved\n", len(open))
+	for _, d := range open {
+		where := ""
+		if d.File != "" {
+			where = fmt.Sprintf(" %s:%d", d.File, d.Line)
+		}
+		body, _, _ := strings.Cut(d.Body, "\n")
+		if len(body) > 120 {
+			body = body[:117] + "..."
+		}
+		fmt.Fprintf(w, "  @%s%s: %s\n", d.Author, where, body)
+	}
 }

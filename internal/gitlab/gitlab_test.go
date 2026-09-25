@@ -49,3 +49,34 @@ func TestFetchMR(t *testing.T) {
 		t.Fatalf("mr = %+v", mr)
 	}
 }
+
+func TestFetchDiscussions(t *testing.T) {
+	var gotArgs []string
+	run := func(_ context.Context, args ...string) ([]byte, error) {
+		gotArgs = args
+		return []byte(`[{"id":"d1","notes":[
+			{"body":"why float?","author":{"username":"alice"},"system":false,"resolvable":true,"resolved":false,
+			 "position":{"new_path":"api/a.go","new_line":57,"old_path":"api/a.go","old_line":null}},
+			{"body":"ok","author":{"username":"bob"},"system":false}]},
+		 {"id":"d2","notes":[{"body":"added 1 commit","author":{"username":"bob"},"system":true}]}]
+		[{"id":"d3","notes":[{"body":"general remark","author":{"username":"carol"},"system":false,"resolvable":true,"resolved":true}]},
+		 {"id":"d4","notes":[{"body":"on removed line","author":{"username":"dan"},"system":false,
+			 "position":{"new_path":"api/b.go","new_line":null,"old_path":"api/b.go","old_line":12}}]}]`), nil
+	}
+	got, err := gitlab.FetchDiscussions(context.Background(), run, gitlab.MRRef{Host: "h", Project: "g/p", IID: 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantArgs := []string{"api", "--hostname", "h", "--paginate", "projects/g%2Fp/merge_requests/7/discussions?per_page=100"}
+	if !reflect.DeepEqual(gotArgs, wantArgs) {
+		t.Fatalf("args = %v", gotArgs)
+	}
+	want := []gitlab.Discussion{
+		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57},
+		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true},
+		{ID: "d4", Author: "dan", Body: "on removed line", File: "api/b.go", Line: 12},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}

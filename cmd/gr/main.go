@@ -15,6 +15,7 @@ const usage = `usage: gr <command> [args]
 
   init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
   list
+  sync
   done
   hunks
   plan set [-f FILE]
@@ -60,6 +61,8 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdInit(ctx, e, args[1:])
 	case "list":
 		return cmdList(ctx, e)
+	case "sync":
+		return cmdSync(ctx, e)
 	case "done":
 		return cmdDone(ctx, e)
 	case "hunks":

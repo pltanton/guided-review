@@ -34,9 +34,8 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 	if r.MR != nil {
 		fmt.Fprintf(w, "MR !%d %s\n", r.MR.IID, r.MR.Title)
 	}
-	if head, err := s.repo.Commit(ctx, "HEAD"); err == nil && head != r.HeadSHA {
-		fmt.Fprintf(w, "warning: HEAD moved to %s, the review is pinned to %s\n", short(head), short(r.HeadSHA))
-	}
+	fmt.Fprintf(w, "code: %s\n", codeDir(s, r))
+	printDiscussions(w, r)
 	if len(r.Steps) == 0 {
 		fmt.Fprintln(w, "no plan yet: pipe a plan to gr plan set")
 		if *gate {
