@@ -1,8 +1,9 @@
 # guided-review
 
-An agent walks you through a merge request in small, ordered steps. You read the code
-in a viewer pane and reply in chat; the agent explains each step in a few lines,
-flags risky spots and records your remarks.
+An agent walks you through a merge request in small, ordered steps. Everything
+happens in one viewer pane: the plan, the code with the agent's annotations, its
+messages, and your replies. The agent explains each step in a few lines, flags risky
+spots, records your remarks, and on the next round checks whether they were fixed.
 
 ## Install
 
@@ -21,9 +22,12 @@ Requirements: git, tmux for the viewer pane, `glab` (authenticated) for MR URLs.
 
 ## Use
 
-In tmux, in the repository, on the MR branch:
+In tmux, in the repository (any branch — the MR is checked out into its own worktree):
 
-    > review https://gitlab.example.com/group/project/-/merge_requests/123
+    > /guided-review https://gitlab.example.com/group/project/-/merge_requests/123
+
+After the author pushes fixes, run the same command again: the agent reviews only what
+changed and checks the open comments first.
 
 Optional `.review.yaml` in the repository root:
 
@@ -33,7 +37,22 @@ Optional `.review.yaml` in the repository root:
 
 ## Viewer keys
 
-`j`/`k` move, `]`/`[` next/previous hunk, `tab` more context, `e` open `$EDITOR` at
-the line (tmux popup), `q` quit.
+| Key | Action |
+|---|---|
+| `j`/`k`, wheel | move |
+| `]`/`[` | next/previous hunk |
+| `n`/`N` | next/previous annotation |
+| `v`, mouse drag | select lines |
+| `c` / `enter` | message the agent (the selection is attached) |
+| `?` | ask the agent to explain the selection or the line |
+| `>` | next step |
+| `S` | skip the step with a reason |
+| click a step in the plan | go to it |
+| `s` | split / unified diff |
+| `p` | show/hide the plan |
+| `m` | mouse capture on/off (off lets the terminal select text) |
+| `tab` / `shift+tab` | more / default context |
+| `e` | open `$EDITOR` at the line (tmux popup) |
+| `q` | quit |
 
 Design: [docs/specs/2026-09-25-guided-review-design.md](docs/specs/2026-09-25-guided-review-design.md)
