@@ -178,3 +178,16 @@ func TestFirstFocus(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupedRunes(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.Update(key("jjj"))
+	if m.cursor != 3 {
+		t.Fatalf("grouped jjj: cursor = %d, want 3", m.cursor)
+	}
+	m.Update(key("gchi"))
+	m.Update(key("enter"))
+	if len(*sent) != 1 || (*sent)[0].Text != "hi" {
+		t.Fatalf("grouped compose sent %+v", *sent)
+	}
+}

@@ -220,13 +220,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m, m.handleMouse(msg)
 	case tea.KeyMsg:
-		if m.composing {
-			m.handleCompose(msg)
-			return m, nil
-		}
-		return m, m.handleKey(msg)
+		return m, m.handleKeys(msg)
 	}
 	return m, nil
+}
+
+func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
+	if msg.Type != tea.KeyRunes || msg.Paste || len(msg.Runes) < 2 {
+		if m.composing {
+			m.handleCompose(msg)
+			return nil
+		}
+		return m.handleKey(msg)
+	}
+	var cmds []tea.Cmd
+	for i, r := range msg.Runes {
+		if m.composing {
+			m.input = append(m.input, msg.Runes[i:]...)
+			break
+		}
+		cmds = append(cmds, m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
