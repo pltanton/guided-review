@@ -80,3 +80,21 @@ func TestWorktree(t *testing.T) {
 		t.Fatalf("worktree still exists: %v", err)
 	}
 }
+
+func TestDiffAlgorithm(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("a.txt", "one\n")
+	base := tr.Commit("base")
+	tr.Write("a.txt", "one\ntwo\n")
+	head := tr.Commit("head")
+	repo := gitx.Repo{Dir: tr.Dir}
+	for _, algo := range gitx.DiffAlgorithms {
+		if d, err := repo.DiffWith(ctx, algo, base, head); err != nil || !strings.Contains(d, "+two") {
+			t.Fatalf("%s: %q, %v", algo, d, err)
+		}
+	}
+	if _, err := repo.DiffWith(ctx, "bogus", base, head); err == nil {
+		t.Fatal("unknown algorithm must fail")
+	}
+}

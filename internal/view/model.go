@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/aplotnikov/guided-review/internal/config"
 	"github.com/aplotnikov/guided-review/internal/gitx"
 	"github.com/aplotnikov/guided-review/internal/inbox"
 	"github.com/aplotnikov/guided-review/internal/state"
@@ -74,6 +75,7 @@ type model struct {
 
 	showRemoved bool
 	unfolded    map[string]bool
+	algo        string
 
 	composing   bool
 	composeKind string
@@ -92,7 +94,10 @@ type model struct {
 }
 
 func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
-	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true}
+	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true, algo: gitx.DefaultDiffAlgorithm}
+	if cfg, err := config.Load(repo.Dir); err == nil {
+		m.algo = cfg.DiffAlgorithm(m.algo)
+	}
 	m.send = func(e inbox.Event) error {
 		if m.review == nil {
 			return state.ErrNoReview
@@ -110,7 +115,7 @@ func (m *model) reload() {
 		return
 	}
 	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
-		m.src = newGitSource(m.ctx, m.repo, r.DiffBase(), r.HeadSHA)
+		m.src = newGitSource(m.ctx, m.repo, m.algo, r.DiffBase(), r.HeadSHA)
 	}
 	m.events, _ = inbox.All(m.store.ReviewDir(r.ID))
 	m.lastWait, _ = inbox.LastWait(m.store.ReviewDir(r.ID))
@@ -447,6 +452,15 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.showPlan, m.focusFiles = true, true
 		m.fileCursor = max(0, slices.Index(files, m.current().File))
 		m.relist()
+	case "d":
+		i := (slices.Index(gitx.DiffAlgorithms, m.algo) + 1) % len(gitx.DiffAlgorithms)
+		m.algo = gitx.DiffAlgorithms[i]
+		m.status = "diff: " + m.algo
+		if m.src != nil {
+			m.src = newGitSource(m.ctx, m.repo, m.algo, m.src.base, m.src.head)
+			m.unfolded = nil
+			m.rebuild(false)
+		}
 	case "o":
 		m.toggleFold()
 	case "O":

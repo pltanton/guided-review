@@ -304,7 +304,11 @@ func reviewFiles(ctx context.Context, repo gitx.Repo, cfg config.Config, base, h
 }
 
 func parseDiff(ctx context.Context, repo gitx.Repo, base, head string) ([]diff.File, error) {
-	raw, err := repo.Diff(ctx, base, head)
+	cfg, err := config.Load(repo.Dir)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := repo.DiffWith(ctx, cfg.DiffAlgorithm(gitx.DefaultDiffAlgorithm), base, head)
 	if err != nil {
 		return nil, err
 	}

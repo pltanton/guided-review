@@ -488,3 +488,18 @@ func TestDiffRendering(t *testing.T) {
 		t.Fatal("cursor must not be drawn as an arrow in the gutter")
 	}
 }
+
+func TestCycleDiffAlgorithm(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.algo = "histogram"
+	m.Update(key("d"))
+	if m.algo != "patience" || !strings.Contains(m.status, "diff: patience") {
+		t.Fatalf("algo %q status %q", m.algo, m.status)
+	}
+	for range 3 {
+		m.Update(key("d"))
+	}
+	if m.algo != "histogram" {
+		t.Fatalf("cycle must wrap, got %q", m.algo)
+	}
+}

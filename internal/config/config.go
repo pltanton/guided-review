@@ -14,7 +14,15 @@ const FileName = ".review.yaml"
 
 type Config struct {
 	Domain    string   `yaml:"domain"`
+	Diff      string   `yaml:"diff"`
 	Generated []string `yaml:"generated"`
+}
+
+func (c Config) DiffAlgorithm(fallback string) string {
+	if c.Diff == "" {
+		return fallback
+	}
+	return c.Diff
 }
 
 func Load(root string) (Config, error) {

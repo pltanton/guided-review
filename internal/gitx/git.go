@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -50,8 +51,19 @@ func (r Repo) CommonDir(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
+const DefaultDiffAlgorithm = "histogram"
+
+var DiffAlgorithms = []string{"histogram", "patience", "myers", "minimal"}
+
 func (r Repo) Diff(ctx context.Context, base, head string, paths ...string) (string, error) {
-	args := []string{"diff", "--no-color", "--no-ext-diff", "--diff-algorithm=histogram", "-U0", "-M", base, head}
+	return r.DiffWith(ctx, DefaultDiffAlgorithm, base, head, paths...)
+}
+
+func (r Repo) DiffWith(ctx context.Context, algo, base, head string, paths ...string) (string, error) {
+	if !slices.Contains(DiffAlgorithms, algo) {
+		return "", fmt.Errorf("diff algorithm %q, want one of %v", algo, DiffAlgorithms)
+	}
+	args := []string{"diff", "--no-color", "--no-ext-diff", "--diff-algorithm=" + algo, "-U0", "-M", base, head}
 	if len(paths) > 0 {
 		args = append(append(args, "--"), paths...)
 	}

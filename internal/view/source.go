@@ -11,18 +11,19 @@ import (
 type gitSource struct {
 	ctx        context.Context
 	repo       gitx.Repo
+	algo       string
 	base, head string
 	diffs      map[string]diff.File
 	lines      map[string][]string
 }
 
-func newGitSource(ctx context.Context, repo gitx.Repo, base, head string) *gitSource {
-	return &gitSource{ctx: ctx, repo: repo, base: base, head: head, lines: map[string][]string{}}
+func newGitSource(ctx context.Context, repo gitx.Repo, algo, base, head string) *gitSource {
+	return &gitSource{ctx: ctx, repo: repo, algo: algo, base: base, head: head, lines: map[string][]string{}}
 }
 
 func (s *gitSource) FileDiff(path string) (diff.File, error) {
 	if s.diffs == nil {
-		raw, err := s.repo.Diff(s.ctx, s.base, s.head)
+		raw, err := s.repo.DiffWith(s.ctx, s.algo, s.base, s.head)
 		if err != nil {
 			return diff.File{}, err
 		}

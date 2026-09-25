@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/aplotnikov/guided-review/internal/config"
 	"github.com/aplotnikov/guided-review/internal/diff"
 	"github.com/aplotnikov/guided-review/internal/gitx"
 	"github.com/aplotnikov/guided-review/internal/state"
@@ -43,7 +44,11 @@ func loadReview(ctx context.Context, dir string) (session, *state.Review, error)
 }
 
 func (s session) diffFiles(ctx context.Context, r *state.Review) ([]diff.File, error) {
-	raw, err := s.repo.Diff(ctx, r.DiffBase(), r.HeadSHA)
+	cfg, err := config.Load(s.repo.Dir)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := s.repo.DiffWith(ctx, cfg.DiffAlgorithm(gitx.DefaultDiffAlgorithm), r.DiffBase(), r.HeadSHA)
 	if err != nil {
 		return nil, err
 	}

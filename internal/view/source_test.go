@@ -19,7 +19,7 @@ func TestGitSource(t *testing.T) {
 	tr.Git("rm", "-q", "gone.go")
 	head := tr.Commit("head")
 
-	src := newGitSource(context.Background(), gitx.Repo{Dir: tr.Dir}, base, head)
+	src := newGitSource(context.Background(), gitx.Repo{Dir: tr.Dir}, gitx.DefaultDiffAlgorithm, base, head)
 	lines, err := src.Lines("a.go")
 	if err != nil || len(lines) != 3 || ansi.Strip(lines[2]) != "var X = 1" {
 		t.Fatalf("Lines(a.go) = %q, %v", lines, err)

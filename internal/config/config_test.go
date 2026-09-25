@@ -15,12 +15,12 @@ func TestLoad(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(c, config.Config{}) {
 		t.Fatalf("missing file: %+v, %v", c, err)
 	}
-	data := "domain: finance\ngenerated:\n  - api/gen/**\n"
+	data := "domain: finance\ndiff: patience\ngenerated:\n  - api/gen/**\n"
 	if err := os.WriteFile(filepath.Join(dir, config.FileName), []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	c, err = config.Load(dir)
-	want := config.Config{Domain: "finance", Generated: []string{"api/gen/**"}}
+	want := config.Config{Domain: "finance", Diff: "patience", Generated: []string{"api/gen/**"}}
 	if err != nil || !reflect.DeepEqual(c, want) {
 		t.Fatalf("got %+v, %v; want %+v", c, err, want)
 	}

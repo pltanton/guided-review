@@ -35,6 +35,7 @@ changed and checks the open comments first.
 Optional `.review.yaml` in the repository root:
 
     domain: finance          # raises the bar for money-related changes
+    diff: histogram          # histogram (default) | patience | myers | minimal
     generated:               # extra generated-file patterns
       - api/gen/**
 
@@ -60,6 +61,7 @@ both sides in full.
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
 | `o` / `O` | unfold the removed block under the cursor / show all removed lines |
+| `d` | next diff algorithm (histogram → patience → myers → minimal) |
 | `s` | split / unified diff |
 | `p` | show/hide the plan |
 | `m` | mouse capture on/off (off lets the terminal select text) |
