@@ -1,0 +1,152 @@
+package state
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+type Tier string
+
+const (
+	TierCore        Tier = "core"
+	TierBoilerplate Tier = "boilerplate"
+	TierGenerated   Tier = "generated"
+)
+
+type StepStatus string
+
+const (
+	StatusPending StepStatus = "pending"
+	StatusDone    StepStatus = "done"
+	StatusSkipped StepStatus = "skipped"
+	StatusStale   StepStatus = "stale"
+)
+
+type Severity string
+
+const (
+	SeverityBlocker Severity = "blocker"
+	SeverityMajor   Severity = "major"
+	SeverityMinor   Severity = "minor"
+	SeverityNit     Severity = "nit"
+)
+
+var (
+	Severities        = []Severity{SeverityBlocker, SeverityMajor, SeverityMinor, SeverityNit}
+	HotspotCategories = []string{"security", "consistency", "money", "migration"}
+)
+
+type Review struct {
+	ID       string    `yaml:"id"`
+	Source   string    `yaml:"source"`
+	BaseSHA  string    `yaml:"base_sha"`
+	StartSHA string    `yaml:"start_sha,omitempty"`
+	HeadSHA  string    `yaml:"head_sha"`
+	MR       *MR       `yaml:"mr,omitempty"`
+	Domain   string    `yaml:"domain,omitempty"`
+	Files    []File    `yaml:"files"`
+	Summary  string    `yaml:"summary,omitempty"`
+	Steps    []Step    `yaml:"steps,omitempty"`
+	Current  string    `yaml:"current,omitempty"`
+	Comments []Comment `yaml:"comments,omitempty"`
+}
+
+type MR struct {
+	URL     string `yaml:"url"`
+	Host    string `yaml:"host"`
+	Project string `yaml:"project"`
+	IID     int    `yaml:"iid"`
+	Title   string `yaml:"title"`
+}
+
+type File struct {
+	Path    string `yaml:"path"`
+	OldPath string `yaml:"old_path,omitempty"`
+	Status  string `yaml:"status"`
+	Tier    Tier   `yaml:"tier"`
+	Added   int    `yaml:"added"`
+	Deleted int    `yaml:"deleted"`
+}
+
+type Step struct {
+	ID         string     `yaml:"id"`
+	Title      string     `yaml:"title"`
+	Kind       string     `yaml:"kind"`
+	Hunks      []StepHunk `yaml:"hunks"`
+	Hotspots   []Hotspot  `yaml:"hotspots,omitempty"`
+	DependsOn  []string   `yaml:"depends_on,omitempty"`
+	Note       string     `yaml:"note,omitempty"`
+	Status     StepStatus `yaml:"status,omitempty"`
+	MayChange  bool       `yaml:"may_change,omitempty"`
+	SkipReason string     `yaml:"skip_reason,omitempty"`
+}
+
+type StepHunk struct {
+	File  string `yaml:"file"`
+	Lines string `yaml:"lines,omitempty"`
+}
+
+type Hotspot struct {
+	Cat  string `yaml:"cat"`
+	Q    string `yaml:"q"`
+	File string `yaml:"file,omitempty"`
+	Line int    `yaml:"line,omitempty"`
+}
+
+type Comment struct {
+	ID         int      `yaml:"id"`
+	Step       string   `yaml:"step"`
+	File       string   `yaml:"file"`
+	Lines      string   `yaml:"lines"`
+	SHA        string   `yaml:"sha"`
+	Severity   Severity `yaml:"severity"`
+	Body       string   `yaml:"body"`
+	Suggestion string   `yaml:"suggestion,omitempty"`
+}
+
+func (r *Review) Step(id string) *Step {
+	if i := r.StepIndex(id); i >= 0 {
+		return &r.Steps[i]
+	}
+	return nil
+}
+
+func (r *Review) StepIndex(id string) int {
+	for i := range r.Steps {
+		if r.Steps[i].ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (r *Review) File(path string) *File {
+	for i := range r.Files {
+		if r.Files[i].Path == path {
+			return &r.Files[i]
+		}
+	}
+	return nil
+}
+
+func ParseLines(s string) (start, end int, err error) {
+	if s == "" {
+		return 0, 0, nil
+	}
+	bad := fmt.Errorf("lines %q: want N or N-M with 1 <= N <= M", s)
+	a, b, found := strings.Cut(s, "-")
+	if start, err = strconv.Atoi(a); err != nil {
+		return 0, 0, bad
+	}
+	end = start
+	if found {
+		if end, err = strconv.Atoi(b); err != nil {
+			return 0, 0, bad
+		}
+	}
+	if start < 1 || end < start {
+		return 0, 0, bad
+	}
+	return start, end, nil
+}
