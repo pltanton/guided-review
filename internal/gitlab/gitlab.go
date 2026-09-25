@@ -1,0 +1,90 @@
+package gitlab
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/url"
+	"os/exec"
+	"strconv"
+	"strings"
+)
+
+type MRRef struct {
+	Host    string
+	Project string
+	IID     int
+}
+
+type DiffRefs struct {
+	BaseSHA  string `json:"base_sha"`
+	StartSHA string `json:"start_sha"`
+	HeadSHA  string `json:"head_sha"`
+}
+
+type MR struct {
+	Title        string   `json:"title"`
+	WebURL       string   `json:"web_url"`
+	SourceBranch string   `json:"source_branch"`
+	DiffRefs     DiffRefs `json:"diff_refs"`
+}
+
+type Runner func(ctx context.Context, args ...string) ([]byte, error)
+
+const mrPathSep = "/-/merge_requests/"
+
+func IsMRURL(s string) bool {
+	return strings.Contains(s, mrPathSep)
+}
+
+func ParseMRURL(raw string) (MRRef, error) {
+	bad := fmt.Errorf("not a merge request URL: %q", raw)
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return MRRef{}, bad
+	}
+	project, rest, ok := strings.Cut(strings.Trim(u.Path, "/"), strings.TrimPrefix(mrPathSep, "/"))
+	project = strings.TrimSuffix(project, "/")
+	if !ok || project == "" {
+		return MRRef{}, bad
+	}
+	iidText, _, _ := strings.Cut(rest, "/")
+	iid, err := strconv.Atoi(iidText)
+	if err != nil || iid <= 0 {
+		return MRRef{}, bad
+	}
+	return MRRef{Host: u.Host, Project: project, IID: iid}, nil
+}
+
+func Glab(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "glab", args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if errors.Is(err, exec.ErrNotFound) {
+		return nil, errors.New("glab not found: install it from https://gitlab.com/gitlab-org/cli")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("glab %s: %w: %s (not logged in? run: glab auth login)",
+			strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return out, nil
+}
+
+func FetchMR(ctx context.Context, run Runner, ref MRRef) (MR, error) {
+	path := fmt.Sprintf("projects/%s/merge_requests/%d", url.PathEscape(ref.Project), ref.IID)
+	out, err := run(ctx, "api", "--hostname", ref.Host, path)
+	if err != nil {
+		return MR{}, err
+	}
+	var mr MR
+	if err := json.Unmarshal(out, &mr); err != nil {
+		return MR{}, fmt.Errorf("decode merge request: %w", err)
+	}
+	if mr.DiffRefs.HeadSHA == "" {
+		return MR{}, errors.New("merge request has no diff_refs yet")
+	}
+	return mr, nil
+}
