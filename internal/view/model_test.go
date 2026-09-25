@@ -191,3 +191,27 @@ func TestGroupedRunes(t *testing.T) {
 		t.Fatalf("grouped compose sent %+v", *sent)
 	}
 }
+
+func TestIntakeBeforePlan(t *testing.T) {
+	var sent []inbox.Event
+	r := &state.Review{ID: "mr-1", MR: &state.MR{IID: 1, Title: "Add guard"},
+		Messages: []state.Message{{Text: "Task: reject negatives. Верно понял?"}}}
+	m := &model{review: r, width: 100, height: 20, showPlan: true,
+		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"review mr-1", "Add guard", "claude: Task: reject negatives. Верно понял?"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("intake view lacks %q:\n%s", want, out)
+		}
+	}
+	m.Update(key("c"))
+	typeText(m, "да")
+	m.Update(key("enter"))
+	if len(sent) != 1 || sent[0] != (inbox.Event{Kind: inbox.KindMessage, Text: "да"}) {
+		t.Fatalf("sent %+v", sent)
+	}
+	m.Update(key(">"))
+	if len(sent) != 1 {
+		t.Fatalf("next without a plan must not be sent: %+v", sent)
+	}
+}

@@ -10,7 +10,7 @@ import (
 )
 
 func (m *model) startCompose(kind string) {
-	if m.step == nil {
+	if m.review == nil || m.step == nil && kind != inbox.KindMessage {
 		return
 	}
 	m.composing, m.composeKind, m.input = true, kind, nil
@@ -54,10 +54,10 @@ func (m *model) explain() {
 }
 
 func (m *model) emit(e inbox.Event) {
-	if m.step == nil {
+	if m.review == nil || m.step == nil && e.Kind != inbox.KindMessage {
 		return
 	}
-	if e.Step == "" {
+	if e.Step == "" && m.step != nil {
 		e.Step = m.step.ID
 	}
 	if err := m.send(e); err != nil {

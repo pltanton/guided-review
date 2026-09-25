@@ -88,17 +88,21 @@ type chatLine struct {
 }
 
 func (m *model) conversation() []chatLine {
-	if m.step == nil {
+	if m.review == nil {
 		return nil
+	}
+	stepID := ""
+	if m.step != nil {
+		stepID = m.step.ID
 	}
 	var out []chatLine
 	for _, msg := range m.review.Messages {
-		if msg.Step == m.step.ID {
+		if msg.Step == stepID {
 			out = append(out, chatLine{msg.Time, agentStyle.Render("claude: ") + msg.Text})
 		}
 	}
 	for _, e := range m.events {
-		if e.Step != m.step.ID || e.Kind == inbox.KindGoto {
+		if e.Step != stepID || e.Kind == inbox.KindGoto {
 			continue
 		}
 		text := e.Text
@@ -115,14 +119,18 @@ func (m *model) conversation() []chatLine {
 }
 
 func (m *model) bottomLines() []string {
+	limit := messageLines
+	if m.step == nil {
+		limit = max(m.height-4, 1)
+	}
 	var lines []string
 	if chat := m.conversation(); len(chat) > 0 {
 		var wrapped []string
 		for _, c := range chat {
 			wrapped = append(wrapped, strings.Split(ansi.Wrap(c.text, max(m.width, 10), ""), "\n")...)
 		}
-		if len(wrapped) > messageLines {
-			wrapped = wrapped[len(wrapped)-messageLines:]
+		if len(wrapped) > limit {
+			wrapped = wrapped[len(wrapped)-limit:]
 		}
 		lines = append(lines, dimStyle.Render(strings.Repeat("─", max(m.width, 1))))
 		lines = append(lines, wrapped...)
@@ -162,7 +170,7 @@ func (m *model) View() string {
 		return dimStyle.Render(msg)
 	}
 	if m.step == nil {
-		return dimStyle.Render(fmt.Sprintf("review %s: waiting for gr plan set…", m.review.ID))
+		return m.intakeView()
 	}
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)
@@ -314,4 +322,24 @@ func renderCell(c Cell, w int, hot bool) string {
 		marker = hotStyle.Render("⚑")
 	}
 	return marker + dimStyle.Render(fmt.Sprintf("%4d │ ", c.Line)) + text
+}
+
+func (m *model) intakeView() string {
+	title := "review " + m.review.ID
+	if m.review.MR != nil {
+		title += fmt.Sprintf(" · !%d %s", m.review.MR.IID, m.review.MR.Title)
+	}
+	top := []string{boldStyle.Render(title), dimStyle.Render("no plan yet — answer the agent below (c to write)")}
+	bottom := m.bottomLines()
+	out := make([]string, 0, m.height)
+	for _, line := range top {
+		out = append(out, fit(line, m.width))
+	}
+	for len(out)+len(bottom) < m.height {
+		out = append(out, "")
+	}
+	for _, line := range bottom {
+		out = append(out, fit(line, m.width))
+	}
+	return strings.Join(out[:min(len(out), max(m.height, len(top)))], "\n")
 }
