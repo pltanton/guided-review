@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Tier string
@@ -58,7 +59,16 @@ type Review struct {
 	Current      string       `yaml:"current,omitempty"`
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
+	Messages     []Message    `yaml:"messages,omitempty"`
 }
+
+type Message struct {
+	Time time.Time `yaml:"time"`
+	Step string    `yaml:"step,omitempty"`
+	Text string    `yaml:"text"`
+}
+
+const MaxMessages = 50
 
 type Discussion struct {
 	ID       string `yaml:"id"`

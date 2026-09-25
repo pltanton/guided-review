@@ -24,6 +24,8 @@ const usage = `usage: gr <command> [args]
   comment list | resolve ID
   note add --file F --line N [--kind note|spec] [--step ID] TEXT...
   status [--gate]
+  wait [--timeout 9m]
+  say TEXT... | say -
   view
 `
 
@@ -77,6 +79,10 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdComment(ctx, e, args[1:])
 	case "status":
 		return cmdStatus(ctx, e, args[1:])
+	case "wait":
+		return cmdWait(ctx, e, args[1:])
+	case "say":
+		return cmdSay(ctx, e, args[1:])
 	case "view":
 		return cmdView(ctx, e)
 	case "help", "-h", "--help":

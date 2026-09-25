@@ -35,6 +35,10 @@ func (s Store) currentPath() string {
 	return filepath.Join(s.Dir, name)
 }
 
+func (s Store) ReviewDir(id string) string {
+	return filepath.Join(s.Dir, id)
+}
+
 func (s Store) path(id string) string {
 	return filepath.Join(s.Dir, id, FileName)
 }

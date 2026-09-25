@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aplotnikov/guided-review/internal/inbox"
 	"github.com/aplotnikov/guided-review/internal/testrepo"
 )
 
@@ -240,4 +241,28 @@ func TestReReviewRebase(t *testing.T) {
 	}
 	out = h.mustRun("steps:\n  - id: r1\n    title: wire\n    kind: logic\n    hunks: [{file: wire.go}]\n", "plan", "set")
 	assertContains(t, out, "plan accepted: 1 steps")
+}
+
+func TestWaitAndSay(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+
+	s, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := inbox.Append(s.store.ReviewDir(r.ID), inbox.Event{Kind: inbox.KindMessage, Step: "s1", File: "api/transfer.go", Lines: "4", Text: "why 0?"}); err != nil {
+		t.Fatal(err)
+	}
+	out := h.mustRun("", "wait", "--timeout", "1s")
+	assertContains(t, out, "[message] s1 api/transfer.go:4: why 0?")
+	out = h.mustRun("", "wait", "--timeout", "50ms")
+	assertContains(t, out, "no input yet")
+
+	h.mustRun("", "say", "Zero", "is", "a", "silent", "reject.")
+	_, r, _ = loadReview(context.Background(), h.repo.Dir)
+	if n := len(r.Messages); n != 1 || r.Messages[0].Text != "Zero is a silent reject." || r.Messages[0].Step != "s1" {
+		t.Fatalf("messages: %+v", r.Messages)
+	}
 }
