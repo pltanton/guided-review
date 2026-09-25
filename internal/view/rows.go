@@ -67,11 +67,13 @@ type Source interface {
 	Lines(path string) ([]string, error)
 }
 
-func BuildRows(src Source, st state.Step, context int, notes []Note) ([]Row, error) {
-	return BuildRowsWith(src, st, context, notes, nil)
-}
-
-func BuildRowsWith(src Source, st state.Step, context int, notes []Note, reveal map[string][][2]int) ([]Row, error) {
+func buildRows(
+	src Source,
+	st state.Step,
+	context int,
+	notes []Note,
+	reveal map[string][][2]int,
+) ([]Row, error) {
 	var rows []Row
 	for _, sh := range st.Hunks {
 		fd, err := src.FileDiff(sh.File)
@@ -95,8 +97,22 @@ func BuildRowsWith(src Source, st state.Step, context int, notes []Note, reveal 
 		if len(rows) > 0 {
 			rows = append(rows, Row{Kind: RowSpacer, File: sh.File})
 		}
-		rows = append(rows, Row{Kind: RowFile, File: sh.File, Text: sh.File, FileInfo: fileInfo(fd)})
-		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File), fileNotes, reveal[sh.File])...)
+		rows = append(
+			rows,
+			Row{Kind: RowFile, File: sh.File, Text: sh.File, FileInfo: fileInfo(fd)},
+		)
+		rows = append(
+			rows,
+			fileRows(
+				fd,
+				lines,
+				start,
+				end,
+				context,
+				hotspotLines(st, sh.File),
+				fileNotes,
+				reveal[sh.File],
+			)...)
 	}
 	markIntraline(rows)
 	markMoved(rows)
@@ -139,7 +155,14 @@ func hunkBefore(h diff.Hunk, n int) bool {
 	return h.NewStart+h.NewLines-1 < n
 }
 
-func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int]bool, notes []Note, reveal [][2]int) []Row {
+func fileRows(
+	fd diff.File,
+	lines []string,
+	start, end, context int,
+	hot map[int]bool,
+	notes []Note,
+	reveal [][2]int,
+) []Row {
 	added := map[int]bool{}
 	reformat := map[int]bool{}
 	removed := map[int][]Row{}
@@ -156,7 +179,17 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 				continue
 			}
 			text := expandTabs(l.Text)
-			removed[anchor] = append(removed[anchor], Row{Kind: RowRemoved, File: fd.Path, OldLine: old, Text: text, Plain: text, Reformat: onlyFormat})
+			removed[anchor] = append(
+				removed[anchor],
+				Row{
+					Kind:     RowRemoved,
+					File:     fd.Path,
+					OldLine:  old,
+					Text:     text,
+					Plain:    text,
+					Reformat: onlyFormat,
+				},
+			)
 			old++
 		}
 	}
@@ -218,7 +251,15 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 			if n > w[1] {
 				break
 			}
-			row := Row{Kind: RowCode, File: fd.Path, Line: n, Text: lines[n-1], Plain: ansi.Strip(lines[n-1]), Hotspot: hot[n], HunkStart: first}
+			row := Row{
+				Kind:      RowCode,
+				File:      fd.Path,
+				Line:      n,
+				Text:      lines[n-1],
+				Plain:     ansi.Strip(lines[n-1]),
+				Hotspot:   hot[n],
+				HunkStart: first,
+			}
 			if added[n] {
 				row.Kind, row.Reformat = RowAdded, reformat[n]
 			} else {
@@ -226,7 +267,19 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 			}
 			rows = append(rows, row)
 			for _, note := range notesAt[n] {
-				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, NoteLabel: note.Label, Dim: note.Dim, Ref: note.Ref})
+				rows = append(
+					rows,
+					Row{
+						Kind:      RowNote,
+						File:      fd.Path,
+						Line:      n,
+						Text:      note.Text,
+						NoteKind:  note.Kind,
+						NoteLabel: note.Label,
+						Dim:       note.Dim,
+						Ref:       note.Ref,
+					},
+				)
 			}
 		}
 	}
@@ -246,7 +299,8 @@ func isReformat(h diff.Hunk) bool {
 			before.WriteString(squashed)
 		}
 	}
-	return h.OldLines > 0 && h.NewLines > 0 && before.Len() > 0 && before.String() == after.String()
+	return h.OldLines > 0 && h.NewLines > 0 && before.Len() > 0 &&
+		before.String() == after.String()
 }
 
 func mergeWindows(ws [][2]int, maxLine int) [][2]int {

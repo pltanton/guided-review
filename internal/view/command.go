@@ -14,14 +14,9 @@ import (
 	"github.com/aplotnikov/guided-review/internal/inbox"
 )
 
-var commandNames = []string{
-	"q", "quit", "help", "noh", "step", "all", "boilerplate", "generated", "file",
-	"set", "msg", "skip", "next", "explain", "publish", "edit", "chat",
-}
+var commandNames = []string{"q", "all", "boilerplate", "generated", "f", "set", "msg", "skip"}
 
-var setOptions = []string{
-	"split", "nosplit", "plan", "noplan", "mouse", "nomouse", "removed", "noremoved", "context=", "diff=",
-}
+var setOptions = []string{"context=", "diff="}
 
 func (m *model) startCmd(mode rune) {
 	m.composing, m.composeKind, m.cmdMode = true, "", mode
@@ -54,46 +49,30 @@ func (m *model) execCommand(line string) tea.Cmd {
 		return nil
 	}
 	switch name {
-	case "q", "quit", "qa":
+	case "q":
 		return tea.Quit
-	case "h", "help":
-		m.help, m.helpTop = true, 0
-		return nil
-	case "noh", "nohlsearch":
-		m.search = ""
-		return nil
-	case "step":
-		return m.showStepByName(arg)
 	case "all", "boilerplate", "generated":
-		return m.showStepByName(name)
-	case "f", "file":
+		name = "~" + name
+	case "f":
 		m.jumpToFileMatch(arg)
 		return nil
 	case "set":
-		return m.setOption(arg)
-	case "msg", "m":
-		m.sendMessage(arg)
+		m.setOption(arg)
 		return nil
-	case "skip":
+	case "msg", "skip":
+		kind := inbox.KindMessage
+		if name == "skip" {
+			kind = inbox.KindSkip
+		}
 		if arg == "" {
-			m.status = "usage: :skip <reason>"
+			m.status = "usage: :" + name + " <text>"
 			return nil
 		}
-		m.emit(inbox.Event{Kind: inbox.KindSkip, Text: arg})
-		return nil
-	case "next":
-		m.next()
-		return nil
-	case "explain":
-		m.explain()
-		return nil
-	case "publish":
-		m.publish()
-		return nil
-	case "e", "edit":
-		return m.openEditor()
-	case "chat":
-		m.chatSize, m.chatTop = 2, 0
+		e := inbox.Event{Kind: kind, Text: arg}
+		if kind == inbox.KindMessage {
+			e.File, e.Lines, e.Comment = m.anchorAt()
+		}
+		m.emit(e)
 		return nil
 	}
 	if m.review != nil && m.stepByID(name) != nil {
@@ -108,24 +87,10 @@ func (m *model) execCommand(line string) tea.Cmd {
 	return nil
 }
 
-func (m *model) showStepByName(name string) tea.Cmd {
-	switch name {
-	case "all", "boilerplate", "generated":
-		name = "~" + name
-	case "", "current":
-		name = m.review.Current
-	}
-	if m.review == nil || m.stepByID(name) == nil {
-		m.status = "no step " + name
-		return nil
-	}
-	return m.showStep(name)
-}
-
 func (m *model) gotoLine(n int) {
 	file := m.current().File
 	if file == "" {
-		for _, it := range m.list {
+		for _, it := range m.lines {
 			if it.File != "" {
 				file = it.File
 				break
@@ -133,8 +98,8 @@ func (m *model) gotoLine(n int) {
 		}
 	}
 	best := -1
-	for i, it := range m.list {
-		if it.File != file || it.Note || it.Line == 0 {
+	for i, it := range m.lines {
+		if it.File != file || it.NoteHead || it.Line == 0 {
 			continue
 		}
 		if it.Line == n {
@@ -149,8 +114,8 @@ func (m *model) gotoLine(n int) {
 		m.status = fmt.Sprintf("line %d is not shown in %s (o on ⋯ reveals hidden lines)", n, file)
 		return
 	}
-	if m.list[best].Line != n {
-		m.status = fmt.Sprintf("line %d is hidden, nearest shown: %d", n, m.list[best].Line)
+	if m.lines[best].Line != n {
+		m.status = fmt.Sprintf("line %d is hidden, nearest shown: %d", n, m.lines[best].Line)
 	}
 	m.cursor = best
 	m.clamp()
@@ -167,63 +132,30 @@ func (m *model) jumpToFileMatch(q string) {
 	m.status = "no file matching " + q + " in this step"
 }
 
-func (m *model) setOption(arg string) tea.Cmd {
+func (m *model) setOption(arg string) {
 	opt, value, _ := strings.Cut(arg, "=")
 	switch opt {
-	case "split", "nosplit":
-		m.splitView = opt == "split"
-		m.relist()
-	case "plan", "noplan":
-		m.showPlan = opt == "plan"
-		m.relist()
-	case "removed", "noremoved":
-		m.showRemoved = opt == "removed"
-		m.relist()
-	case "mouse", "nomouse":
-		if m.mouse != (opt == "mouse") {
-			return m.toggleMouse()
-		}
 	case "context":
 		n, err := strconv.Atoi(value)
 		if err != nil || n < 0 {
 			m.status = "usage: :set context=N"
-			return nil
+			return
 		}
 		m.context = n
-		if m.src != nil && m.step != nil {
-			m.rebuild(false)
-		}
 	case "diff":
 		if !slices.Contains(gitx.DiffAlgorithms, value) {
 			m.status = fmt.Sprintf("diff must be one of %v", gitx.DiffAlgorithms)
-			return nil
+			return
 		}
-		m.algo = value
-		if m.src != nil {
-			m.src = newGitSource(m.ctx, m.repo, m.algo, m.src.base, m.src.head)
-			m.unfolded = nil
-			m.rebuild(false)
-		}
+		m.setAlgorithm(value)
+		return
 	default:
-		m.status = "unknown option: " + arg + " (" + strings.Join(setOptions, " ") + ")"
-	}
-	return nil
-}
-
-func (m *model) sendMessage(text string) {
-	if text == "" {
-		m.status = "usage: :msg <text>"
+		m.status = "usage: :set context=N | diff=ALGORITHM"
 		return
 	}
-	e := inbox.Event{Kind: inbox.KindMessage, Text: text}
-	cur := m.current()
-	switch {
-	case cur.Ref > 0:
-		e.Comment, e.File, e.Lines = cur.Ref, cur.File, fmt.Sprint(cur.Line)
-	case cur.File != "" && cur.Line > 0:
-		e.File, e.Lines = cur.File, fmt.Sprint(cur.Line)
+	if m.src != nil && m.step != nil {
+		m.rebuild(false)
 	}
-	m.emit(e)
 }
 
 func (m *model) complete() {
@@ -290,15 +222,11 @@ func (m *model) rowText(i int) string {
 		}
 		return ansi.Strip(text)
 	}
-	if m.useSplit() {
-		r := m.split[i]
-		if r.Full != nil {
-			return strip(r.Full.Plain, r.Full.Text)
-		}
-		return strip(r.Right.Plain, r.Right.Text) + "\n" + strip(r.Left.Plain, r.Left.Text)
+	l := m.lines[i]
+	if l.Pair && m.useSplit() {
+		return strip(l.Right.Plain, l.Right.Text) + "\n" + strip(l.Left.Plain, l.Left.Text)
 	}
-	r := m.disp[i]
-	return strip(r.Plain, r.Text)
+	return strip(l.Plain, l.Text)
 }
 
 func (m *model) matches() []int {
@@ -308,7 +236,7 @@ func (m *model) matches() []int {
 		q = strings.ToLower(q)
 	}
 	var out []int
-	for i := range m.list {
+	for i := range m.lines {
 		text := m.rowText(i)
 		if fold {
 			text = strings.ToLower(text)

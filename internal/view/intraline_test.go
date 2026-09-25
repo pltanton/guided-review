@@ -62,11 +62,14 @@ func TestReformatHunk(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
 			{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 2, Lines: []diff.Line{
-				{Kind: '-', Text: "call(a,b)"}, {Kind: '+', Text: "call(a,"}, {Kind: '+', Text: "  b)"}}},
+				{
+					Kind: '-',
+					Text: "call(a,b)",
+				}, {Kind: '+', Text: "call(a,"}, {Kind: '+', Text: "  b)"}}},
 		}}},
 		lines: map[string][]string{"a.go": {"x", "call(a,", "  b)", "y"}},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 0, nil)
+	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 0, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,11 +83,27 @@ func TestReformatHunk(t *testing.T) {
 func TestFoldRemoved(t *testing.T) {
 	rows := []Row{
 		{Kind: RowFile, File: "a.go", Text: "a.go"},
-		{Kind: RowRemoved, File: "a.go", Line: 5, OldLine: 5, Plain: "old1", Text: "old1", HunkStart: true},
+		{
+			Kind:      RowRemoved,
+			File:      "a.go",
+			Line:      5,
+			OldLine:   5,
+			Plain:     "old1",
+			Text:      "old1",
+			HunkStart: true,
+		},
 		{Kind: RowRemoved, File: "a.go", Line: 5, OldLine: 6, Plain: "old2", Text: "old2"},
 		{Kind: RowRemoved, File: "a.go", Line: 5, OldLine: 7, Plain: "old3", Text: "old3"},
 		{Kind: RowAdded, File: "a.go", Line: 5, Plain: "new", Text: "new"},
-		{Kind: RowRemoved, File: "a.go", Line: 9, OldLine: 11, Plain: "one", Text: "one", HunkStart: true},
+		{
+			Kind:      RowRemoved,
+			File:      "a.go",
+			Line:      9,
+			OldLine:   11,
+			Plain:     "one",
+			Text:      "one",
+			HunkStart: true,
+		},
 		{Kind: RowCode, File: "a.go", Line: 9, Plain: "keep", Text: "keep"},
 	}
 	out := foldRemoved(rows, nil)

@@ -8,11 +8,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/aplotnikov/guided-review/internal/gitx"
 	"github.com/aplotnikov/guided-review/internal/state"
 )
 
-func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane string) error {
+func Run(ctx context.Context, o Options) error {
+	store := o.Store
 	if err := os.MkdirAll(store.Dir, 0o755); err != nil {
 		return err
 	}
@@ -20,12 +20,11 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane stri
 	if err != nil {
 		return err
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 	if err := watchTree(w, store.Dir); err != nil {
 		return err
 	}
-	m := newModel(ctx, store, repo)
-	m.returnPane = returnPane
+	m := newModel(ctx, o)
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx)}
 	if m.mouse {
 		opts = append(opts, tea.WithMouseCellMotion())
@@ -36,7 +35,7 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane stri
 	if m.lsp != nil {
 		m.lsp.close()
 	}
-	_ = focusAgent(returnPane)
+	_ = focusAgent(o.ReturnPane)
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -73,7 +72,8 @@ func forward(w *fsnotify.Watcher, p *tea.Program) {
 					_ = w.Add(ev.Name)
 				}
 			}
-			if name := filepath.Base(ev.Name); name == state.FileName || state.IsCurrentFile(name) {
+			if name := filepath.Base(ev.Name); name == state.FileName ||
+				state.IsCurrentFile(name) {
 				p.Send(reloadMsg{})
 			}
 		case _, ok := <-w.Errors:

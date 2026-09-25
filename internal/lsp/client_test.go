@@ -33,16 +33,42 @@ func (s *fakeServer) serve() {
 		switch msg.Method {
 		case "initialize":
 			result = map[string]any{"capabilities": map[string]any{}}
-			_ = writeMessage(s.out, map[string]any{"jsonrpc": "2.0", "id": 900, "method": "workspace/configuration", "params": map[string]any{"items": []any{map[string]any{}}}})
+			_ = writeMessage(
+				s.out,
+				map[string]any{
+					"jsonrpc": "2.0",
+					"id":      900,
+					"method":  "workspace/configuration",
+					"params":  map[string]any{"items": []any{map[string]any{}}},
+				},
+			)
 		case "textDocument/definition":
-			result = []any{map[string]any{"targetUri": "file:///repo/b.go", "targetSelectionRange": map[string]any{"start": map[string]any{"line": 9, "character": 5}}}}
+			result = []any{
+				map[string]any{
+					"targetUri": "file:///repo/b.go",
+					"targetSelectionRange": map[string]any{
+						"start": map[string]any{"line": 9, "character": 5},
+					},
+				},
+			}
 		case "textDocument/references":
 			result = []any{
-				map[string]any{"uri": "file:///repo/a.go", "range": map[string]any{"start": map[string]any{"line": 2, "character": 1}}},
-				map[string]any{"uri": "file:///repo/c.go", "range": map[string]any{"start": map[string]any{"line": 4, "character": 0}}},
+				map[string]any{
+					"uri":   "file:///repo/a.go",
+					"range": map[string]any{"start": map[string]any{"line": 2, "character": 1}},
+				},
+				map[string]any{
+					"uri":   "file:///repo/c.go",
+					"range": map[string]any{"start": map[string]any{"line": 4, "character": 0}},
+				},
 			}
 		case "textDocument/hover":
-			result = map[string]any{"contents": map[string]any{"kind": "markdown", "value": "```go\nfunc Transfer(a, b int) int\n```"}}
+			result = map[string]any{
+				"contents": map[string]any{
+					"kind":  "markdown",
+					"value": "```go\nfunc Transfer(a, b int) int\n```",
+				},
+			}
 		case "shutdown":
 			result = nil
 		}
@@ -66,7 +92,8 @@ func TestClient(t *testing.T) {
 		t.Fatal(err)
 	}
 	defs, err := c.Definition(ctx, "/repo/a.go", 2, 3)
-	if err != nil || len(defs) != 1 || defs[0].Path != "/repo/b.go" || defs[0].Line != 9 || defs[0].Char != 5 {
+	if err != nil || len(defs) != 1 || defs[0].Path != "/repo/b.go" || defs[0].Line != 9 ||
+		defs[0].Char != 5 {
 		t.Fatalf("Definition = %+v, %v", defs, err)
 	}
 	refs, err := c.References(ctx, "/repo/a.go", 2, 3)

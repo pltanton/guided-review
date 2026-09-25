@@ -48,17 +48,6 @@ func tick() tea.Cmd {
 
 type editorDoneMsg struct{ err error }
 
-type item struct {
-	File      string
-	Line      int
-	HunkStart bool
-	Note      bool
-	FileHead  bool
-	Fold      string
-	Ref       int
-	Gap       [2]int
-}
-
 type model struct {
 	ctx    context.Context
 	store  state.Store
@@ -67,9 +56,7 @@ type model struct {
 	review *state.Review
 	step   *state.Step
 	rows   []Row
-	disp   []Row
-	split  []SplitRow
-	list   []item
+	lines  []line
 	events []inbox.Event
 
 	cursor, offset int
@@ -103,7 +90,7 @@ type model struct {
 	km         *keymap
 	help       bool
 	helpTop    int
-	context0   int
+	baseCtx    int
 	popup      *popup
 	popupStack []*popup
 	lspDo      func(kind, file string, line, col int) tea.Cmd
@@ -137,12 +124,22 @@ type model struct {
 	frame        int
 }
 
-func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
-	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true, algo: gitx.DefaultDiffAlgorithm}
-	user, _, uerr := config.LoadUser()
-	repoCfg, rerr := config.Load(repo.Dir)
-	m.applyConfig(config.Merge(user, repoCfg))
-	m.err = errors.Join(uerr, rerr, m.err)
+type Options struct {
+	Store      state.Store
+	Repo       gitx.Repo
+	Config     config.Config
+	ReturnPane string
+}
+
+func newModel(ctx context.Context, o Options) *model {
+	m := &model{
+		ctx:        ctx,
+		store:      o.Store,
+		repo:       o.Repo,
+		returnPane: o.ReturnPane,
+		algo:       gitx.DefaultDiffAlgorithm,
+	}
+	m.applyConfig(o.Config)
 	m.lspDo = m.defaultLSP
 	m.runGr = func(args ...string) (string, error) {
 		bin, err := os.Executable()
@@ -150,7 +147,7 @@ func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 			return "", err
 		}
 		cmd := exec.CommandContext(ctx, bin, args...)
-		cmd.Dir = repo.Dir
+		cmd.Dir = o.Repo.Dir
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}
@@ -168,7 +165,7 @@ func (m *model) reload() {
 	r, err := m.store.LoadCurrent()
 	if err != nil {
 		m.closed = m.review != nil && errors.Is(err, state.ErrNoReview)
-		m.review, m.step, m.rows, m.split, m.list, m.err = nil, nil, nil, nil, nil, err
+		m.review, m.step, m.rows, m.lines, m.err = nil, nil, nil, nil, err
 		return
 	}
 	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
@@ -189,18 +186,18 @@ func (m *model) reload() {
 	}
 	m.step = m.stepByID(target)
 	if m.step == nil {
-		m.rows, m.split, m.list = nil, nil, nil
+		m.rows, m.lines = nil, nil
 		return
 	}
 	changed := m.step.ID != prev
 	if changed {
-		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseContext(), 0, 0, false, nil
+		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseCtx, 0, 0, false, nil
 	}
 	m.rebuild(changed)
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	rows, err := BuildRowsWith(m.src, *m.step, m.context, m.notes(), m.reveal)
+	rows, err := buildRows(m.src, *m.step, m.context, m.notes(), m.reveal)
 	if err != nil {
 		m.err = err
 		return
@@ -210,7 +207,7 @@ func (m *model) rebuild(jumpToHunk bool) {
 	m.relist()
 	switch {
 	case jumpToHunk:
-		m.cursor = firstFocus(m.list)
+		m.cursor = firstFocus(m.lines)
 	case keep.File != "":
 		m.focus(keep)
 	}
@@ -220,11 +217,17 @@ func (m *model) rebuild(jumpToHunk bool) {
 func (m *model) notes() []Note {
 	var out []Note
 	for _, a := range m.step.Annotations {
-		out = append(out, Note{File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true})
+		out = append(
+			out,
+			Note{File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true},
+		)
 	}
 	for _, h := range m.step.Hotspots {
 		if h.Line > 0 {
-			out = append(out, Note{File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true})
+			out = append(
+				out,
+				Note{File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true},
+			)
 		}
 	}
 	round := max(m.review.Round, 1)
@@ -233,7 +236,18 @@ func (m *model) notes() []Note {
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
 		}
-		out = append(out, Note{Ref: c.ID, File: c.File, Line: start, Kind: "comment", Label: fmt.Sprintf("#%d %s", c.ID, c.Severity), Text: c.Body, Dim: c.Resolved})
+		out = append(
+			out,
+			Note{
+				Ref:   c.ID,
+				File:  c.File,
+				Line:  start,
+				Kind:  "comment",
+				Label: fmt.Sprintf("#%d %s", c.ID, c.Severity),
+				Text:  c.Body,
+				Dim:   c.Resolved,
+			},
+		)
 	}
 	out = append(out, m.pendingNotes()...)
 	for _, d := range m.review.Discussions {
@@ -241,7 +255,10 @@ func (m *model) notes() []Note {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
-		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body})
+		out = append(
+			out,
+			Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body},
+		)
 	}
 	return out
 }
@@ -264,7 +281,16 @@ func (m *model) pendingNotes() []Note {
 			continue
 		}
 		if start, _, err := state.ParseLines(e.Lines); err == nil && start > 0 {
-			out = append(out, Note{File: e.File, Line: start, Kind: "pending", Text: "agent is explaining…", Focus: true})
+			out = append(
+				out,
+				Note{
+					File:  e.File,
+					Line:  start,
+					Kind:  "pending",
+					Text:  "agent is explaining…",
+					Focus: true,
+				},
+			)
 		}
 	}
 	return out
@@ -276,25 +302,15 @@ func (m *model) useSplit() bool {
 
 func (m *model) relist() {
 	keep := m.current()
-	base := m.rows
-	if !m.useSplit() && !m.showRemoved {
-		base = foldRemoved(base, m.unfolded)
-	}
-	m.disp = expandNotes(base, m.mainWidth()-noteIndent)
-	m.split = pairRows(m.disp)
-	m.list = m.list[:0]
+	width := m.mainWidth() - noteIndent
 	if m.useSplit() {
-		for _, r := range m.split {
-			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey, Ref: r.Full.Ref, Gap: [2]int{r.Full.GapFrom, r.Full.GapTo}})
-				continue
-			}
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
-		}
+		m.lines = pairRows(expandNotes(m.rows, width))
 	} else {
-		for _, r := range m.disp {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey, Ref: r.Ref, Gap: [2]int{r.GapFrom, r.GapTo}})
+		rows := m.rows
+		if !m.showRemoved {
+			rows = foldRemoved(rows, m.unfolded)
 		}
+		m.lines = unifiedLines(expandNotes(rows, width))
 	}
 	if keep.File != "" {
 		m.focus(keep)
@@ -302,23 +318,23 @@ func (m *model) relist() {
 	m.clamp()
 }
 
-func (m *model) current() item {
-	if m.cursor < len(m.list) {
-		return m.list[m.cursor]
+func (m *model) current() line {
+	if m.cursor < len(m.lines) {
+		return m.lines[m.cursor]
 	}
-	return item{}
+	return line{}
 }
 
-func (m *model) focus(it item) {
-	for i, x := range m.list {
-		if x.File == it.File && x.Line == it.Line && x.Note == it.Note {
+func (m *model) focus(it line) {
+	for i, x := range m.lines {
+		if x.File == it.File && x.Line == it.Line && x.NoteHead == it.NoteHead {
 			m.cursor = i
 			return
 		}
 	}
 }
 
-func firstFocus(list []item) int {
+func firstFocus(list []line) int {
 	for i, it := range list {
 		if it.HunkStart {
 			return i
@@ -334,28 +350,18 @@ func firstFocus(list []item) int {
 
 func (m *model) Init() tea.Cmd { return tick() }
 
-func (m *model) applyConfig(c config.UserConfig) {
+func (m *model) applyConfig(c config.Config) {
 	var err error
 	m.km, err = newKeymap(c.Keys)
 	m.err = err
 	m.splitView, m.showPlan, m.mouse = c.View.Split, !c.View.HidePlan, !c.View.NoMouse
-	if c.View.Context > 0 {
-		m.context0, m.context = c.View.Context, c.View.Context
-	}
+	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
+	m.context = m.baseCtx
 	if c.View.Style != "" {
 		styleName = c.View.Style
 	}
-	if c.Diff != "" {
-		m.algo = c.Diff
-	}
+	m.algo = cmp.Or(c.Diff, m.algo)
 	m.lspServers = c.LSP
-}
-
-func (m *model) baseContext() int {
-	if m.context0 > 0 {
-		return m.context0
-	}
-	return defaultContext
 }
 
 func (m *model) clock() time.Time {
@@ -406,7 +412,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loading, m.err = "", msg.err
 		m.rows = msg.rows
 		m.relist()
-		m.cursor = firstFocus(m.list)
+		m.cursor = firstFocus(m.lines)
 		m.clamp()
 	case tickMsg:
 		m.frame++
@@ -442,8 +448,8 @@ func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) stepFiles() []string {
 	var out []string
-	for _, it := range m.list {
-		if it.FileHead && (len(out) == 0 || out[len(out)-1] != it.File) {
+	for _, it := range m.lines {
+		if it.Kind == RowFile && (len(out) == 0 || out[len(out)-1] != it.File) {
 			out = append(out, it.File)
 		}
 	}
@@ -451,8 +457,8 @@ func (m *model) stepFiles() []string {
 }
 
 func (m *model) jumpToFile(file string) {
-	for i, it := range m.list {
-		if it.FileHead && it.File == file {
+	for i, it := range m.lines {
+		if it.Kind == RowFile && it.File == file {
 			m.cursor, m.offset = i, i
 			m.clamp()
 			return
@@ -461,7 +467,7 @@ func (m *model) jumpToFile(file string) {
 }
 
 func (m *model) hasFolds() bool {
-	for _, r := range m.disp {
+	for _, r := range m.lines {
 		if r.Kind == RowFold {
 			return true
 		}
@@ -471,17 +477,17 @@ func (m *model) hasFolds() bool {
 
 func (m *model) toggleFold() {
 	cur := m.current()
-	if cur.Gap[1] > 0 {
+	if cur.GapTo > 0 {
 		if m.reveal == nil {
 			m.reveal = map[string][][2]int{}
 		}
-		m.reveal[cur.File] = append(m.reveal[cur.File], cur.Gap)
-		m.status = fmt.Sprintf("showing lines %d–%d", cur.Gap[0], cur.Gap[1])
+		m.reveal[cur.File] = append(m.reveal[cur.File], [2]int{cur.GapFrom, cur.GapTo})
+		m.status = fmt.Sprintf("showing lines %d–%d", cur.GapFrom, cur.GapTo)
 		if m.src != nil {
 			m.rebuild(false)
 		}
-		for i, it := range m.list {
-			if it.File == cur.File && it.Line == cur.Gap[0] {
+		for i, it := range m.lines {
+			if it.File == cur.File && it.Line == cur.GapFrom {
 				m.cursor = i
 				break
 			}
@@ -489,7 +495,7 @@ func (m *model) toggleFold() {
 		m.clamp()
 		return
 	}
-	key := cur.Fold
+	key := cur.FoldKey
 	if key == "" {
 		m.status = "nothing to open here: o opens ⋯ hidden lines and ▸ folded removed blocks"
 		return
@@ -499,8 +505,8 @@ func (m *model) toggleFold() {
 	}
 	m.unfolded[key] = !m.unfolded[key]
 	m.relist()
-	for i, it := range m.list {
-		if it.Fold == key {
+	for i, it := range m.lines {
+		if it.FoldKey == key {
 			m.cursor = i
 			break
 		}
@@ -537,9 +543,22 @@ func (m *model) extraSteps() []state.Step {
 	for _, e := range []struct {
 		id, title string
 		hunks     []state.StepHunk
-	}{{extraBoilerplate, "boilerplate", boilerplate}, {extraGenerated, "generated", generated}, {extraAll, "all changes", all}} {
+	}{
+		{extraBoilerplate, "boilerplate", boilerplate},
+		{extraGenerated, "generated", generated},
+		{extraAll, "all changes", all},
+	} {
 		if len(e.hunks) > 0 {
-			out = append(out, state.Step{ID: e.id, Title: e.title, Kind: "extra", Hunks: e.hunks, Status: state.StatusPending})
+			out = append(
+				out,
+				state.Step{
+					ID:     e.id,
+					Title:  e.title,
+					Kind:   "extra",
+					Hunks:  e.hunks,
+					Status: state.StatusPending,
+				},
+			)
 		}
 	}
 	return out
@@ -581,7 +600,7 @@ func (m *model) showStep(id string) tea.Cmd {
 		m.viewStep = ""
 	}
 	m.step = st
-	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseContext(), nil
+	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseCtx, nil
 	if m.src == nil {
 		return nil
 	}
@@ -594,7 +613,7 @@ func (m *model) showStep(id string) tea.Cmd {
 	m.relist()
 	src, step, context, notes := m.src, *st, m.context, m.notes()
 	return func() tea.Msg {
-		rows, err := BuildRowsWith(src, step, context, notes, nil)
+		rows, err := buildRows(src, step, context, notes, nil)
 		return rowsMsg{step: step.ID, rows: rows, err: err}
 	}
 }
@@ -704,9 +723,9 @@ func (m *model) move(d int) {
 	m.clamp()
 }
 
-func (m *model) jump(dir int, match func(item) bool) {
-	for i := m.cursor + dir; i >= 0 && i < len(m.list); i += dir {
-		if match(m.list[i]) {
+func (m *model) jump(dir int, match func(line) bool) {
+	for i := m.cursor + dir; i >= 0 && i < len(m.lines); i += dir {
+		if match(m.lines[i]) {
 			m.cursor = i
 			m.clamp()
 			return
@@ -715,7 +734,7 @@ func (m *model) jump(dir int, match func(item) bool) {
 }
 
 func (m *model) clamp() {
-	m.cursor = max(0, min(m.cursor, len(m.list)-1))
+	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
 	body := m.bodyHeight()
 	if m.cursor < m.offset {
 		m.offset = m.cursor
@@ -748,7 +767,18 @@ func editorCmd(dir, file string, line int) *exec.Cmd {
 	script := editor + " " + target
 	var cmd *exec.Cmd
 	if os.Getenv("TMUX") != "" {
-		cmd = exec.Command("tmux", "display-popup", "-E", "-w", "90%", "-h", "90%", "-d", dir, script)
+		cmd = exec.Command(
+			"tmux",
+			"display-popup",
+			"-E",
+			"-w",
+			"90%",
+			"-h",
+			"90%",
+			"-d",
+			dir,
+			script,
+		)
 	} else {
 		cmd = exec.Command("sh", "-c", script)
 	}

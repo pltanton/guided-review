@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -13,26 +14,56 @@ import (
 
 const usage = `usage: gr <command> [args]
 
+review
   init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
-  list
-  sync
-  config [init]
-  publish [--prepare | --dry-run] [--verdict approve|changes|blocked] [--decisions TEXT | --decisions-file F] [--approve]
-  discussions
-  done
+  status [--gate]
   hunks
   plan set [-f FILE]
   step [show [ID] | next | skip --reason TEXT | goto ID]
-  comment add --file F --lines N[-M] --severity blocker|major|minor|nit [--step ID] [--suggestion TEXT] BODY...
+  comment add --file F --lines N[-M] --severity S [--step ID] [--suggestion TEXT] BODY...
   comment list | resolve ID | edit ID [--severity S] TEXT...
   note add --file F --line N [--kind note|spec] [--step ID] TEXT...
-  status [--gate]
+  discussions
+  publish [--prepare | --dry-run] [--verdict approve|changes|blocked]
+          [--decisions TEXT | --decisions-file F] [--approve]
+  done
+  list
+
+viewer channel
+  view [--return PANE]
   wait [--timeout 9m]
   say TEXT... | say -
   progress TEXT...
-  idle                 (Stop hook: tells the viewer the agent ended its turn)
-  view [--return PANE]
+  idle                 Stop hook: tells the viewer the agent ended its turn
+
+  config [init]
 `
+
+type command func(ctx context.Context, e env, args []string) error
+
+var commands map[string]command
+
+func init() {
+	commands = map[string]command{
+		"init":        cmdInit,
+		"status":      cmdStatus,
+		"hunks":       cmdHunks,
+		"plan":        cmdPlan,
+		"step":        cmdStep,
+		"comment":     cmdComment,
+		"note":        cmdNote,
+		"discussions": cmdDiscussions,
+		"publish":     cmdPublish,
+		"done":        cmdDone,
+		"list":        cmdList,
+		"view":        cmdView,
+		"wait":        cmdWait,
+		"say":         cmdSay,
+		"progress":    cmdProgress,
+		"idle":        cmdIdle,
+		"config":      cmdConfig,
+	}
+}
 
 type env struct {
 	dir      string
@@ -42,66 +73,54 @@ type env struct {
 	glab     gitlab.Runner
 }
 
+func (e env) printf(format string, a ...any) {
+	_, _ = fmt.Fprintf(e.stdout, format, a...)
+}
+
+func (e env) println(a ...any) {
+	_, _ = fmt.Fprintln(e.stdout, a...)
+}
+
+func (e env) flags(name string) *flag.FlagSet {
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.SetOutput(e.stdout)
+	return fs
+}
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	dir, err := os.Getwd()
-	if err == nil {
-		var cache string
-		if cache, err = os.UserCacheDir(); err == nil {
-			err = run(ctx, env{dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab}, os.Args[1:])
-		}
-	}
+	err := start(ctx)
+	stop()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gr:", err)
 		os.Exit(1)
 	}
 }
 
+func start(ctx context.Context) error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return err
+	}
+	e := env{dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab}
+	return run(ctx, e, os.Args[1:])
+}
+
 func run(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
-		fmt.Fprint(e.stdout, usage)
+		e.printf("%s", usage)
 		return errors.New("no command")
 	}
+	if cmd, ok := commands[args[0]]; ok {
+		return cmd(ctx, e, args[1:])
+	}
 	switch args[0] {
-	case "init":
-		return cmdInit(ctx, e, args[1:])
-	case "list":
-		return cmdList(ctx, e)
-	case "sync":
-		return cmdSync(ctx, e)
-	case "config":
-		return cmdConfig(ctx, e, args[1:])
-	case "publish":
-		return cmdPublish(ctx, e, args[1:])
-	case "discussions":
-		return cmdDiscussions(ctx, e)
-	case "done":
-		return cmdDone(ctx, e)
-	case "hunks":
-		return cmdHunks(ctx, e)
-	case "plan":
-		return cmdPlan(ctx, e, args[1:])
-	case "step":
-		return cmdStep(ctx, e, args[1:])
-	case "note":
-		return cmdNote(ctx, e, args[1:])
-	case "comment":
-		return cmdComment(ctx, e, args[1:])
-	case "status":
-		return cmdStatus(ctx, e, args[1:])
-	case "wait":
-		return cmdWait(ctx, e, args[1:])
-	case "say":
-		return cmdSay(ctx, e, args[1:])
-	case "idle":
-		return cmdIdle(ctx, e)
-	case "progress":
-		return cmdProgress(ctx, e, args[1:])
-	case "view":
-		return cmdView(ctx, e, args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprint(e.stdout, usage)
+		e.printf("%s", usage)
 		return nil
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", args[0], usage)

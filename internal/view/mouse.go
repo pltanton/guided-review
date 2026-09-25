@@ -44,7 +44,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			if !m.useSplit() {
 				m.col = max(msg.X-m.planWidth()-8, 0)
 			}
-			if it := m.list[i]; it.Fold != "" && i < len(m.disp) && m.disp[i].Kind == RowFold || it.Gap[1] > 0 {
+			if it := m.lines[i]; it.Kind == RowFold || it.GapTo > 0 {
 				m.toggleFold()
 			}
 		}
@@ -62,9 +62,9 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 
 func (m *model) scroll(d int) {
 	body := m.bodyHeight()
-	m.offset = max(0, min(m.offset+d, len(m.list)-body))
+	m.offset = max(0, min(m.offset+d, len(m.lines)-body))
 	m.cursor = max(m.offset, min(m.cursor, m.offset+body-1))
-	m.cursor = max(0, min(m.cursor, len(m.list)-1))
+	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
 }
 
 func (m *model) rowAt(y int) (int, bool) {
@@ -73,7 +73,7 @@ func (m *model) rowAt(y int) (int, bool) {
 		return 0, false
 	}
 	i := m.offset + y - hdr
-	return i, i < len(m.list)
+	return i, i < len(m.lines)
 }
 
 func (m *model) overChat(y int) bool {

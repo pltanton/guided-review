@@ -4,44 +4,16 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
 
-const FileName = ".review.yaml"
+const RepoFile = ".review.yaml"
 
-type Config struct {
-	Domain    string              `yaml:"domain"`
-	Diff      string              `yaml:"diff"`
-	Generated []string            `yaml:"generated"`
-	LSP       map[string][]string `yaml:"lsp"`
-}
-
-func (c Config) DiffAlgorithm(fallback string) string {
-	if c.Diff == "" {
-		return fallback
-	}
-	return c.Diff
-}
-
-func Load(root string) (Config, error) {
-	data, err := os.ReadFile(filepath.Join(root, FileName))
-	if errors.Is(err, fs.ErrNotExist) {
-		return Config{}, nil
-	}
-	if err != nil {
-		return Config{}, err
-	}
-	var c Config
-	if err := yaml.Unmarshal(data, &c); err != nil {
-		return Config{}, fmt.Errorf("%s: %w", FileName, err)
-	}
-	return c, nil
-}
-
-type ViewConfig struct {
+type View struct {
 	Split    bool   `yaml:"split"`
 	HidePlan bool   `yaml:"hide_plan"`
 	NoMouse  bool   `yaml:"no_mouse"`
@@ -49,11 +21,13 @@ type ViewConfig struct {
 	Style    string `yaml:"style"`
 }
 
-type UserConfig struct {
-	Keys map[string][]string `yaml:"keys"`
-	View ViewConfig          `yaml:"view"`
-	Diff string              `yaml:"diff"`
-	LSP  map[string][]string `yaml:"lsp"`
+type Config struct {
+	Domain    string              `yaml:"domain"`
+	Generated []string            `yaml:"generated"`
+	Diff      string              `yaml:"diff"`
+	LSP       map[string][]string `yaml:"lsp"`
+	Keys      map[string][]string `yaml:"keys"`
+	View      View                `yaml:"view"`
 }
 
 func UserPath() (string, error) {
@@ -68,38 +42,44 @@ func UserPath() (string, error) {
 	return filepath.Join(base, "guided-review", "config.yaml"), nil
 }
 
-func LoadUser() (UserConfig, string, error) {
+func Load(repoRoot string) (Config, error) {
+	var c Config
 	path, err := UserPath()
 	if err != nil {
-		return UserConfig{}, "", err
+		return c, err
 	}
-	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return UserConfig{}, path, nil
+	if err := read(path, &c); err != nil {
+		return c, err
 	}
-	if err != nil {
-		return UserConfig{}, path, err
+	var repo Config
+	if err := read(filepath.Join(repoRoot, RepoFile), &repo); err != nil {
+		return c, err
 	}
-	var c UserConfig
-	if err := yaml.Unmarshal(data, &c); err != nil {
-		return UserConfig{}, path, fmt.Errorf("%s: %w", path, err)
-	}
-	return c, path, nil
-}
-
-func Merge(user UserConfig, repo Config) UserConfig {
+	c.Domain, c.Generated = repo.Domain, repo.Generated
 	if repo.Diff != "" {
-		user.Diff = repo.Diff
+		c.Diff = repo.Diff
 	}
 	if len(repo.LSP) > 0 {
-		lsp := map[string][]string{}
-		for k, v := range user.LSP {
-			lsp[k] = v
+		lsp := maps.Clone(c.LSP)
+		if lsp == nil {
+			lsp = map[string][]string{}
 		}
-		for k, v := range repo.LSP {
-			lsp[k] = v
-		}
-		user.LSP = lsp
+		maps.Copy(lsp, repo.LSP)
+		c.LSP = lsp
 	}
-	return user
+	return c, nil
+}
+
+func read(path string, c *Config) error {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := yaml.Unmarshal(data, c); err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
 }

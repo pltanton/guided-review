@@ -23,17 +23,14 @@ var (
 	fileStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
 	fileInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 	agentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-
-	statusGlyph = map[state.StepStatus]string{
-		state.StatusPending: "·", state.StatusDone: "✓", state.StatusSkipped: "↷", state.StatusStale: "~",
-	}
 )
 
 const hints = "c message  h help  q quit"
 
-var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
+var buttonStyle = lipgloss.NewStyle().
+	Background(lipgloss.Color("8")).
+	Foreground(lipgloss.Color("15"))
 
 type button struct {
 	label, key string
@@ -90,7 +87,8 @@ func (m *model) footer() (string, []span) {
 }
 
 func (m *model) planWidth() int {
-	if m.help || !m.showPlan || m.review == nil || len(m.review.Steps) == 0 || m.width < minPlanWidth {
+	if m.help || !m.showPlan || m.review == nil || len(m.review.Steps) == 0 ||
+		m.width < minPlanWidth {
 		return 0
 	}
 	return min(maxPlanWidth, m.width/4)
@@ -112,11 +110,14 @@ func (m *model) header() []string {
 	if isExtra(st.ID) {
 		return []string{
 			boldStyle.Render(fmt.Sprintf("%s · %d files", st.Title, len(st.Hunks))),
-			hotStyle.Render(fmt.Sprintf("outside the plan · current is %s — esc to return", m.review.Current)),
+			hotStyle.Render(
+				fmt.Sprintf("outside the plan · current is %s — esc to return", m.review.Current),
+			),
 			m.separator(),
 		}
 	}
-	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, m.review.StepIndex(st.ID)+1, len(m.review.Steps), st.Kind, st.Title)
+	n := m.review.StepIndex(st.ID) + 1
+	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, n, len(m.review.Steps), st.Kind, st.Title)
 	if st.Status != state.StatusPending {
 		title += " [" + string(st.Status) + "]"
 	}
@@ -125,7 +126,12 @@ func (m *model) header() []string {
 	}
 	lines := []string{boldStyle.Render(title)}
 	if m.viewStep != "" {
-		lines = append(lines, hotStyle.Render(fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)))
+		lines = append(
+			lines,
+			hotStyle.Render(
+				fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current),
+			),
+		)
 	}
 	if st.Note != "" {
 		lines = append(lines, dimStyle.Render(st.Note))
@@ -168,7 +174,10 @@ func (m *model) conversation(all bool) []chatLine {
 	var out []chatLine
 	for _, msg := range m.review.Messages {
 		if keep(msg.Step) {
-			out = append(out, chatLine{msg.Time, msg.Step, agentStyle.Render("claude: ") + msg.Text})
+			out = append(
+				out,
+				chatLine{msg.Time, msg.Step, agentStyle.Render("claude: ") + msg.Text},
+			)
 		}
 	}
 	for _, e := range m.events {
@@ -187,7 +196,8 @@ func (m *model) conversation(all bool) []chatLine {
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
 	for _, e := range m.events {
 		if m.pending(e) && !m.agentIdle {
-			out = append(out, chatLine{e.Time, e.Step, agentStyle.Render("claude: ") + hotStyle.Render(string(spinner[m.frame%len(spinner)])+" thinking…")})
+			thinking := hotStyle.Render(string(spinner[m.frame%len(spinner)]) + " thinking…")
+			out = append(out, chatLine{e.Time, e.Step, agentStyle.Render("claude: ") + thinking})
 			break
 		}
 	}
@@ -232,7 +242,8 @@ func (m *model) bottomLines() []string {
 		if chat := m.chatLines(m.width, m.chatSize == 1 || m.step == nil); len(chat) > 0 {
 			label := strings.Repeat("─", max(m.width, 1))
 			if m.chatSize == 0 {
-				label = "── " + m.keys().key("chat") + " enlarges the chat " + strings.Repeat("─", max(m.width-24, 1))
+				label = "── " + m.keys().key("chat") + " enlarges the chat " +
+					strings.Repeat("─", max(m.width-24, 1))
 			}
 			lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
 			lines = append(lines, window(chat, limit, m.chatTop)...)
@@ -242,7 +253,7 @@ func (m *model) bottomLines() []string {
 	switch {
 	case m.composing && m.cmdMode != 0:
 		pos := min(m.inputPos, len(m.input))
-		last = cursorStyle.Render(string(m.cmdMode)) + string(m.input[:pos]) + "█" + string(m.input[pos:])
+		last = cursorStyle.Render(string(m.cmdMode)) + m.inputWithCursor(pos)
 		if m.status != "" {
 			last += "   " + dimStyle.Render(m.status)
 		}
@@ -264,7 +275,7 @@ func (m *model) bottomLines() []string {
 		if m.anchorFile != "" {
 			hint = dimStyle.Render("   ctrl+x: no line")
 		}
-		last = cursorStyle.Render(prompt) + string(m.input[:pos]) + "█" + string(m.input[pos:]) + hint
+		last = cursorStyle.Render(prompt) + m.inputWithCursor(pos) + hint
 		return append(lines, wrapInput(last, m.width)...)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
@@ -294,7 +305,7 @@ func (m *model) View() string {
 
 	body := m.bodyHeight()
 	below := ""
-	if rest := len(m.list) - (m.offset + body); rest > 0 {
+	if rest := len(m.lines) - (m.offset + body); rest > 0 {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main := m.header()
@@ -302,13 +313,23 @@ func (m *model) View() string {
 		k := m.keys()
 		main = []string{
 			boldStyle.Render("chat"),
-			dimStyle.Render(fmt.Sprintf("j/k scroll · %s write · %s / esc back to the code", k.key("message"), k.key("chat"))),
+			dimStyle.Render(
+				fmt.Sprintf(
+					"j/k scroll · %s write · %s / esc back to the code",
+					k.key("message"),
+					k.key("chat"),
+				),
+			),
 			dimStyle.Render(strings.Repeat("─", max(mw, 1))),
 		}
 		main = append(main, window(m.chatLines(mw, true), bodyH-len(main)-1, m.chatTop)...)
 	}
 	if m.help {
-		main = []string{boldStyle.Render("keys"), dimStyle.Render("any key closes · j/k scroll · remap in " + configHint), dimStyle.Render(strings.Repeat("─", max(mw, 1)))}
+		main = []string{
+			boldStyle.Render("keys"),
+			dimStyle.Render("any key closes · j/k scroll · remap in " + configHint),
+			dimStyle.Render(strings.Repeat("─", max(mw, 1))),
+		}
 		lines := m.helpLines(mw)
 		main = append(main, lines[min(m.helpTop, len(lines)):]...)
 	}
@@ -319,22 +340,21 @@ func (m *model) View() string {
 			dimStyle.Render(strings.Repeat("─", max(mw, 1))),
 		}
 		lines := strings.Split(strings.TrimRight(m.preview, "\n"), "\n")
-		for _, l := range lines[min(m.previewTop, len(lines)):] {
-			main = append(main, l)
-		}
+		main = append(main, lines[min(m.previewTop, len(lines)):]...)
 	}
 	if m.loading != "" {
-		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
+		loading := fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))
+		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.list) || m.preview != "" || m.help || m.chatSize == 2 {
+		if i >= len(m.lines) || m.preview != "" || m.help || m.chatSize == 2 {
 			main = append(main, "")
 			continue
 		}
 		row := m.renderRow(i, mw)
 		if i == m.cursor && !m.useSplit() {
 			if plain, ok := m.currentCode(); ok {
-				r := m.disp[i]
+				r := m.lines[i].Row
 				r.Text, r.Emph, r.Moved = underlineWord(plain, m.col), nil, false
 				row = renderUnified(r)
 			}
@@ -345,7 +365,7 @@ func (m *model) View() string {
 			line = paint(line, cursorBg)
 		case m.selected(i):
 			line = paint(line, selectBg)
-		case m.list[i].FileHead:
+		case m.lines[i].Kind == RowFile:
 			line = paint(line, fileBg)
 		}
 		main = append(main, line)
@@ -414,7 +434,7 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if len(out) >= rows {
 			break
 		}
-		glyph := statusGlyph[st.Status]
+		glyph := st.Status.Glyph()
 		style := dimStyle
 		if st.Status == state.StatusPending {
 			style = lipgloss.NewStyle()
@@ -429,7 +449,10 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if len(st.Hotspots) > 0 {
 			line += " ⚑"
 		}
-		out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID})
+		out = append(
+			out,
+			sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID},
+		)
 	}
 	for _, st := range m.extraSteps() {
 		if len(out) >= rows {
@@ -440,7 +463,10 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			glyph, style = "◆", hotStyle
 		}
 		line := fmt.Sprintf("%s %s · %d files", glyph, st.Title, len(st.Hunks))
-		out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID})
+		out = append(
+			out,
+			sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID},
+		)
 	}
 	for len(out) < rows {
 		out = append(out, sideEntry{})
@@ -456,7 +482,10 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			indent := ""
 			if dir != "." {
 				if dir != prevDir {
-					out = append(out, sideEntry{text: dimStyle.Render(ansi.Truncate(dir+"/", w-1, "…"))})
+					out = append(
+						out,
+						sideEntry{text: dimStyle.Render(ansi.Truncate(dir+"/", w-1, "…"))},
+					)
 				}
 				indent = "  "
 			}
@@ -472,7 +501,10 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			case !m.focusFiles && f == current:
 				style = cursorStyle
 			}
-			out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), file: f})
+			out = append(
+				out,
+				sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), file: f},
+			)
 		}
 	}
 	for len(out) < h {
@@ -485,7 +517,7 @@ func (m *model) renderRow(i, w int) string {
 	if m.useSplit() {
 		return m.renderSplit(i, w)
 	}
-	return renderUnified(m.animate(m.disp[i]))
+	return renderUnified(m.animate(m.lines[i].Row))
 }
 
 func renderUnified(r Row) string {
@@ -502,7 +534,8 @@ func renderUnified(r Row) string {
 		if r.GapTo == 0 {
 			return dimStyle.Render("      ⋯")
 		}
-		return gapStyle.Render(fmt.Sprintf("      ⋯ %d hidden lines (%d–%d)", r.GapTo-r.GapFrom+1, r.GapFrom, r.GapTo)) + dimStyle.Render("  · o to show")
+		gap := fmt.Sprintf("      ⋯ %d hidden lines (%d–%d)", r.GapTo-r.GapFrom+1, r.GapFrom, r.GapTo)
+		return gapStyle.Render(gap) + dimStyle.Render("  · o to show")
 	case RowNote:
 		return renderNote(r)
 	case RowFold:
@@ -542,8 +575,14 @@ const (
 var (
 	foldStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
 	gapStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-	addEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("22")).Bold(true)
-	delEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("52")).Bold(true)
+	addEmphStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("22")).
+			Bold(true)
+	delEmphStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("52")).
+			Bold(true)
 )
 
 func renderEmph(plain string, emph [][2]int, kind RowKind) string {
@@ -577,11 +616,21 @@ func paint(line, bg string) string {
 
 const noteIndent = 1 + 7 + 2
 
-var noteColors = map[string]string{"note": "6", "spec": "1", "hotspot": "3", "comment": "5", "mr": "4", "pending": "3"}
+var noteColors = map[string]string{
+	"note":    "6",
+	"spec":    "1",
+	"hotspot": "3",
+	"comment": "5",
+	"mr":      "4",
+	"pending": "3",
+}
 
 func noteBadge(kind, label string) string {
 	if label == "" {
-		label = map[string]string{"note": "NOTE", "spec": "SPEC", "hotspot": "RISK", "comment": "YOU", "mr": "MR", "pending": "…"}[kind]
+		label = map[string]string{
+			"note": "NOTE", "spec": "SPEC", "hotspot": "RISK",
+			"comment": "YOU", "mr": "MR", "pending": "…",
+		}[kind]
 	}
 	return " " + label + " "
 }
@@ -619,19 +668,20 @@ func renderNote(r Row) string {
 	badge := noteBadge(r.NoteKind, r.NoteLabel)
 	lead := strings.Repeat(" ", ansi.StringWidth(badge)+1)
 	if r.NoteHead {
-		lead = lipgloss.NewStyle().Background(color).Foreground(lipgloss.Color("0")).Bold(true).Render(badge) + " "
+		badgeStyle := lipgloss.NewStyle().Background(color).Foreground(lipgloss.Color("0")).Bold(true)
+		lead = badgeStyle.Render(badge) + " "
 	}
 	return "       " + bar + " " + lead + body.Render(r.Text)
 }
 
 func (m *model) renderSplit(i, w int) string {
-	r := m.split[i]
-	if r.Full != nil {
-		return renderUnified(m.animate(*r.Full))
+	l := m.lines[i]
+	if !l.Pair {
+		return renderUnified(m.animate(l.Row))
 	}
 	side := (w - 2) / 2
-	left := renderCell(r.Left, side, false)
-	right := renderCell(r.Right, side, r.Hotspot)
+	left := renderCell(l.Left, side, false)
+	right := renderCell(l.Right, side, l.Hotspot && l.Right.Line > 0)
 	return fit(left, side) + dimStyle.Render("┃") + right
 }
 
@@ -663,7 +713,10 @@ func (m *model) intakeView() string {
 	if m.review.MR != nil {
 		title += fmt.Sprintf(" · !%d %s", m.review.MR.IID, m.review.MR.Title)
 	}
-	top := []string{boldStyle.Render(title), dimStyle.Render("no plan yet — answer the agent below (c to write)")}
+	top := []string{
+		boldStyle.Render(title),
+		dimStyle.Render("no plan yet — answer the agent below (c to write)"),
+	}
 	if !m.agentWaiting {
 		top = append(top, "", "  "+m.agentStatus())
 	}
@@ -714,4 +767,8 @@ func (m *model) mrIID() int {
 		return 0
 	}
 	return m.review.MR.IID
+}
+
+func (m *model) inputWithCursor(pos int) string {
+	return string(m.input[:pos]) + "█" + string(m.input[pos:])
 }

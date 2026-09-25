@@ -20,7 +20,14 @@ type gitSource struct {
 }
 
 func newGitSource(ctx context.Context, repo gitx.Repo, algo, base, head string) *gitSource {
-	return &gitSource{ctx: ctx, repo: repo, algo: algo, base: base, head: head, lines: map[string][]string{}}
+	return &gitSource{
+		ctx:   ctx,
+		repo:  repo,
+		algo:  algo,
+		base:  base,
+		head:  head,
+		lines: map[string][]string{},
+	}
 }
 
 func (s *gitSource) FileDiff(path string) (diff.File, error) {

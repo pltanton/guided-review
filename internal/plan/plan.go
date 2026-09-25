@@ -78,7 +78,12 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		}
 		for _, h := range s.Hotspots {
 			if !slices.Contains(state.HotspotCategories, h.Cat) {
-				fail("step %s: hotspot category %q, want one of %v", s.ID, h.Cat, state.HotspotCategories)
+				fail(
+					"step %s: hotspot category %q, want one of %v",
+					s.ID,
+					h.Cat,
+					state.HotspotCategories,
+				)
 			}
 			if strings.TrimSpace(h.Q) == "" {
 				fail("step %s: hotspot %s has no question", s.ID, h.Cat)

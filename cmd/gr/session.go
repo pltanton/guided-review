@@ -1,12 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
-	"io"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/aplotnikov/guided-review/internal/config"
@@ -18,6 +19,7 @@ import (
 type session struct {
 	repo  gitx.Repo
 	store state.Store
+	cfg   config.Config
 }
 
 func openSession(ctx context.Context, dir string) (session, error) {
@@ -29,9 +31,16 @@ func openSession(ctx context.Context, dir string) (session, error) {
 	if err != nil {
 		return session{}, err
 	}
+	cfg, err := config.Load(repo.Dir)
+	if err != nil {
+		return session{}, err
+	}
 	key := sha1.Sum([]byte(repo.Dir))
-	store := state.Store{Dir: filepath.Join(common, "guided-review"), Key: hex.EncodeToString(key[:])[:12]}
-	return session{repo: repo, store: store}, nil
+	store := state.Store{
+		Dir: filepath.Join(common, "guided-review"),
+		Key: hex.EncodeToString(key[:])[:12],
+	}
+	return session{repo: repo, store: store, cfg: cfg}, nil
 }
 
 func loadReview(ctx context.Context, dir string) (session, *state.Review, error) {
@@ -43,34 +52,44 @@ func loadReview(ctx context.Context, dir string) (session, *state.Review, error)
 	return s, r, err
 }
 
-func (s session) diffFiles(ctx context.Context, r *state.Review) ([]diff.File, error) {
-	cfg, err := config.Load(s.repo.Dir)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := s.repo.DiffWith(ctx, cfg.DiffAlgorithm(gitx.DefaultDiffAlgorithm), r.DiffBase(), r.HeadSHA)
+func (s session) diff(ctx context.Context, base, head string) ([]diff.File, error) {
+	algo := cmp.Or(s.cfg.Diff, gitx.DefaultDiffAlgorithm)
+	raw, err := s.repo.DiffWith(ctx, algo, base, head)
 	if err != nil {
 		return nil, err
 	}
 	return diff.Parse(raw)
 }
 
-func short(sha string) string {
-	if len(sha) > 8 {
-		return sha[:8]
-	}
-	return sha
+func (s session) reviewDiff(ctx context.Context, r *state.Review) ([]diff.File, error) {
+	return s.diff(ctx, r.DiffBase(), r.HeadSHA)
 }
 
-func printHunks(w io.Writer, r *state.Review, files []diff.File) {
+func short(sha string) string {
+	return sha[:min(len(sha), 8)]
+}
+
+func indent(s, prefix string) string {
+	return prefix + strings.ReplaceAll(s, "\n", "\n"+prefix)
+}
+
+func parseID(s string) (int, error) {
+	id, err := strconv.Atoi(strings.TrimPrefix(s, "#"))
+	if err != nil {
+		return 0, fmt.Errorf("comment id %q: %w", s, err)
+	}
+	return id, nil
+}
+
+func printHunks(e env, r *state.Review, files []diff.File) {
 	var generated []state.File
-	fmt.Fprintln(w, "hunks (new-file line ranges):")
+	e.println("hunks (new-file line ranges):")
 	for _, f := range files {
 		rf := r.File(f.Path)
-		if rf == nil {
+		switch {
+		case rf == nil:
 			continue
-		}
-		if rf.Tier == state.TierGenerated {
+		case rf.Tier == state.TierGenerated:
 			generated = append(generated, *rf)
 			continue
 		}
@@ -88,41 +107,74 @@ func printHunks(w io.Writer, r *state.Review, files []diff.File) {
 		for i, h := range f.Hunks {
 			ranges[i] = h.Range()
 		}
-		fmt.Fprintf(w, "  %s  [%s]  %s\n", f.Path, label, strings.Join(ranges, " "))
+		e.printf("  %s  [%s]  %s\n", f.Path, label, strings.Join(ranges, " "))
 	}
 	if len(generated) > 0 {
-		fmt.Fprintf(w, "generated (%d files, not reviewed):\n", len(generated))
+		e.printf("generated (%d files, not reviewed):\n", len(generated))
 		for _, f := range generated {
-			fmt.Fprintf(w, "  %s  +%d -%d\n", f.Path, f.Added, f.Deleted)
+			e.printf("  %s  +%d -%d\n", f.Path, f.Added, f.Deleted)
 		}
 	}
 }
 
-func printStep(w io.Writer, r *state.Review, st *state.Step) {
-	fmt.Fprintf(w, "%s %d/%d [%s] %s · %s\n", st.ID, r.StepIndex(st.ID)+1, len(r.Steps), st.Status, st.Kind, st.Title)
+func printStep(e env, r *state.Review, st *state.Step) {
+	pos := r.StepIndex(st.ID) + 1
+	e.printf("%s %d/%d [%s] %s · %s\n", st.ID, pos, len(r.Steps), st.Status, st.Kind, st.Title)
 	if st.Note != "" {
-		fmt.Fprintf(w, "note: %s\n", st.Note)
+		e.printf("note: %s\n", st.Note)
 	}
 	for _, h := range st.Hunks {
-		lines := h.Lines
-		if lines == "" {
-			lines = "whole file"
-		}
-		fmt.Fprintf(w, "hunk: %s %s\n", h.File, lines)
+		e.printf("hunk: %s %s\n", h.File, cmp.Or(h.Lines, "whole file"))
 	}
 	for _, h := range st.Hotspots {
-		fmt.Fprintf(w, "hotspot %s: %s\n", h.Cat, h.Q)
+		e.printf("hotspot %s: %s\n", h.Cat, h.Q)
 	}
 	for _, a := range st.Annotations {
-		fmt.Fprintf(w, "%s %s:%d: %s\n", a.Kind, a.File, a.Line, a.Text)
+		e.printf("%s %s:%d: %s\n", a.Kind, a.File, a.Line, a.Text)
 	}
 	if len(st.DependsOn) > 0 {
-		fmt.Fprintf(w, "depends on: %s\n", strings.Join(st.DependsOn, " "))
+		e.printf("depends on: %s\n", strings.Join(st.DependsOn, " "))
 	}
 	if st.MayChange {
-		fmt.Fprintln(w, "may change: an earlier blocker/major touches a step this one depends on")
+		e.println("may change: an earlier blocker/major touches a step this one depends on")
 	}
 	if st.SkipReason != "" {
-		fmt.Fprintf(w, "skipped: %s\n", st.SkipReason)
+		e.printf("skipped: %s\n", st.SkipReason)
+	}
+}
+
+func printDiscussions(e env, r *state.Review, full bool) {
+	if r.MR == nil {
+		return
+	}
+	var open []state.Discussion
+	for _, d := range r.Discussions {
+		if !d.Resolved {
+			open = append(open, d)
+		}
+	}
+	if !full {
+		e.printf("MR discussions: %d unresolved\n", len(open))
+	}
+	for _, d := range open {
+		where := ""
+		if d.File != "" {
+			where = fmt.Sprintf(" %s:%d", d.File, d.Line)
+		}
+		if full {
+			e.printf(
+				"@%s%s (%d replies)\n%s\n\n",
+				d.Author,
+				where,
+				d.Replies,
+				indent(d.Body, "  "),
+			)
+			continue
+		}
+		body, _, _ := strings.Cut(d.Body, "\n")
+		if len(body) > 120 {
+			body = body[:117] + "..."
+		}
+		e.printf("  @%s%s: %s\n", d.Author, where, body)
 	}
 }

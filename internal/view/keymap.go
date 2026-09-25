@@ -26,82 +26,158 @@ func DefaultActions() []Action {
 	do := func(f func(*model)) func(*model) tea.Cmd {
 		return func(m *model) tea.Cmd { f(m); return nil }
 	}
-	jump := func(dir int, match func(item) bool) func(*model) tea.Cmd {
+	jump := func(dir int, match func(line) bool) func(*model) tea.Cmd {
 		return do(func(m *model) { m.jump(dir, match) })
 	}
+	hunk := func(l line) bool { return l.HunkStart }
+	file := func(l line) bool { return l.Kind == RowFile }
+	k := func(keys ...string) []string { return keys }
+	const nav, dif, lsp, rev, vw = "navigate", "diff", "lsp", "review", "view"
 	return []Action{
-		{"down", "navigate", "move down", []string{"j", "down"}, do(func(m *model) { m.move(1) })},
-		{"up", "navigate", "move up", []string{"k", "up"}, do(func(m *model) { m.move(-1) })},
-		{"half-down", "navigate", "half a page down", []string{"ctrl+d"}, do(func(m *model) { m.move(m.bodyHeight() / 2) })},
-		{"half-up", "navigate", "half a page up", []string{"ctrl+u"}, do(func(m *model) { m.move(-m.bodyHeight() / 2) })},
-		{"top", "navigate", "first line", []string{"g g", "home"}, do(func(m *model) { m.cursor = 0; m.clamp() })},
-		{"bottom", "navigate", "last line", []string{"G", "end"}, do(func(m *model) { m.cursor = len(m.list) - 1; m.clamp() })},
-		{"next-hunk", "navigate", "next change", []string{"]"}, jump(1, func(it item) bool { return it.HunkStart })},
-		{"prev-hunk", "navigate", "previous change", []string{"["}, jump(-1, func(it item) bool { return it.HunkStart })},
-		{"next-note", "navigate", "next search match, else next annotation", []string{"n"}, do(func(m *model) {
-			if m.search != "" {
-				m.searchStep(1)
-				return
-			}
-			m.jump(1, func(it item) bool { return it.Note })
-		})},
-		{"prev-note", "navigate", "previous search match, else previous annotation", []string{"N"}, do(func(m *model) {
-			if m.search != "" {
-				m.searchStep(-1)
-				return
-			}
-			m.jump(-1, func(it item) bool { return it.Note })
-		})},
-		{"search", "navigate", "search in this step (n/N next/prev, esc clears)", []string{"/"}, do(func(m *model) { m.startCmd('/') })},
-		{"next-file", "navigate", "next file", []string{"}"}, jump(1, func(it item) bool { return it.FileHead })},
-		{"prev-file", "navigate", "previous file", []string{"{"}, jump(-1, func(it item) bool { return it.FileHead })},
-		{"files", "navigate", "focus the files panel", []string{"f"}, do((*model).focusFilesPanel)},
-		{"prev-step", "navigate", "look at the previous step (progress stays)", []string{"H"}, func(m *model) tea.Cmd { return m.shiftStep(-1) }},
-		{"next-step-view", "navigate", "look at the next step, then boilerplate / generated / all", []string{"L"}, func(m *model) tea.Cmd { return m.shiftStep(1) }},
-		{"back", "navigate", "clear the selection, back to the current step", []string{"esc"}, (*model).back},
-		{"word-next", "navigate", "next symbol in the line", []string{"w"}, do((*model).wordNext)},
-		{"word-prev", "navigate", "previous symbol in the line", []string{"b"}, do((*model).wordPrev)},
+		{Name: "down", Group: nav, Desc: "move down", Keys: k("j", "down"),
+			run: do(func(m *model) { m.move(1) })},
+		{Name: "up", Group: nav, Desc: "move up", Keys: k("k", "up"),
+			run: do(func(m *model) { m.move(-1) })},
+		{Name: "half-down", Group: nav, Desc: "half a page down", Keys: k("ctrl+d"),
+			run: do(func(m *model) { m.move(m.bodyHeight() / 2) })},
+		{Name: "half-up", Group: nav, Desc: "half a page up", Keys: k("ctrl+u"),
+			run: do(func(m *model) { m.move(-m.bodyHeight() / 2) })},
+		{Name: "top", Group: nav, Desc: "first line", Keys: k("g g", "home"),
+			run: do(func(m *model) { m.cursor = 0; m.clamp() })},
+		{Name: "bottom", Group: nav, Desc: "last line", Keys: k("G", "end"),
+			run: do(func(m *model) { m.cursor = len(m.lines) - 1; m.clamp() })},
+		{Name: "next-hunk", Group: nav, Desc: "next change", Keys: k("]"), run: jump(1, hunk)},
+		{
+			Name:  "prev-hunk",
+			Group: nav,
+			Desc:  "previous change",
+			Keys:  k("["),
+			run:   jump(-1, hunk),
+		},
+		{
+			Name:  "next-note",
+			Group: nav,
+			Desc:  "next search match, else next annotation",
+			Keys:  k("n"),
+			run:   do(func(m *model) { m.nextNote(1) }),
+		},
+		{Name: "prev-note", Group: nav, Desc: "previous match or annotation", Keys: k("N"),
+			run: do(func(m *model) { m.nextNote(-1) })},
+		{Name: "search", Group: nav, Desc: "search this step (n/N walk, esc clears)", Keys: k("/"),
+			run: do(func(m *model) { m.startCmd('/') })},
+		{Name: "next-file", Group: nav, Desc: "next file", Keys: k("}"), run: jump(1, file)},
+		{Name: "prev-file", Group: nav, Desc: "previous file", Keys: k("{"), run: jump(-1, file)},
+		{Name: "files", Group: nav, Desc: "focus the files panel", Keys: k("f"),
+			run: do((*model).focusFilesPanel)},
+		{
+			Name:  "prev-step",
+			Group: nav,
+			Desc:  "look at the previous step (progress stays)",
+			Keys:  k("H"),
+			run:   func(m *model) tea.Cmd { return m.shiftStep(-1) },
+		},
+		{Name: "next-step-view", Group: nav, Desc: "look at the next step, then extra views",
+			Keys: k("L"), run: func(m *model) tea.Cmd { return m.shiftStep(1) }},
+		{
+			Name:  "back",
+			Group: nav,
+			Desc:  "clear selection / search / chat, back to the current step",
+			Keys:  k("esc"),
+			run:   (*model).back,
+		},
+		{Name: "word-next", Group: nav, Desc: "next symbol in the line", Keys: k("w"),
+			run: do((*model).wordNext)},
+		{Name: "word-prev", Group: nav, Desc: "previous symbol in the line", Keys: k("b"),
+			run: do((*model).wordPrev)},
 
-		{"open", "diff", "open ⋯ hidden lines or a ▸ folded block", []string{"o"}, do((*model).toggleFold)},
-		{"all-removed", "diff", "show every removed line / fold again", []string{"O"}, do((*model).toggleRemoved)},
-		{"more-context", "diff", "more context around changes", []string{"tab"}, do((*model).moreContext)},
-		{"reset-context", "diff", "default context", []string{"shift+tab"}, do((*model).resetContext)},
-		{"split", "diff", "split / unified", []string{"s"}, do((*model).toggleSplit)},
-		{"diff-algorithm", "diff", "next diff algorithm", []string{"d"}, do((*model).nextAlgorithm)},
+		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block", Keys: k("o"),
+			run: do((*model).toggleFold)},
+		{
+			Name:  "all-removed",
+			Group: dif,
+			Desc:  "show every removed line / fold again",
+			Keys:  k("O"),
+			run:   do((*model).toggleRemoved),
+		},
+		{Name: "more-context", Group: dif, Desc: "more context around changes", Keys: k("tab"),
+			run: do((*model).moreContext)},
+		{Name: "reset-context", Group: dif, Desc: "default context", Keys: k("shift+tab"),
+			run: do((*model).resetContext)},
+		{Name: "split", Group: dif, Desc: "split / unified", Keys: k("s"),
+			run: do((*model).toggleSplit)},
+		{Name: "diff-algorithm", Group: dif, Desc: "next diff algorithm", Keys: k("d"),
+			run: do((*model).nextAlgorithm)},
 
-		{"definition", "lsp", "go to definition (peek)", []string{"g d"}, func(m *model) tea.Cmd { return m.lspRequest("definition") }},
-		{"references", "lsp", "list references", []string{"g r"}, func(m *model) tea.Cmd { return m.lspRequest("references") }},
-		{"hover", "lsp", "type and docs", []string{"K"}, func(m *model) tea.Cmd { return m.lspRequest("hover") }},
+		{Name: "definition", Group: lsp, Desc: "go to definition (peek)", Keys: k("g d"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("definition") }},
+		{Name: "references", Group: lsp, Desc: "list references", Keys: k("g r"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("references") }},
+		{Name: "hover", Group: lsp, Desc: "type and docs", Keys: k("K"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("hover") }},
 
-		{"next", "review", "done with this step, go on", []string{">"}, do((*model).next)},
-		{"message", "review", "message the agent (cursor line attached); opens ⋯ / ▸ rows", []string{"c", "enter"}, do(func(m *model) {
-			if cur := m.current(); cur.Gap[1] > 0 || cur.Fold != "" && m.cursor < len(m.disp) && m.disp[m.cursor].Kind == RowFold {
-				m.toggleFold()
-				return
-			}
-			m.startCompose(inbox.KindMessage)
-		})},
-		{"explain", "review", "ask the agent to explain the line / selection", []string{"?"}, do((*model).explain)},
-		{"select", "review", "select lines", []string{"v"}, do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
-		{"skip", "review", "skip the step with a reason", []string{"S"}, do(func(m *model) { m.startCompose(inbox.KindSkip) })},
-		{"edit-comment", "review", "edit the comment under the cursor", []string{"E"}, do((*model).startEdit)},
-		{"publish", "review", "preview, then publish to the MR", []string{"P"}, do((*model).publish)},
-		{"editor", "review", "open $EDITOR at the line", []string{"e"}, (*model).openEditor},
+		{Name: "next", Group: rev, Desc: "done with this step, go on", Keys: k(">"),
+			run: do((*model).next)},
+		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
+			Keys: k("c", "enter"), run: do((*model).messageOrOpen)},
+		{
+			Name:  "explain",
+			Group: rev,
+			Desc:  "ask the agent to explain the line / selection",
+			Keys:  k("?"),
+			run:   do((*model).explain),
+		},
+		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
+			run: do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
+		{Name: "skip", Group: rev, Desc: "skip the step with a reason", Keys: k("S"),
+			run: do(func(m *model) { m.startCompose(inbox.KindSkip) })},
+		{Name: "edit-comment", Group: rev, Desc: "edit the comment under the cursor", Keys: k("E"),
+			run: do((*model).startEdit)},
+		{Name: "publish", Group: rev, Desc: "preview, then publish to the MR", Keys: k("P"),
+			run: do((*model).publish)},
+		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
+			run: (*model).openEditor},
 
-		{"plan", "view", "show / hide the plan panel", []string{"p"}, do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
-		{"mouse", "view", "mouse capture on / off", []string{"m"}, (*model).toggleMouse},
-		{"agent", "view", "switch to the agent's pane", []string{"a"}, do(func(m *model) {
-			if err := focusAgent(m.returnPane); err != nil {
-				m.err = err
-			}
-		})},
-		{"chat", "view", "chat size: small → half → full screen", []string{"t"}, do(func(m *model) {
-			m.chatSize, m.chatTop = (m.chatSize+1)%3, 0
-			m.clamp()
-		})},
-		{"command", "view", "command line (:42, :s3, :set split, :msg …, any action)", []string{":"}, do(func(m *model) { m.startCmd(':') })},
-		{"help", "view", "this help", []string{"h", "f1"}, do(func(m *model) { m.help, m.helpTop = true, 0 })},
-		{"quit", "view", "quit the viewer", []string{"q", "ctrl+c"}, func(*model) tea.Cmd { return tea.Quit }},
+		{Name: "plan", Group: vw, Desc: "show / hide the plan panel", Keys: k("p"),
+			run: do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
+		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
+			run: (*model).toggleMouse},
+		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
+			run: do((*model).focusAgent)},
+		{Name: "chat", Group: vw, Desc: "chat size: small → half → full screen", Keys: k("t"),
+			run: do(func(m *model) { m.chatSize, m.chatTop = (m.chatSize+1)%3, 0; m.clamp() })},
+		{
+			Name:  "command",
+			Group: vw,
+			Desc:  "command line (:42, :s3, :f name, any action)",
+			Keys:  k(":"),
+			run:   do(func(m *model) { m.startCmd(':') }),
+		},
+		{Name: "help", Group: vw, Desc: "this help", Keys: k("h", "f1"),
+			run: do(func(m *model) { m.help, m.helpTop = true, 0 })},
+		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q", "ctrl+c"),
+			run: func(*model) tea.Cmd { return tea.Quit }},
+	}
+}
+
+func (m *model) nextNote(dir int) {
+	if m.search != "" {
+		m.searchStep(dir)
+		return
+	}
+	m.jump(dir, func(l line) bool { return l.NoteHead })
+}
+
+func (m *model) messageOrOpen() {
+	if cur := m.current(); cur.GapTo > 0 || cur.Kind == RowFold {
+		m.toggleFold()
+		return
+	}
+	m.startCompose(inbox.KindMessage)
+}
+
+func (m *model) focusAgent() {
+	if err := focusAgent(m.returnPane); err != nil {
+		m.err = err
 	}
 }
 
@@ -126,7 +202,10 @@ func newKeymap(overrides map[string][]string) (*keymap, error) {
 	for i, a := range km.actions {
 		for _, k := range a.Keys {
 			if j, taken := km.byKey[k]; taken {
-				conflicts = append(conflicts, fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, a.Name))
+				conflicts = append(
+					conflicts,
+					fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, a.Name),
+				)
 				continue
 			}
 			km.byKey[k] = i
@@ -242,7 +321,7 @@ func (m *model) moreContext() {
 
 func (m *model) resetContext() {
 	if m.step != nil {
-		m.context = m.baseContext()
+		m.context = m.baseCtx
 		m.rebuild(false)
 	}
 }
@@ -257,8 +336,11 @@ func (m *model) toggleSplit() {
 
 func (m *model) nextAlgorithm() {
 	i := (slices.Index(gitx.DiffAlgorithms, m.algo) + 1) % len(gitx.DiffAlgorithms)
-	m.algo = gitx.DiffAlgorithms[i]
-	m.status = "diff: " + m.algo
+	m.setAlgorithm(gitx.DiffAlgorithms[i])
+}
+
+func (m *model) setAlgorithm(algo string) {
+	m.algo, m.status = algo, "diff: "+algo
 	if m.src != nil {
 		m.src = newGitSource(m.ctx, m.repo, m.algo, m.src.base, m.src.head)
 		m.unfolded = nil
@@ -288,7 +370,10 @@ func (m *model) helpLines(width int) []string {
 			for i, k := range a.Keys {
 				keys[i] = strings.ReplaceAll(k, " ", "")
 			}
-			block = append(block, cursorStyle.Render(fmt.Sprintf("  %-11s", strings.Join(keys, " ")))+" "+a.Desc)
+			block = append(
+				block,
+				cursorStyle.Render(fmt.Sprintf("  %-11s", strings.Join(keys, " ")))+" "+a.Desc,
+			)
 		}
 		blocks = append(blocks, block)
 		total += len(block) + 1

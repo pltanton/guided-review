@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -127,7 +128,11 @@ type apiPosition struct {
 }
 
 func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion, error) {
-	path := fmt.Sprintf("projects/%s/merge_requests/%d/discussions?per_page=100", url.PathEscape(ref.Project), ref.IID)
+	path := fmt.Sprintf(
+		"projects/%s/merge_requests/%d/discussions?per_page=100",
+		url.PathEscape(ref.Project),
+		ref.IID,
+	)
 	out, err := run(ctx, "api", "--hostname", ref.Host, "--paginate", path)
 	if err != nil {
 		return nil, err
@@ -148,7 +153,13 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 			if body == "" {
 				continue
 			}
-			disc := Discussion{ID: d.ID, Author: first.Author.Username, Body: body, Replies: len(d.Notes) - 1, Resolved: first.Resolved}
+			disc := Discussion{
+				ID:       d.ID,
+				Author:   first.Author.Username,
+				Body:     body,
+				Replies:  len(d.Notes) - 1,
+				Resolved: first.Resolved,
+			}
 			if p := first.Position; p != nil {
 				switch {
 				case p.NewLine != nil:
@@ -190,19 +201,16 @@ func post(ctx context.Context, run Runner, ref MRRef, suffix string, body any) (
 		if err != nil {
 			return nil, err
 		}
-		f, err := os.CreateTemp("", "gr-body-*.json")
+		dir, err := os.MkdirTemp("", "gr-body-")
 		if err != nil {
 			return nil, err
 		}
-		defer os.Remove(f.Name())
-		if _, err := f.Write(data); err != nil {
-			f.Close()
+		defer func() { _ = os.RemoveAll(dir) }()
+		path := filepath.Join(dir, "body.json")
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			return nil, err
 		}
-		if err := f.Close(); err != nil {
-			return nil, err
-		}
-		args = append(args, "-H", "Content-Type: application/json", "--input", f.Name())
+		args = append(args, "-H", "Content-Type: application/json", "--input", path)
 	}
 	return run(ctx, append(args, ref.path(suffix))...)
 }
@@ -216,7 +224,10 @@ func CreateDraft(ctx context.Context, run Runner, ref MRRef, d DraftNote) (int, 
 		ID int `json:"id"`
 	}
 	if err := json.Unmarshal(out, &created); err != nil || created.ID == 0 {
-		return 0, fmt.Errorf("create draft note: unexpected reply %q", strings.TrimSpace(string(out)))
+		return 0, fmt.Errorf(
+			"create draft note: unexpected reply %q",
+			strings.TrimSpace(string(out)),
+		)
 	}
 	return created.ID, nil
 }

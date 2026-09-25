@@ -3,10 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
-	"os"
 	"slices"
 	"strings"
 
@@ -22,21 +19,42 @@ var verdicts = map[string]string{
 	"blocked": "blocked ⛔",
 }
 
-type pendingDraft struct {
+type draft struct {
 	comment *state.Comment
 	where   string
-	draft   gitlab.DraftNote
+	note    gitlab.DraftNote
+}
+
+func cmdDiscussions(ctx context.Context, e env, _ []string) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	if r.MR == nil {
+		return errors.New("not a merge request review")
+	}
+	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+		return err
+	}
+	if err := s.store.Save(r); err != nil {
+		return err
+	}
+	printDiscussions(e, r, true)
+	return nil
 }
 
 func cmdPublish(ctx context.Context, e env, args []string) error {
-	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
-	fs.SetOutput(e.stdout)
+	fs := e.flags("publish")
 	dryRun := fs.Bool("dry-run", false, "print what would be posted and stop")
+	prepare := fs.Bool(
+		"prepare",
+		false,
+		"store verdict and decisions for the viewer's P button, print the preview",
+	)
 	verdict := fs.String("verdict", "", "approve|changes|blocked")
 	decisions := fs.String("decisions", "", "decisions taken during the review and why (markdown)")
 	decisionsFile := fs.String("decisions-file", "", "read decisions from a file (- for stdin)")
 	approve := fs.Bool("approve", false, "also approve the MR")
-	prepare := fs.Bool("prepare", false, "store the verdict and decisions for the viewer's publish button and print the preview")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -51,73 +69,69 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	if *verdict == "" && r.Publish != nil {
-		*verdict, *approve = r.Publish.Verdict, *approve || r.Publish.Approve
+	if p := r.Publish; *verdict == "" && p != nil {
+		*verdict, *approve = p.Verdict, *approve || p.Approve
 		if *decisions == "" {
-			*decisions = r.Publish.Decisions
+			*decisions = p.Decisions
 		}
 	}
-	if _, ok := verdicts[*verdict]; !ok {
-		return errors.New("--verdict must be approve, changes or blocked (or prepare one with --prepare)")
-	}
-	if r.MR == nil {
+	switch _, ok := verdicts[*verdict]; {
+	case !ok:
+		return errors.New(
+			"--verdict must be approve, changes or blocked (or prepare one with --prepare)",
+		)
+	case r.MR == nil:
 		return errors.New("not a merge request review: nothing to publish to")
-	}
-	if len(r.Steps) == 0 {
+	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
 	}
 	if pending := plan.Gate(r); len(pending) > 0 {
-		return fmt.Errorf("gate not passed, pending: %s (review or skip them first)", strings.Join(pending, " "))
+		return fmt.Errorf(
+			"gate not passed, pending: %s (review or skip them first)",
+			strings.Join(pending, " "),
+		)
 	}
-	raw, err := s.repo.Diff(ctx, r.BaseSHA, r.HeadSHA)
+	mrFiles, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
 	if err != nil {
 		return err
 	}
-	mrFiles, err := diff.Parse(raw)
-	if err != nil {
-		return err
-	}
-
-	var drafts []pendingDraft
+	var drafts []draft
 	for i := range r.Comments {
-		c := &r.Comments[i]
-		if c.Published {
-			continue
+		if c := &r.Comments[i]; !c.Published {
+			note, where := commentDraft(r, *c, mrFiles)
+			drafts = append(drafts, draft{comment: c, where: where, note: note})
 		}
-		d, where := commentDraft(r, *c, mrFiles)
-		drafts = append(drafts, pendingDraft{comment: c, where: where, draft: d})
 	}
 	round := max(r.Round, 1)
 	withSummary := r.SummaryRound != round
 	summary := summaryMarkdown(r, *verdict, *decisions)
-
+	what := fmt.Sprintf("%d comments", len(drafts))
+	if withSummary {
+		what += " and the summary"
+	}
 	preview := func() {
 		for _, d := range drafts {
-			fmt.Fprintf(e.stdout, "--- %s\n%s\n\n", d.where, d.draft.Note)
+			e.printf("--- %s\n%s\n\n", d.where, d.note.Note)
 		}
 		if withSummary {
-			fmt.Fprintf(e.stdout, "--- summary\n%s\n", summary)
+			e.printf("--- summary\n%s\n", summary)
 		}
 	}
-	if *prepare {
+
+	switch {
+	case *prepare:
 		r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
 		if err := s.store.Save(r); err != nil {
 			return err
 		}
-		what := fmt.Sprintf("%d comments", len(drafts))
-		if withSummary {
-			what += " and the summary"
-		}
-		fmt.Fprintf(e.stdout, "prepared: %s — press P in the viewer to preview and publish\n\n", what)
+		e.printf("prepared: %s — press P in the viewer to preview and publish\n\n", what)
 		preview()
 		return nil
-	}
-	if *dryRun {
+	case *dryRun:
 		preview()
 		return nil
-	}
-	if len(drafts) == 0 && !withSummary {
-		fmt.Fprintln(e.stdout, "nothing new to publish")
+	case len(drafts) == 0 && !withSummary:
+		e.println("nothing new to publish")
 		return nil
 	}
 
@@ -126,21 +140,18 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 		if d.comment.DraftID != 0 {
 			continue
 		}
-		id, err := gitlab.CreateDraft(ctx, e.glab, ref, d.draft)
-		if err != nil {
+		if d.comment.DraftID, err = gitlab.CreateDraft(ctx, e.glab, ref, d.note); err != nil {
 			return err
 		}
-		d.comment.DraftID = id
 		if err := s.store.Save(r); err != nil {
 			return err
 		}
 	}
 	if withSummary && r.SummaryDraft == 0 {
-		id, err := gitlab.CreateDraft(ctx, e.glab, ref, gitlab.DraftNote{Note: summary})
-		if err != nil {
+		note := gitlab.DraftNote{Note: summary}
+		if r.SummaryDraft, err = gitlab.CreateDraft(ctx, e.glab, ref, note); err != nil {
 			return err
 		}
-		r.SummaryDraft = id
 		if err := s.store.Save(r); err != nil {
 			return err
 		}
@@ -163,22 +174,15 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 			return err
 		}
 	}
-	what := fmt.Sprintf("%d comments", len(drafts))
-	if withSummary {
-		what += " and the summary"
-	}
-	fmt.Fprintf(e.stdout, "published %s to !%d\n%s\n", what, r.MR.IID, r.MR.URL)
+	e.printf("published %s to !%d\n%s\n", what, r.MR.IID, r.MR.URL)
 	return nil
 }
 
-func readInput(e env, path string) ([]byte, error) {
-	if path == "-" {
-		return io.ReadAll(e.stdin)
-	}
-	return os.ReadFile(path)
-}
-
-func commentDraft(r *state.Review, c state.Comment, mrFiles []diff.File) (gitlab.DraftNote, string) {
+func commentDraft(
+	r *state.Review,
+	c state.Comment,
+	mrFiles []diff.File,
+) (gitlab.DraftNote, string) {
 	start, end, _ := state.ParseLines(c.Lines)
 	body := fmt.Sprintf("**%s** %s", c.Severity, c.Body)
 	if c.Suggestion != "" {
@@ -187,16 +191,21 @@ func commentDraft(r *state.Review, c state.Comment, mrFiles []diff.File) (gitlab
 	where := fmt.Sprintf("%s:%d", c.File, end)
 	i := slices.IndexFunc(mrFiles, func(f diff.File) bool { return f.Path == c.File })
 	if c.SHA != r.HeadSHA || i < 0 {
-		return gitlab.DraftNote{Note: fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)}, where + " (general note)"
+		note := fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)
+		return gitlab.DraftNote{Note: note}, where + " (general note)"
 	}
 	f := mrFiles[i]
-	oldPath := f.OldPath
-	if oldPath == "" {
-		oldPath = f.Path
-	}
 	pos := &gitlab.Position{
-		PositionType: "text", BaseSHA: r.BaseSHA, StartSHA: r.StartSHA, HeadSHA: r.HeadSHA,
-		OldPath: oldPath, NewPath: f.Path, NewLine: end,
+		PositionType: "text",
+		BaseSHA:      r.BaseSHA,
+		StartSHA:     r.StartSHA,
+		HeadSHA:      r.HeadSHA,
+		OldPath:      f.Path,
+		NewPath:      f.Path,
+		NewLine:      end,
+	}
+	if f.OldPath != "" {
+		pos.OldPath = f.OldPath
 	}
 	if old, added := f.OldLineFor(end); !added {
 		pos.OldLine = old
@@ -206,17 +215,18 @@ func commentDraft(r *state.Review, c state.Comment, mrFiles []diff.File) (gitlab
 
 func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "## Guided review: %s\n\n", verdicts[verdict])
+	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
+	w("## Guided review: %s\n\n", verdicts[verdict])
 	if r.Round > 1 {
-		fmt.Fprintf(&b, "Round %d.\n\n", r.Round)
+		w("Round %d.\n\n", r.Round)
 	}
 	if r.Summary != "" {
-		fmt.Fprintf(&b, "%s\n\n", r.Summary)
+		w("%s\n\n", r.Summary)
 	}
-	if strings.TrimSpace(decisions) != "" {
-		fmt.Fprintf(&b, "**Decisions**\n\n%s\n\n", strings.TrimSpace(decisions))
+	if d := strings.TrimSpace(decisions); d != "" {
+		w("**Decisions**\n\n%s\n\n", d)
 	}
-	b.WriteString("| | Step | Notes |\n|---|---|---|\n")
+	w("| | Step | Notes |\n|---|---|---|\n")
 	for _, st := range r.Steps {
 		note := ""
 		switch st.Status {
@@ -225,24 +235,23 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 		case state.StatusStale:
 			note = "not reviewed: depends on a blocked step"
 		}
-		fmt.Fprintf(&b, "| %s | %s %s | %s |\n", statusGlyph[st.Status], st.ID, st.Title, note)
+		w("| %s | %s %s | %s |\n", st.Status.Glyph(), st.ID, st.Title, note)
 	}
-	counts := map[state.Severity]int{}
 	var resolved []string
 	for _, c := range r.Comments {
-		counts[c.Severity]++
 		if c.Resolved {
 			resolved = append(resolved, fmt.Sprintf("#%d", c.ID))
 		}
 	}
-	fmt.Fprintf(&b, "\n**Comments:** %d blocker · %d major · %d minor · %d nit (inline)\n",
-		counts[state.SeverityBlocker], counts[state.SeverityMajor], counts[state.SeverityMinor], counts[state.SeverityNit])
+	w("\n**Comments:** %s (inline)\n", severityCounts(r, " · "))
 	if len(resolved) > 0 {
-		fmt.Fprintf(&b, "**Resolved since the last round:** %s\n", strings.Join(resolved, ", "))
+		w("**Resolved since the last round:** %s\n", strings.Join(resolved, ", "))
 	}
 	cov := plan.CoverageOf(r)
-	fmt.Fprintf(&b, "**Coverage:** %d/%d steps, hotspots %d/%d; boilerplate %d files and generated %d files not reviewed line by line\n",
-		cov.Done+cov.Skipped, cov.Total, cov.HotspotsReviewed, cov.Hotspots, cov.Boilerplate, cov.Generated)
-	b.WriteString("\n<sub>guided-review</sub>\n")
+	w("**Coverage:** %d/%d steps, hotspots %d/%d; "+
+		"boilerplate %d files and generated %d files not reviewed line by line\n",
+		cov.Done+cov.Skipped, cov.Total, cov.HotspotsReviewed, cov.Hotspots,
+		cov.Boilerplate, cov.Generated)
+	w("\n<sub>guided-review</sub>\n")
 	return b.String()
 }

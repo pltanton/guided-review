@@ -13,7 +13,8 @@ func TestAppendReadWait(t *testing.T) {
 	if evs, err := inbox.All(dir); err != nil || len(evs) != 0 {
 		t.Fatalf("empty inbox: %v, %v", evs, err)
 	}
-	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindMessage, Text: "why?", File: "a.go", Lines: "3-4", Step: "s1"}); err != nil {
+	ev := inbox.Event{Kind: inbox.KindMessage, Text: "why?", File: "a.go", Lines: "3-4", Step: "s1"}
+	if err := inbox.Append(dir, ev); err != nil {
 		t.Fatal(err)
 	}
 	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindNext, Step: "s1"}); err != nil {
@@ -22,7 +23,8 @@ func TestAppendReadWait(t *testing.T) {
 
 	ctx := context.Background()
 	evs, err := inbox.Wait(ctx, dir, time.Second, 10*time.Millisecond)
-	if err != nil || len(evs) != 2 || evs[0].Text != "why?" || evs[1].Kind != inbox.KindNext || evs[0].Time.IsZero() {
+	if err != nil || len(evs) != 2 || evs[0].Text != "why?" || evs[1].Kind != inbox.KindNext ||
+		evs[0].Time.IsZero() {
 		t.Fatalf("Wait = %+v, %v", evs, err)
 	}
 	evs, err = inbox.Wait(ctx, dir, 50*time.Millisecond, 10*time.Millisecond)
@@ -50,14 +52,42 @@ func TestFormat(t *testing.T) {
 		e    inbox.Event
 		want string
 	}{
-		{inbox.Event{Kind: inbox.KindMessage, Step: "s3", File: "a.go", Lines: "57-58", Text: "what if it fails?"}, "[message] s3 a.go:57-58: what if it fails?"},
-		{inbox.Event{Kind: inbox.KindMessage, Step: "s3", Text: "looks fine"}, "[message] s3: looks fine"},
-		{inbox.Event{Kind: inbox.KindExplain, Step: "s3", File: "a.go", Lines: "40-52"}, "[explain] s3 a.go:40-52"},
+		{
+			inbox.Event{
+				Kind:  inbox.KindMessage,
+				Step:  "s3",
+				File:  "a.go",
+				Lines: "57-58",
+				Text:  "what if it fails?",
+			},
+			"[message] s3 a.go:57-58: what if it fails?",
+		},
+		{
+			inbox.Event{Kind: inbox.KindMessage, Step: "s3", Text: "looks fine"},
+			"[message] s3: looks fine",
+		},
+		{
+			inbox.Event{Kind: inbox.KindExplain, Step: "s3", File: "a.go", Lines: "40-52"},
+			"[explain] s3 a.go:40-52",
+		},
 		{inbox.Event{Kind: inbox.KindNext, Step: "s3"}, "[next] s3"},
 		{inbox.Event{Kind: inbox.KindSkip, Step: "s3", Text: "trivial"}, "[skip] s3: trivial"},
 		{inbox.Event{Kind: inbox.KindGoto, Step: "s5"}, "[goto] s5"},
-		{inbox.Event{Kind: inbox.KindMessage, Step: "s3", File: "a.go", Lines: "57", Comment: 2, Text: "not a nit"}, "[message] s3 a.go:57 re #2: not a nit"},
-		{inbox.Event{Kind: inbox.KindEdit, Step: "s3", Comment: 2, Text: "rename to total"}, "[edit] s3 #2: rename to total"},
+		{
+			inbox.Event{
+				Kind:    inbox.KindMessage,
+				Step:    "s3",
+				File:    "a.go",
+				Lines:   "57",
+				Comment: 2,
+				Text:    "not a nit",
+			},
+			"[message] s3 a.go:57 re #2: not a nit",
+		},
+		{
+			inbox.Event{Kind: inbox.KindEdit, Step: "s3", Comment: 2, Text: "rename to total"},
+			"[edit] s3 #2: rename to total",
+		},
 	}
 	for _, tt := range tests {
 		if got := tt.e.String(); got != tt.want {

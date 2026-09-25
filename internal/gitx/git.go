@@ -28,7 +28,12 @@ func (r Repo) Run(ctx context.Context, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf(
+			"git %s: %w: %s",
+			strings.Join(args, " "),
+			err,
+			strings.TrimSpace(stderr.String()),
+		)
 	}
 	return string(out), nil
 }
@@ -59,11 +64,24 @@ func (r Repo) Diff(ctx context.Context, base, head string, paths ...string) (str
 	return r.DiffWith(ctx, DefaultDiffAlgorithm, base, head, paths...)
 }
 
-func (r Repo) DiffWith(ctx context.Context, algo, base, head string, paths ...string) (string, error) {
+func (r Repo) DiffWith(
+	ctx context.Context,
+	algo, base, head string,
+	paths ...string,
+) (string, error) {
 	if !slices.Contains(DiffAlgorithms, algo) {
 		return "", fmt.Errorf("diff algorithm %q, want one of %v", algo, DiffAlgorithms)
 	}
-	args := []string{"diff", "--no-color", "--no-ext-diff", "--diff-algorithm=" + algo, "-U0", "-M", base, head}
+	args := []string{
+		"diff",
+		"--no-color",
+		"--no-ext-diff",
+		"--diff-algorithm=" + algo,
+		"-U0",
+		"-M",
+		base,
+		head,
+	}
 	if len(paths) > 0 {
 		args = append(append(args, "--"), paths...)
 	}

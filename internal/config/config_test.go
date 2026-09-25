@@ -9,43 +9,49 @@ import (
 	"github.com/aplotnikov/guided-review/internal/config"
 )
 
-func TestLoad(t *testing.T) {
-	dir := t.TempDir()
-	c, err := config.Load(dir)
-	if err != nil || !reflect.DeepEqual(c, config.Config{}) {
-		t.Fatalf("missing file: %+v, %v", c, err)
-	}
-	data := "domain: finance\ndiff: patience\ngenerated:\n  - api/gen/**\n"
-	if err := os.WriteFile(filepath.Join(dir, config.FileName), []byte(data), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	c, err = config.Load(dir)
-	want := config.Config{Domain: "finance", Diff: "patience", Generated: []string{"api/gen/**"}}
-	if err != nil || !reflect.DeepEqual(c, want) {
-		t.Fatalf("got %+v, %v; want %+v", c, err, want)
-	}
-}
-
-func TestUserConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-	c, path, err := config.LoadUser()
-	if err != nil || path != filepath.Join(dir, "guided-review", "config.yaml") || c.Keys != nil {
-		t.Fatalf("missing user config: %+v %q %v", c, path, err)
-	}
+func write(t *testing.T, path, data string) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	data := "keys:\n  next-hunk: [J]\nview:\n  split: true\n  context: 6\ndiff: patience\nlsp:\n  go: [gopls, -remote=auto]\n"
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	c, _, err = config.LoadUser()
-	if err != nil || !reflect.DeepEqual(c.Keys["next-hunk"], []string{"J"}) || !c.View.Split || c.View.Context != 6 || c.Diff != "patience" || c.LSP["go"][1] != "-remote=auto" {
-		t.Fatalf("user config: %+v %v", c, err)
+}
+
+func TestLoad(t *testing.T) {
+	home, repo := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", home)
+
+	got, err := config.Load(repo)
+	if err != nil || !reflect.DeepEqual(got, config.Config{}) {
+		t.Fatalf("no files: %+v, %v", got, err)
 	}
-	merged := config.Merge(c, config.Config{Diff: "myers", LSP: map[string][]string{"kotlin": {"kls"}}})
-	if merged.Diff != "myers" || merged.LSP["go"][0] != "gopls" || merged.LSP["kotlin"][0] != "kls" {
-		t.Fatalf("merge: %+v", merged)
+
+	userPath, _ := config.UserPath()
+	if want := filepath.Join(home, "guided-review", "config.yaml"); userPath != want {
+		t.Fatalf("UserPath = %q, want %q", userPath, want)
+	}
+	write(t, userPath, "keys:\n  next-hunk: [J]\nview:\n  split: true\n  context: 6\n"+
+		"diff: patience\nlsp:\n  go: [gopls]\n  kotlin: [kotlin-lsp]\n")
+	write(t, filepath.Join(repo, config.RepoFile), "domain: finance\ngenerated: [api/gen/**]\n"+
+		"diff: myers\nlsp:\n  kotlin: [kls]\n")
+
+	got, err = config.Load(repo)
+	want := config.Config{
+		Domain:    "finance",
+		Generated: []string{"api/gen/**"},
+		Diff:      "myers",
+		LSP:       map[string][]string{"go": {"gopls"}, "kotlin": {"kls"}},
+		Keys:      map[string][]string{"next-hunk": {"J"}},
+		View:      config.View{Split: true, Context: 6},
+	}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("Load = %+v, %v\nwant %+v", got, err, want)
+	}
+
+	write(t, filepath.Join(repo, config.RepoFile), "domain: [broken\n")
+	if _, err := config.Load(repo); err == nil {
+		t.Fatal("broken repo file: want error")
 	}
 }

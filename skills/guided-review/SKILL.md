@@ -88,18 +88,9 @@ steps:
     kind: entry
     hunks: [{ file: api/transfer.go, lines: 40-92 }]
     hotspots:
-      - {
-          cat: consistency,
-          q: "Retry with the same key after a timeout — second debit?",
-          line: 57,
-        }
+      - { cat: consistency, line: 57, q: "Retry after a timeout — second debit?" }
     annotations:
-      - {
-          file: api/transfer.go,
-          line: 61,
-          kind: note,
-          text: "Put runs in the reserve transaction",
-        }
+      - { file: api/transfer.go, line: 61, kind: note, text: "Put runs in the reserve tx" }
     depends_on: [s1]
 ```
 
@@ -112,14 +103,20 @@ steps:
 3. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
    nothing happened: run it again. Each printed line is one event from the viewer:
 
-   | Event                           | What to do                                                                                                                                                                                                                                                                                                     |
-   | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-   | `[message] sN file:lines: text` | A remark → pick severity (blocker changes the approach, major is local rework, minor, nit), `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY`, then `gr say` one line: `записал: nit, transfer.go:57–58`. A question → `gr say` a short answer. Unsure which → ask one short question. |
-   | `[message] sN: text`            | Same, without a line anchor; ask for the lines if a remark needs them.                                                                                                                                                                                                                                         |
-   | `[explain] sN file:lines`       | Read that code, `gr note add --file F --line <first line> TEXT` with one to three lines on its role in the feature, not its syntax.                                                                                                                                                                            |
-   | `[next] sN`                     | If a hotspot question on this step is unanswered, `gr say` it once more and wait; otherwise `gr step next` and go to 1.                                                                                                                                                                                        |
-   | `[skip] sN: reason`             | `gr step skip --reason "<reason>"`, go to 1.                                                                                                                                                                                                                                                                   |
-   | `[goto] sN`                     | `gr step goto sN`, go to 1.                                                                                                                                                                                                                                                                                    |
+   - `[message] sN file:lines: text` — a remark: pick severity (blocker changes the
+     approach, major is local rework, minor, nit),
+     `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY`, then
+     `gr say` one line: `записал: nit, transfer.go:57–58`. A question: `gr say` a short
+     answer. Unsure which: ask one short question.
+   - `[message] sN: text` — the same without a line anchor; ask for the lines if a
+     remark needs them.
+   - `[explain] sN file:lines` — read that code,
+     `gr note add --file F --line <first line> TEXT`: one to three lines on its role in
+     the feature, not its syntax.
+   - `[next] sN` — if a hotspot question on this step is unanswered, `gr say` it once
+     more and wait; otherwise `gr step next` and go to 1.
+   - `[skip] sN: reason` — `gr step skip --reason "<reason>"`, go to 1.
+   - `[goto] sN` — `gr step goto sN`, go to 1.
 
    `--suggestion` is the full replacement text for the lines; use it only for a nit
    or minor with an obvious fix.
@@ -154,10 +151,10 @@ steps:
 
 ## MR discussions
 
-`gr init`, `gr status` and `gr sync` list unresolved discussions of other reviewers
-by their first line; `gr discussions` prints them in full. The viewer marks the ones
-on lines. Mention them in intake, and on a step that touches
-a discussed line, say whether the code answers it.
+`gr init` and `gr status` list unresolved discussions of other reviewers by their first
+line; `gr discussions` refreshes them from the MR and prints them in full. The viewer
+marks the ones on lines. Mention them in intake, and on a step that touches a discussed
+line, say whether the code answers it.
 
 ## Wrap-up
 

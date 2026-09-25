@@ -14,7 +14,15 @@ func TestHighlightKeepsText(t *testing.T) {
 	for _, l := range got {
 		plain = append(plain, ansi.Strip(l))
 	}
-	want := []string{"package api", "", "/* multi", "line */", "func F() int {", "    return 1", "}"}
+	want := []string{
+		"package api",
+		"",
+		"/* multi",
+		"line */",
+		"func F() int {",
+		"    return 1",
+		"}",
+	}
 	if !reflect.DeepEqual(plain, want) {
 		t.Fatalf("got %q, want %q", plain, want)
 	}

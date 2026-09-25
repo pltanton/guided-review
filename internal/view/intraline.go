@@ -80,7 +80,8 @@ func spans(ts []token, keep []bool) [][2]int {
 		if keep[i] || strings.TrimSpace(t.text) == "" {
 			continue
 		}
-		if n := len(out); n > 0 && out[n-1][1] >= t.start-1 && onlySpaceBetween(ts, out[n-1][1], t.start) {
+		if n := len(out); n > 0 && out[n-1][1] >= t.start-1 &&
+			onlySpaceBetween(ts, out[n-1][1], t.start) {
 			out[n-1][1] = t.end
 			continue
 		}
@@ -98,29 +99,22 @@ func onlySpaceBetween(ts []token, from, to int) bool {
 	return true
 }
 
-func changeRuns(rows []Row, visit func(rem, add []int)) {
+func changeRuns(rows []Row, visit func(i, j, k int)) {
 	for i := 0; i < len(rows); {
-		if rows[i].Kind != RowRemoved && rows[i].Kind != RowAdded {
+		if kind := rows[i].Kind; kind != RowRemoved && kind != RowAdded {
 			i++
 			continue
 		}
-		var rem, add []int
-		for i < len(rows) && rows[i].Kind == RowRemoved {
-			rem = append(rem, i)
-			i++
-		}
-		for i < len(rows) && rows[i].Kind == RowAdded && (len(add) == 0 || !rows[i].HunkStart) {
-			add = append(add, i)
-			i++
-		}
-		visit(rem, add)
+		j, k := changeRun(rows, i)
+		visit(i, j, k)
+		i = k
 	}
 }
 
 func markIntraline(rows []Row) {
-	changeRuns(rows, func(rem, add []int) {
-		for p := range min(len(rem), len(add)) {
-			a, b := &rows[rem[p]], &rows[add[p]]
+	changeRuns(rows, func(i, j, k int) {
+		for p := range min(j-i, k-j) {
+			a, b := &rows[i+p], &rows[j+p]
 			if a.Reformat {
 				continue
 			}
@@ -145,10 +139,15 @@ func moveKey(s string) string {
 
 func markMoved(rows []Row) {
 	var removedRuns [][]int
-	changeRuns(rows, func(rem, _ []int) {
-		if len(rem) >= minMovedLines {
-			removedRuns = append(removedRuns, rem)
+	changeRuns(rows, func(i, j, _ int) {
+		if j-i < minMovedLines {
+			return
 		}
+		run := make([]int, 0, j-i)
+		for n := i; n < j; n++ {
+			run = append(run, n)
+		}
+		removedRuns = append(removedRuns, run)
 	})
 	for _, run := range removedRuns {
 		for s := 0; s+minMovedLines <= len(run); {

@@ -43,10 +43,10 @@ func (h Hunk) NewEnd() int {
 }
 
 func (h Hunk) Range() string {
-	switch {
-	case h.NewLines == 0:
+	switch h.NewLines {
+	case 0:
 		return fmt.Sprintf("%d(del)", h.NewStart)
-	case h.NewLines == 1:
+	case 1:
 		return strconv.Itoa(h.NewStart)
 	default:
 		return fmt.Sprintf("%d-%d", h.NewStart, h.NewEnd())

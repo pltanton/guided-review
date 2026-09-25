@@ -30,15 +30,16 @@ type Client struct {
 	nextID  atomic.Int64
 	mu      sync.Mutex
 	pending map[int64]chan response
-	done    chan struct{}
 	cmd     *exec.Cmd
+}
+
+type rpcError struct {
+	Message string `json:"message"`
 }
 
 type response struct {
 	Result json.RawMessage `json:"result"`
-	Error  *struct {
-		Message string `json:"message"`
-	} `json:"error"`
+	Error  *rpcError       `json:"error"`
 }
 
 type incoming struct {
@@ -49,7 +50,7 @@ type incoming struct {
 }
 
 func NewClient(r io.Reader, w io.Writer) *Client {
-	c := &Client{w: w, pending: map[int64]chan response{}, done: make(chan struct{})}
+	c := &Client{w: w, pending: map[int64]chan response{}}
 	go c.read(bufio.NewReader(r))
 	return c
 }
@@ -78,7 +79,6 @@ func Start(ctx context.Context, argv []string, root string) (*Client, error) {
 }
 
 func (c *Client) read(r *bufio.Reader) {
-	defer close(c.done)
 	for {
 		body, err := readMessage(r)
 		if err != nil {
@@ -113,10 +113,7 @@ func (c *Client) failPending(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for id, ch := range c.pending {
-		msg := err.Error()
-		ch <- response{Error: &struct {
-			Message string `json:"message"`
-		}{msg}}
+		ch <- response{Error: &rpcError{Message: err.Error()}}
 		delete(c.pending, id)
 	}
 }
@@ -145,7 +142,8 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	c.mu.Lock()
 	c.pending[id] = ch
 	c.mu.Unlock()
-	if err := c.send(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}); err != nil {
+	req := map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}
+	if err := c.send(req); err != nil {
 		return nil, err
 	}
 	select {
@@ -188,7 +186,12 @@ func (c *Client) Initialize(ctx context.Context, root string) error {
 
 func (c *Client) DidOpen(path, language, text string) error {
 	return c.notify("textDocument/didOpen", map[string]any{
-		"textDocument": map[string]any{"uri": fileURI(path), "languageId": language, "version": 1, "text": text},
+		"textDocument": map[string]any{
+			"uri":        fileURI(path),
+			"languageId": language,
+			"version":    1,
+			"text":       text,
+		},
 	})
 }
 
@@ -350,7 +353,8 @@ func readMessage(r *bufio.Reader) ([]byte, error) {
 		if line == "" {
 			break
 		}
-		if name, value, ok := strings.Cut(line, ":"); ok && strings.EqualFold(strings.TrimSpace(name), "Content-Length") {
+		if name, value, ok := strings.Cut(line, ":"); ok &&
+			strings.EqualFold(strings.TrimSpace(name), "Content-Length") {
 			length, err = strconv.Atoi(strings.TrimSpace(value))
 			if err != nil {
 				return nil, err

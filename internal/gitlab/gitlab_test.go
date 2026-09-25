@@ -16,8 +16,16 @@ func TestParseMRURL(t *testing.T) {
 		want    gitlab.MRRef
 		wantErr bool
 	}{
-		{"https://gitlab.example.com/g/sub/proj/-/merge_requests/123", gitlab.MRRef{Host: "gitlab.example.com", Project: "g/sub/proj", IID: 123}, false},
-		{"https://gitlab.example.com/g/proj/-/merge_requests/7/diffs?commit_id=abc", gitlab.MRRef{Host: "gitlab.example.com", Project: "g/proj", IID: 7}, false},
+		{
+			"https://gitlab.example.com/g/sub/proj/-/merge_requests/123",
+			gitlab.MRRef{Host: "gitlab.example.com", Project: "g/sub/proj", IID: 123},
+			false,
+		},
+		{
+			"https://gitlab.example.com/g/proj/-/merge_requests/7/diffs?commit_id=abc",
+			gitlab.MRRef{Host: "gitlab.example.com", Project: "g/proj", IID: 7},
+			false,
+		},
 		{"https://gitlab.example.com/g/proj/-/issues/7", gitlab.MRRef{}, true},
 		{"https://gitlab.example.com/g/proj/-/merge_requests/x", gitlab.MRRef{}, true},
 		{"feature", gitlab.MRRef{}, true},
@@ -34,10 +42,16 @@ func TestFetchMR(t *testing.T) {
 	var gotArgs []string
 	run := func(_ context.Context, args ...string) ([]byte, error) {
 		gotArgs = args
-		return []byte(`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
-			"diff_refs":{"base_sha":"b","start_sha":"s","head_sha":"h"}}`), nil
+		return []byte(
+			`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
+			"diff_refs":{"base_sha":"b","start_sha":"s","head_sha":"h"}}`,
+		), nil
 	}
-	mr, err := gitlab.FetchMR(context.Background(), run, gitlab.MRRef{Host: "h", Project: "g/p", IID: 7})
+	mr, err := gitlab.FetchMR(
+		context.Background(),
+		run,
+		gitlab.MRRef{Host: "h", Project: "g/p", IID: 7},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,8 +59,12 @@ func TestFetchMR(t *testing.T) {
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", gotArgs, wantArgs)
 	}
-	want := gitlab.MR{Title: "Add guard", WebURL: "https://h/g/p/-/merge_requests/7", SourceBranch: "feature",
-		DiffRefs: gitlab.DiffRefs{BaseSHA: "b", StartSHA: "s", HeadSHA: "h"}}
+	want := gitlab.MR{
+		Title:        "Add guard",
+		WebURL:       "https://h/g/p/-/merge_requests/7",
+		SourceBranch: "feature",
+		DiffRefs:     gitlab.DiffRefs{BaseSHA: "b", StartSHA: "s", HeadSHA: "h"},
+	}
 	if mr != want {
 		t.Fatalf("mr = %+v", mr)
 	}
@@ -67,11 +85,21 @@ func TestFetchDiscussions(t *testing.T) {
 		 {"id":"d4","notes":[{"body":"on removed line","author":{"username":"dan"},"system":false,
 			 "position":{"new_path":"api/b.go","new_line":null,"old_path":"api/b.go","old_line":12}}]}]`), nil
 	}
-	got, err := gitlab.FetchDiscussions(context.Background(), run, gitlab.MRRef{Host: "h", Project: "g/p", IID: 7})
+	got, err := gitlab.FetchDiscussions(
+		context.Background(),
+		run,
+		gitlab.MRRef{Host: "h", Project: "g/p", IID: 7},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantArgs := []string{"api", "--hostname", "h", "--paginate", "projects/g%2Fp/merge_requests/7/discussions?per_page=100"}
+	wantArgs := []string{
+		"api",
+		"--hostname",
+		"h",
+		"--paginate",
+		"projects/g%2Fp/merge_requests/7/discussions?per_page=100",
+	}
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("args = %v", gotArgs)
 	}
@@ -79,7 +107,14 @@ func TestFetchDiscussions(t *testing.T) {
 		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57},
 		{ID: "d6", Author: "ci", Body: "**Stuck** approval"},
 		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true},
-		{ID: "d4", Author: "dan", Body: "on removed line", File: "api/b.go", Line: 12, OldLine: true},
+		{
+			ID:      "d4",
+			Author:  "dan",
+			Body:    "on removed line",
+			File:    "api/b.go",
+			Line:    12,
+			OldLine: true,
+		},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
@@ -112,8 +147,21 @@ func TestDrafts(t *testing.T) {
 	var calls []recorded
 	ref := gitlab.MRRef{Host: "h", Project: "g/p", IID: 7}
 	run := recorder(t, &calls, `{"id": 42}`)
-	pos := &gitlab.Position{PositionType: "text", BaseSHA: "b", StartSHA: "s", HeadSHA: "h", OldPath: "a.go", NewPath: "a.go", NewLine: 12}
-	id, err := gitlab.CreateDraft(context.Background(), run, ref, gitlab.DraftNote{Note: "why?", Position: pos})
+	pos := &gitlab.Position{
+		PositionType: "text",
+		BaseSHA:      "b",
+		StartSHA:     "s",
+		HeadSHA:      "h",
+		OldPath:      "a.go",
+		NewPath:      "a.go",
+		NewLine:      12,
+	}
+	id, err := gitlab.CreateDraft(
+		context.Background(),
+		run,
+		ref,
+		gitlab.DraftNote{Note: "why?", Position: pos},
+	)
 	if err != nil || id != 42 {
 		t.Fatalf("CreateDraft = %d, %v", id, err)
 	}
@@ -123,7 +171,8 @@ func TestDrafts(t *testing.T) {
 	if err := gitlab.Approve(context.Background(), run, ref); err != nil {
 		t.Fatal(err)
 	}
-	if got := calls[0].args[len(calls[0].args)-1]; got != "projects/g%2Fp/merge_requests/7/draft_notes" {
+	const drafts = "projects/g%2Fp/merge_requests/7/draft_notes"
+	if got := calls[0].args[len(calls[0].args)-1]; got != drafts {
 		t.Fatalf("draft path %q", got)
 	}
 	var body map[string]any
@@ -137,7 +186,7 @@ func TestDrafts(t *testing.T) {
 	if _, hasOld := p["old_line"]; hasOld {
 		t.Fatalf("old_line must be omitted for an added line: %s", calls[0].body)
 	}
-	if got := calls[1].args[len(calls[1].args)-1]; got != "projects/g%2Fp/merge_requests/7/draft_notes/bulk_publish" {
+	if got := calls[1].args[len(calls[1].args)-1]; got != drafts+"/bulk_publish" {
 		t.Fatalf("publish path %q", got)
 	}
 	if got := calls[2].args[len(calls[2].args)-1]; got != "projects/g%2Fp/merge_requests/7/approve" {

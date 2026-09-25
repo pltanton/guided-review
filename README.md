@@ -72,14 +72,13 @@ both sides in full.
 | Command | Does |
 |---|---|
 | `:42` | go to line 42 of the file under the cursor |
-| `:s3`, `:step s3`, `:all`, `:boilerplate`, `:generated` | open a step or view |
+| `:s3`, `:all`, `:boilerplate`, `:generated` | open a step or view |
 | `:f transfer` | jump to the first file of the step whose path contains the text |
-| `:set split` / `nosplit` / `plan` / `noplan` / `mouse` / `nomouse` / `removed` / `noremoved` / `context=10` / `diff=patience` | view options |
-| `:msg text`, `:skip reason`, `:next`, `:explain`, `:publish`, `:e`, `:q`, `:help`, `:noh` | the same as the keys |
-| `:next-hunk`, `:definition`, … | any action by name (see `h`) |
+| `:set context=10`, `:set diff=patience` | context lines, diff algorithm |
+| `:msg text`, `:skip reason`, `:q` | message the agent, skip the step, quit |
+| `:split`, `:next`, `:definition`, … | any action by name (see `h`) |
 
-`/text` searches the current step (smart case); `n`/`N` then walk the matches, `esc` or
-`:noh` clears the search and gives `n`/`N` back to annotations.
+`/text` searches the current step (smart case); `n`/`N` then walk the matches, `esc` clears the search and gives `n`/`N` back to annotations.
 
 ## Viewer keys (defaults)
 

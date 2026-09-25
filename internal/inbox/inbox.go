@@ -74,7 +74,7 @@ func Append(dir string, e Event) error {
 		return err
 	}
 	if _, err := f.Write(append(data, '\n')); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()
@@ -98,7 +98,7 @@ func Wait(ctx context.Context, dir string, timeout, poll time.Duration) ([]Event
 	if err := os.WriteFile(marker, stamp, 0o644); err != nil {
 		return nil, err
 	}
-	defer os.Remove(marker)
+	defer func() { _ = os.Remove(marker) }()
 	deadline := time.Now().Add(timeout)
 	for {
 		evs, next, err := readFrom(dir, offset)
@@ -161,7 +161,11 @@ func readOffset(dir string) (int64, error) {
 }
 
 func writeOffset(dir string, offset int64) error {
-	return os.WriteFile(filepath.Join(dir, offsetFile), []byte(strconv.FormatInt(offset, 10)), 0o644)
+	return os.WriteFile(
+		filepath.Join(dir, offsetFile),
+		[]byte(strconv.FormatInt(offset, 10)),
+		0o644,
+	)
 }
 
 func WaitingSince(dir string) (time.Time, bool) {
@@ -185,7 +189,11 @@ func MarkIdle(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, idleFile), []byte(time.Now().Format(time.RFC3339Nano)), 0o644)
+	return os.WriteFile(
+		filepath.Join(dir, idleFile),
+		[]byte(time.Now().Format(time.RFC3339Nano)),
+		0o644,
+	)
 }
 
 func IdleSince(dir string) (time.Time, bool) {

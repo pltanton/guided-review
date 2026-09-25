@@ -53,12 +53,16 @@ func summary(rows []Row) string {
 func TestBuildRowsWholeFile(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
-			{NewStart: 3, NewLines: 1, Lines: []diff.Line{{Kind: '-', Text: "old3"}, {Kind: '+', Text: "L3"}}},
+			{
+				NewStart: 3,
+				NewLines: 1,
+				Lines:    []diff.Line{{Kind: '-', Text: "old3"}, {Kind: '+', Text: "L3"}},
+			},
 			{NewStart: 12, NewLines: 0, Lines: []diff.Line{{Kind: '-', Text: "gone"}}},
 		}}},
 		lines: map[string][]string{"a.go": numbered(20)},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil)
+	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +75,11 @@ func TestBuildRowsWholeFile(t *testing.T) {
 func TestBuildRowsRangeAndHotspot(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
-			{NewStart: 5, NewLines: 2, Lines: []diff.Line{{Kind: '+', Text: "L5"}, {Kind: '+', Text: "L6"}}},
+			{
+				NewStart: 5,
+				NewLines: 2,
+				Lines:    []diff.Line{{Kind: '+', Text: "L5"}, {Kind: '+', Text: "L6"}},
+			},
 		}}},
 		lines: map[string][]string{"a.go": numbered(10)},
 	}
@@ -79,7 +87,7 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 		Hunks:    []state.StepHunk{{File: "a.go", Lines: "5-6"}},
 		Hotspots: []state.Hotspot{{Cat: "money", Q: "?", Line: 6}},
 	}
-	rows, err := BuildRows(src, st, 0, nil)
+	rows, err := buildRows(src, st, 0, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -91,12 +99,18 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 
 func TestBuildRowsDeletedFile(t *testing.T) {
 	src := fakeSource{
-		files: map[string]diff.File{"gone.go": {Path: "gone.go", Status: diff.Deleted, Hunks: []diff.Hunk{
-			{OldStart: 1, OldLines: 2, Lines: []diff.Line{{Kind: '-', Text: "a"}, {Kind: '-', Text: "b"}}},
-		}}},
+		files: map[string]diff.File{
+			"gone.go": {Path: "gone.go", Status: diff.Deleted, Hunks: []diff.Hunk{
+				{
+					OldStart: 1,
+					OldLines: 2,
+					Lines:    []diff.Line{{Kind: '-', Text: "a"}, {Kind: '-', Text: "b"}},
+				},
+			}},
+		},
 		lines: map[string][]string{},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "gone.go"}}}, 3, nil)
+	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "gone.go"}}}, 3, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +118,8 @@ func TestBuildRowsDeletedFile(t *testing.T) {
 	for _, r := range rows {
 		kinds = append(kinds, r.Kind)
 	}
-	if !reflect.DeepEqual(kinds, []RowKind{RowFile, RowRemoved, RowRemoved}) || !rows[1].HunkStart {
+	if !reflect.DeepEqual(kinds, []RowKind{RowFile, RowRemoved, RowRemoved}) ||
+		!rows[1].HunkStart {
 		t.Fatalf("rows: %s", summary(rows))
 	}
 }
@@ -112,8 +127,24 @@ func TestBuildRowsDeletedFile(t *testing.T) {
 func TestBuildRowsNotesAndOldLines(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
-			{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 2, Lines: []diff.Line{{Kind: '-', Text: "old2"}, {Kind: '+', Text: "L2"}, {Kind: '+', Text: "L3"}}},
-			{OldStart: 20, OldLines: 0, NewStart: 21, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L21"}}},
+			{
+				OldStart: 2,
+				OldLines: 1,
+				NewStart: 2,
+				NewLines: 2,
+				Lines: []diff.Line{
+					{Kind: '-', Text: "old2"},
+					{Kind: '+', Text: "L2"},
+					{Kind: '+', Text: "L3"},
+				},
+			},
+			{
+				OldStart: 20,
+				OldLines: 0,
+				NewStart: 21,
+				NewLines: 1,
+				Lines:    []diff.Line{{Kind: '+', Text: "L21"}},
+			},
 		}}},
 		lines: map[string][]string{"a.go": numbered(30)},
 	}
@@ -123,7 +154,7 @@ func TestBuildRowsNotesAndOldLines(t *testing.T) {
 		{File: "a.go", Line: 21, Kind: "spec", Text: "spec says 409", Focus: true},
 		{File: "a.go", Line: 28, Kind: "mr", Text: "@alice: far away"},
 	}
-	rows, err := BuildRows(src, st, 1, notes)
+	rows, err := buildRows(src, st, 1, notes, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +189,13 @@ func TestWholeFileNoteOutsideHunks(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, []Note{{File: "a.go", Line: 5, Kind: "note", Text: "far note", Focus: true}})
+	rows, err := buildRows(
+		src,
+		state.Step{Hunks: []state.StepHunk{{File: "a.go"}}},
+		1,
+		[]Note{{File: "a.go", Line: 5, Kind: "note", Text: "far note", Focus: true}},
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +212,7 @@ func TestGapsAndReveal(t *testing.T) {
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
 	st := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
-	rows, err := BuildRows(src, st, 1, nil)
+	rows, err := buildRows(src, st, 1, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +225,7 @@ func TestGapsAndReveal(t *testing.T) {
 	if !reflect.DeepEqual(gaps, [][2]int{{1, 28}, {32, 40}}) {
 		t.Fatalf("gaps = %v", gaps)
 	}
-	rows, err = BuildRowsWith(src, st, 1, nil, map[string][][2]int{"a.go": {{1, 28}}})
+	rows, err = buildRows(src, st, 1, nil, map[string][][2]int{"a.go": {{1, 28}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,12 +237,37 @@ func TestGapsAndReveal(t *testing.T) {
 func TestFileHeaders(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{
-			"a.go": {Path: "a.go", Status: diff.Modified, Hunks: []diff.Hunk{{NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L1"}}}}},
-			"b.go": {Path: "b.go", OldPath: "old/b.go", Status: diff.Renamed, Hunks: []diff.Hunk{{OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '-', Text: "x"}, {Kind: '+', Text: "L1"}}}}},
+			"a.go": {
+				Path:   "a.go",
+				Status: diff.Modified,
+				Hunks: []diff.Hunk{
+					{NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L1"}}},
+				},
+			},
+			"b.go": {
+				Path:    "b.go",
+				OldPath: "old/b.go",
+				Status:  diff.Renamed,
+				Hunks: []diff.Hunk{
+					{
+						OldStart: 1,
+						OldLines: 1,
+						NewStart: 1,
+						NewLines: 1,
+						Lines:    []diff.Line{{Kind: '-', Text: "x"}, {Kind: '+', Text: "L1"}},
+					},
+				},
+			},
 		},
 		lines: map[string][]string{"a.go": numbered(1), "b.go": numbered(1)},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}, {File: "b.go"}}}, 0, nil)
+	rows, err := buildRows(
+		src,
+		state.Step{Hunks: []state.StepHunk{{File: "a.go"}, {File: "b.go"}}},
+		0,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,10 +279,12 @@ func TestFileHeaders(t *testing.T) {
 	if !reflect.DeepEqual(kinds, want) {
 		t.Fatalf("kinds = %v, want %v", kinds, want)
 	}
-	if rows[0].FileInfo != "+1 −0 · modified" || rows[3].FileInfo != "+1 −1 · renamed from old/b.go" {
+	if rows[0].FileInfo != "+1 −0 · modified" ||
+		rows[3].FileInfo != "+1 −1 · renamed from old/b.go" {
 		t.Fatalf("file info: %q / %q", rows[0].FileInfo, rows[3].FileInfo)
 	}
-	if got := ansi.Strip(renderUnified(rows[3])); !strings.Contains(got, "b.go") || !strings.Contains(got, "renamed from old/b.go") {
+	if got := ansi.Strip(renderUnified(rows[3])); !strings.Contains(got, "b.go") ||
+		!strings.Contains(got, "renamed from old/b.go") {
 		t.Fatalf("header render: %q", got)
 	}
 }

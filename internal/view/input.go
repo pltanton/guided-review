@@ -18,15 +18,20 @@ func (m *model) startCompose(kind string) {
 	if kind != inbox.KindMessage {
 		return
 	}
+	m.anchorFile, m.anchorLines, m.composeRef = m.anchorAt()
+}
+
+func (m *model) anchorAt() (file, lines string, ref int) {
 	cur := m.current()
 	switch {
 	case m.visual:
-		m.anchorFile, m.anchorLines, _ = m.selection()
+		file, lines, _ = m.selection()
 	case cur.Ref > 0:
-		m.composeRef, m.anchorFile, m.anchorLines = cur.Ref, cur.File, fmt.Sprint(cur.Line)
+		file, lines, ref = cur.File, fmt.Sprint(cur.Line), cur.Ref
 	case cur.File != "" && cur.Line > 0:
-		m.anchorFile, m.anchorLines = cur.File, fmt.Sprint(cur.Line)
+		file, lines = cur.File, fmt.Sprint(cur.Line)
 	}
+	return file, lines, ref
 }
 
 func (m *model) startEdit() {
@@ -74,7 +79,15 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		if text == "" {
 			return nil
 		}
-		m.emit(inbox.Event{Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines, Comment: m.composeRef})
+		m.emit(
+			inbox.Event{
+				Kind:    m.composeKind,
+				Text:    text,
+				File:    m.anchorFile,
+				Lines:   m.anchorLines,
+				Comment: m.composeRef,
+			},
+		)
 	case tea.KeyCtrlX:
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 	case tea.KeyLeft:
@@ -155,8 +168,8 @@ func (m *model) selection() (file, lines string, ok bool) {
 	}
 	lo, hi := min(m.anchor, m.cursor), max(m.anchor, m.cursor)
 	first, last := 0, 0
-	for i := lo; i <= hi && i < len(m.list); i++ {
-		it := m.list[i]
+	for i := lo; i <= hi && i < len(m.lines); i++ {
+		it := m.lines[i]
 		if it.File != cur.File || it.Line == 0 {
 			continue
 		}

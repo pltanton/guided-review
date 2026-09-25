@@ -76,7 +76,12 @@ func newLSPManager(root string, overrides map[string][]string) *lspManager {
 			servers[k] = v
 		}
 	}
-	return &lspManager{root: root, servers: servers, clients: map[string]*lsp.Client{}, opened: map[string]bool{}}
+	return &lspManager{
+		root:    root,
+		servers: servers,
+		clients: map[string]*lsp.Client{},
+		opened:  map[string]bool{},
+	}
 }
 
 func (lm *lspManager) client(ctx context.Context, path string) (*lsp.Client, string, error) {
@@ -87,7 +92,12 @@ func (lm *lspManager) client(ctx context.Context, path string) (*lsp.Client, str
 	}
 	argv := lm.servers[lang]
 	if _, err := exec.LookPath(argv[0]); err != nil {
-		return nil, "", fmt.Errorf("no LSP server for %s: install %s or set lsp.%s in .review.yaml", ext, argv[0], lang)
+		return nil, "", fmt.Errorf(
+			"no LSP server for %s: install %s or set lsp.%s in .review.yaml",
+			ext,
+			argv[0],
+			lang,
+		)
 	}
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
@@ -278,25 +288,17 @@ func wordBounds(line string, col int) (int, int) {
 }
 
 func (m *model) currentCode() (string, bool) {
-	if m.cursor >= len(m.list) {
+	l := m.current()
+	if l.Pair && m.useSplit() {
+		return l.Right.Plain, l.Right.Line > 0
+	}
+	if l.Kind != RowCode && l.Kind != RowAdded {
 		return "", false
 	}
-	if m.useSplit() {
-		r := m.split[m.cursor]
-		if r.Full != nil || r.Right.Line == 0 {
-			return "", false
-		}
-		return r.Right.Plain, true
+	if l.Plain != "" {
+		return l.Plain, true
 	}
-	r := m.disp[m.cursor]
-	if r.Kind != RowCode && r.Kind != RowAdded {
-		return "", false
-	}
-	plain := r.Plain
-	if plain == "" {
-		plain = ansi.Strip(r.Text)
-	}
-	return plain, true
+	return ansi.Strip(l.Text), true
 }
 
 func (m *model) lspRequest(kind string) tea.Cmd {
@@ -327,7 +329,11 @@ func (m *model) handleLSP(msg lspMsg) {
 			return
 		}
 		w := max(m.mainWidth()-6, 20)
-		m.popup = &popup{kind: "hover", title: "hover", lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n")}
+		m.popup = &popup{
+			kind:  "hover",
+			title: "hover",
+			lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n"),
+		}
 	case "definition":
 		switch len(msg.locs) {
 		case 0:
@@ -335,14 +341,22 @@ func (m *model) handleLSP(msg lspMsg) {
 		case 1:
 			m.openPeek(msg.locs[0])
 		default:
-			m.popup = &popup{kind: "definition", title: fmt.Sprintf("definitions · %d", len(msg.locs)), items: msg.locs}
+			m.popup = &popup{
+				kind:  "definition",
+				title: fmt.Sprintf("definitions · %d", len(msg.locs)),
+				items: msg.locs,
+			}
 		}
 	default:
 		if len(msg.locs) == 0 {
 			m.status = "no references found"
 			return
 		}
-		m.popup = &popup{kind: "references", title: fmt.Sprintf("references · %d", len(msg.locs)), items: msg.locs}
+		m.popup = &popup{
+			kind:  "references",
+			title: fmt.Sprintf("references · %d", len(msg.locs)),
+			items: msg.locs,
+		}
 	}
 	m.popupStack = nil
 }
@@ -353,7 +367,14 @@ func (m *model) openPeek(loc lspLoc) {
 		peek = m.defaultPeek
 	}
 	target := max(loc.Line-1, 0)
-	m.popup = &popup{kind: "peek", title: fmt.Sprintf("%s:%d", loc.Path, loc.Line), lines: peek(loc.Path), target: target, top: max(target-3, 0), loc: loc}
+	m.popup = &popup{
+		kind:   "peek",
+		title:  fmt.Sprintf("%s:%d", loc.Path, loc.Line),
+		lines:  peek(loc.Path),
+		target: target,
+		top:    max(target-3, 0),
+		loc:    loc,
+	}
 }
 
 func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
@@ -411,7 +432,8 @@ func (m *model) popupLines(width, height int) []string {
 		hint = "j/k scroll · e editor · esc back"
 	}
 	head := fmt.Sprintf("┌─ %s ", p.title)
-	head += strings.Repeat("─", max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)) + " " + hint
+	fill := max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)
+	head += strings.Repeat("─", fill) + " " + hint
 	out := []string{hotStyle.Render(ansi.Truncate(head, width, ""))}
 	rows := height - 1
 	switch p.kind {

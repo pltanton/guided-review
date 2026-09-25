@@ -3,19 +3,36 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
-	"fmt"
-	"io"
 	"strings"
 	"time"
 
 	"github.com/aplotnikov/guided-review/internal/inbox"
 	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/aplotnikov/guided-review/internal/view"
 )
 
+func cmdView(ctx context.Context, e env, args []string) error {
+	fs := e.flags("view")
+	pane := fs.String(
+		"return",
+		"",
+		"tmux pane to focus when the viewer exits (the agent's $TMUX_PANE)",
+	)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	s, err := openSession(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	return view.Run(
+		ctx,
+		view.Options{Store: s.store, Repo: s.repo, Config: s.cfg, ReturnPane: *pane},
+	)
+}
+
 func cmdWait(ctx context.Context, e env, args []string) error {
-	fs := flag.NewFlagSet("wait", flag.ContinueOnError)
-	fs.SetOutput(e.stdout)
+	fs := e.flags("wait")
 	timeout := fs.Duration("timeout", 9*time.Minute, "how long to wait for viewer input")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -29,11 +46,10 @@ func cmdWait(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	if len(evs) == 0 {
-		fmt.Fprintln(e.stdout, "no input yet: run gr wait again")
-		return nil
+		e.println("no input yet: run gr wait again")
 	}
 	for _, ev := range evs {
-		fmt.Fprintln(e.stdout, ev)
+		e.println(ev)
 	}
 	return nil
 }
@@ -41,26 +57,23 @@ func cmdWait(ctx context.Context, e env, args []string) error {
 func cmdSay(ctx context.Context, e env, args []string) error {
 	text := strings.Join(args, " ")
 	if text == "-" {
-		data, err := io.ReadAll(e.stdin)
+		data, err := readInput(e, "-")
 		if err != nil {
 			return err
 		}
 		text = string(data)
 	}
-	text = strings.TrimSpace(text)
-	if text == "" {
+	if text = strings.TrimSpace(text); text == "" {
 		return errors.New("usage: gr say TEXT (or - to read stdin)")
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
-	r.Messages = append(r.Messages, state.Message{Time: time.Now(), Step: r.Current, Text: text})
-	r.Progress = nil
-	if n := len(r.Messages); n > state.MaxMessages {
-		r.Messages = r.Messages[n-state.MaxMessages:]
-	}
-	return s.store.Save(r)
+	return update(ctx, e, func(r *state.Review) {
+		r.Messages = append(
+			r.Messages,
+			state.Message{Time: time.Now(), Step: r.Current, Text: text},
+		)
+		r.Messages = r.Messages[max(len(r.Messages)-state.MaxMessages, 0):]
+		r.Progress = nil
+	})
 }
 
 func cmdProgress(ctx context.Context, e env, args []string) error {
@@ -68,15 +81,23 @@ func cmdProgress(ctx context.Context, e env, args []string) error {
 	if text == "" {
 		return errors.New("usage: gr progress TEXT")
 	}
+	return update(ctx, e, func(r *state.Review) {
+		r.Progress = &state.Progress{Text: text, Time: time.Now()}
+	})
+}
+
+func update(ctx context.Context, e env, apply func(*state.Review)) error {
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
 		return err
 	}
-	r.Progress = &state.Progress{Text: text, Time: time.Now()}
+	apply(r)
 	return s.store.Save(r)
 }
 
-func cmdIdle(ctx context.Context, e env) error {
+// cmdIdle runs as a Claude Code Stop hook in every session, so outside a review it
+// must succeed silently.
+func cmdIdle(ctx context.Context, e env, _ []string) error {
 	s, err := openSession(ctx, e.dir)
 	if err != nil {
 		return nil

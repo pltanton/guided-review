@@ -21,7 +21,10 @@ func TestGopls(t *testing.T) {
 	}
 	write("go.mod", "module example.com/m\n\ngo 1.22\n")
 	write("a.go", "package m\n\nfunc Use() int {\n\treturn Transfer(1, 2)\n}\n")
-	write("b.go", "package m\n\n// Transfer adds.\nfunc Transfer(a, b int) int {\n\treturn a + b\n}\n")
+	write(
+		"b.go",
+		"package m\n\n// Transfer adds.\nfunc Transfer(a, b int) int {\n\treturn a + b\n}\n",
+	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -29,7 +32,7 @@ func TestGopls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Shutdown(ctx)
+	defer func() { _ = c.Shutdown(ctx) }()
 	a := filepath.Join(dir, "a.go")
 	data, _ := os.ReadFile(a)
 	if err := c.DidOpen(a, "go", string(data)); err != nil {

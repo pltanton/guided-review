@@ -2,8 +2,6 @@ package state_test
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -35,7 +33,8 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, r) {
 		t.Fatalf("LoadCurrent = %+v, %v; want %+v", got, err, r)
 	}
-	if got.Step("s1") == nil || got.Step("nope") != nil || got.StepIndex("s1") != 0 || got.File("a.go") == nil {
+	if got.Step("s1") == nil || got.Step("nope") != nil || got.StepIndex("s1") != 0 ||
+		got.File("a.go") == nil {
 		t.Fatal("lookup helpers")
 	}
 }
@@ -94,22 +93,5 @@ func TestStoreKeysAndList(t *testing.T) {
 	}
 	if !state.IsCurrentFile("current-aaa") || state.IsCurrentFile("state.yaml") {
 		t.Fatal("IsCurrentFile")
-	}
-}
-
-func TestLegacyCurrent(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "current"), []byte("mr-69\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	s := state.Store{Dir: dir, Key: "abc"}
-	if id, err := s.Current(); err != nil || id != "mr-69" {
-		t.Fatalf("Current with legacy file = %q, %v", id, err)
-	}
-	if err := s.ClearCurrent(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Current(); !errors.Is(err, state.ErrNoReview) {
-		t.Fatalf("after ClearCurrent: %v", err)
 	}
 }

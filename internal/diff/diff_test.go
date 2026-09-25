@@ -47,14 +47,44 @@ func TestParse(t *testing.T) {
 	}
 	want := []diff.File{
 		{Path: "api/transfer.go", Status: diff.Modified, Hunks: []diff.Hunk{
-			{OldStart: 10, OldLines: 0, NewStart: 11, NewLines: 2, Lines: []diff.Line{{Kind: '+', Text: "\tx := 1"}, {Kind: '+', Text: "\ty := 2"}}},
-			{OldStart: 20, OldLines: 2, NewStart: 21, NewLines: 0, Lines: []diff.Line{{Kind: '-', Text: "\told1"}, {Kind: '-', Text: "\t--- old2"}}},
+			{
+				OldStart: 10,
+				OldLines: 0,
+				NewStart: 11,
+				NewLines: 2,
+				Lines: []diff.Line{
+					{Kind: '+', Text: "\tx := 1"},
+					{Kind: '+', Text: "\ty := 2"},
+				},
+			},
+			{
+				OldStart: 20,
+				OldLines: 2,
+				NewStart: 21,
+				NewLines: 0,
+				Lines: []diff.Line{
+					{Kind: '-', Text: "\told1"},
+					{Kind: '-', Text: "\t--- old2"},
+				},
+			},
 		}},
 		{Path: "new.go", Status: diff.Added, Hunks: []diff.Hunk{
-			{OldStart: 0, OldLines: 0, NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "package new"}}},
+			{
+				OldStart: 0,
+				OldLines: 0,
+				NewStart: 1,
+				NewLines: 1,
+				Lines:    []diff.Line{{Kind: '+', Text: "package new"}},
+			},
 		}},
 		{Path: "gone.go", Status: diff.Deleted, Hunks: []diff.Hunk{
-			{OldStart: 1, OldLines: 1, NewStart: 0, NewLines: 0, Lines: []diff.Line{{Kind: '-', Text: "package gone"}}},
+			{
+				OldStart: 1,
+				OldLines: 1,
+				NewStart: 0,
+				NewLines: 0,
+				Lines:    []diff.Line{{Kind: '-', Text: "package gone"}},
+			},
 		}},
 		{Path: "new/name.go", OldPath: "old/name.go", Status: diff.Renamed},
 		{Path: "logo.png", Status: diff.Modified, Binary: true},

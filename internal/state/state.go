@@ -24,6 +24,18 @@ const (
 	StatusStale   StepStatus = "stale"
 )
 
+func (s StepStatus) Glyph() string {
+	switch s {
+	case StatusDone:
+		return "✓"
+	case StatusSkipped:
+		return "↷"
+	case StatusStale:
+		return "~"
+	}
+	return "·"
+}
+
 type Severity string
 
 const (
@@ -159,6 +171,13 @@ type Comment struct {
 	Resolved   bool     `yaml:"resolved,omitempty"`
 	DraftID    int      `yaml:"draft_id,omitempty"`
 	Published  bool     `yaml:"published,omitempty"`
+}
+
+func (r *Review) CodeDir(repoDir string) string {
+	if r.Worktree != "" {
+		return r.Worktree
+	}
+	return repoDir
 }
 
 func (r *Review) DiffBase() string {

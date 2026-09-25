@@ -20,7 +20,13 @@ func flowReview() *state.Review {
 			{Path: "w.go", Tier: state.TierBoilerplate},
 			{Path: "x.pb.go", Tier: state.TierGenerated},
 		},
-		Steps: []state.Step{step("s1"), step("s2", "s1"), step("s3", "s2"), step("s4"), step("s5", "s1")},
+		Steps: []state.Step{
+			step("s1"),
+			step("s2", "s1"),
+			step("s3", "s2"),
+			step("s4"),
+			step("s5", "s1"),
+		},
 	}
 	r.Steps[4].Hotspots = []state.Hotspot{{Cat: "money", Q: "?"}}
 	r.Current = "s1"
@@ -37,7 +43,8 @@ func TestNextAndSkip(t *testing.T) {
 		t.Fatal("Skip without reason must fail")
 	}
 	st, err = plan.Skip(r, "covered by s1")
-	if err != nil || st.ID != "s3" || r.Step("s2").Status != state.StatusSkipped || r.Step("s2").SkipReason != "covered by s1" {
+	if err != nil || st.ID != "s3" || r.Step("s2").Status != state.StatusSkipped ||
+		r.Step("s2").SkipReason != "covered by s1" {
 		t.Fatalf("Skip: %v, %v", st, err)
 	}
 	if err := plan.Goto(r, "s1"); err != nil || r.Current != "s1" {
@@ -60,20 +67,33 @@ func TestNextAndSkip(t *testing.T) {
 
 func TestAddCommentBlocker(t *testing.T) {
 	r := flowReview()
-	c, imp, err := plan.AddComment(r, state.Comment{File: "a.go", Lines: "3-4", Severity: state.SeverityBlocker, Body: "wrong approach"})
+	c, imp, err := plan.AddComment(
+		r,
+		state.Comment{
+			File:     "a.go",
+			Lines:    "3-4",
+			Severity: state.SeverityBlocker,
+			Body:     "wrong approach",
+		},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if c.ID != 1 || c.Step != "s1" || c.SHA != "head" {
 		t.Fatalf("defaults not filled: %+v", c)
 	}
-	if !reflect.DeepEqual(imp.Stale, []string{"s2", "s3"}) || !reflect.DeepEqual(imp.MayChange, []string{"s5"}) {
+	if !reflect.DeepEqual(imp.Stale, []string{"s2", "s3"}) ||
+		!reflect.DeepEqual(imp.MayChange, []string{"s5"}) {
 		t.Fatalf("impact: %+v", imp)
 	}
-	if r.Step("s3").Status != state.StatusStale || r.Step("s5").Status != state.StatusPending || !r.Step("s5").MayChange {
+	if r.Step("s3").Status != state.StatusStale || r.Step("s5").Status != state.StatusPending ||
+		!r.Step("s5").MayChange {
 		t.Fatalf("steps: %+v", r.Steps)
 	}
-	c2, _, err := plan.AddComment(r, state.Comment{File: "a.go", Lines: "9", Severity: state.SeverityNit, Body: "rename"})
+	c2, _, err := plan.AddComment(
+		r,
+		state.Comment{File: "a.go", Lines: "9", Severity: state.SeverityNit, Body: "rename"},
+	)
 	if err != nil || c2.ID != 2 {
 		t.Fatalf("second comment: %+v, %v", c2, err)
 	}
@@ -81,7 +101,10 @@ func TestAddCommentBlocker(t *testing.T) {
 
 func TestAddCommentMajor(t *testing.T) {
 	r := flowReview()
-	_, imp, err := plan.AddComment(r, state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityMajor, Body: "rework"})
+	_, imp, err := plan.AddComment(
+		r,
+		state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityMajor, Body: "rework"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +141,16 @@ func TestGateAndCoverage(t *testing.T) {
 	if got := plan.Gate(r); len(got) != 0 {
 		t.Fatalf("Gate = %v, want pass", got)
 	}
-	want := plan.Coverage{Total: 5, Done: 3, Skipped: 1, Stale: 1, Hotspots: 1, HotspotsReviewed: 1, Boilerplate: 1, Generated: 1}
+	want := plan.Coverage{
+		Total:            5,
+		Done:             3,
+		Skipped:          1,
+		Stale:            1,
+		Hotspots:         1,
+		HotspotsReviewed: 1,
+		Boilerplate:      1,
+		Generated:        1,
+	}
 	if got := plan.CoverageOf(r); got != want {
 		t.Fatalf("CoverageOf = %+v, want %+v", got, want)
 	}
@@ -126,19 +158,23 @@ func TestGateAndCoverage(t *testing.T) {
 
 func TestAddNoteAndResolve(t *testing.T) {
 	r := flowReview()
-	if err := plan.AddNote(r, "", state.Annotation{File: "a.go", Line: 3, Kind: "note", Text: "retry wrapper"}); err != nil {
+	note := state.Annotation{File: "a.go", Line: 3, Kind: "note", Text: "retry wrapper"}
+	if err := plan.AddNote(r, "", note); err != nil {
 		t.Fatal(err)
 	}
 	if got := r.Step("s1").Annotations; len(got) != 1 || got[0].Text != "retry wrapper" {
 		t.Fatalf("annotations: %+v", got)
 	}
-	if err := plan.AddNote(r, "s9", state.Annotation{File: "a.go", Line: 3, Kind: "note", Text: "x"}); err == nil {
+	if err := plan.AddNote(r, "s9", note); err == nil {
 		t.Fatal("unknown step must fail")
 	}
 	if err := plan.AddNote(r, "", state.Annotation{File: "a.go", Line: 3, Kind: "note"}); err == nil {
 		t.Fatal("empty text must fail")
 	}
-	c, _, err := plan.AddComment(r, state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"})
+	c, _, err := plan.AddComment(
+		r,
+		state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,17 +188,22 @@ func TestAddNoteAndResolve(t *testing.T) {
 
 func TestEditComment(t *testing.T) {
 	r := flowReview()
-	c, _, _ := plan.AddComment(r, state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"})
+	c, _, _ := plan.AddComment(
+		r,
+		state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"},
+	)
 	if err := plan.EditComment(r, c.ID, "better text", state.SeverityMinor); err != nil {
 		t.Fatal(err)
 	}
 	if got := r.Comments[0]; got.Body != "better text" || got.Severity != state.SeverityMinor {
 		t.Fatalf("edited: %+v", got)
 	}
-	if err := plan.EditComment(r, c.ID, "keep severity", ""); err != nil || r.Comments[0].Severity != state.SeverityMinor {
+	if err := plan.EditComment(r, c.ID, "keep severity", ""); err != nil ||
+		r.Comments[0].Severity != state.SeverityMinor {
 		t.Fatalf("empty severity must keep it: %v %+v", err, r.Comments[0])
 	}
-	if plan.EditComment(r, 99, "x", "") == nil || plan.EditComment(r, c.ID, " ", "") == nil || plan.EditComment(r, c.ID, "x", "huge") == nil {
+	if plan.EditComment(r, 99, "x", "") == nil || plan.EditComment(r, c.ID, " ", "") == nil ||
+		plan.EditComment(r, c.ID, "x", "huge") == nil {
 		t.Fatal("bad edits must fail")
 	}
 }

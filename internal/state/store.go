@@ -76,12 +76,11 @@ func (s Store) SetCurrent(id string) error {
 }
 
 func (s Store) ClearCurrent() error {
-	for _, path := range []string{s.currentPath(), filepath.Join(s.Dir, currentPrefix)} {
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
+	err := os.Remove(s.currentPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 func (s Store) List() ([]string, error) {
@@ -103,9 +102,6 @@ func (s Store) List() ([]string, error) {
 
 func (s Store) Current() (string, error) {
 	data, err := os.ReadFile(s.currentPath())
-	if errors.Is(err, fs.ErrNotExist) && s.Key != "" {
-		data, err = os.ReadFile(filepath.Join(s.Dir, currentPrefix))
-	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", ErrNoReview
 	}
