@@ -15,6 +15,15 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
+		if msg.Y == m.height-1 && !m.composing {
+			_, spans := m.footer()
+			for _, sp := range spans {
+				if msg.X >= sp.from && msg.X < sp.to {
+					sp.b.press(m)
+				}
+			}
+			return nil
+		}
 		if msg.X < m.planWidth() {
 			if id := m.planStepAt(msg.Y); id != "" {
 				m.emit(inbox.Event{Kind: inbox.KindGoto, Step: id})

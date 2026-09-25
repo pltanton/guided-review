@@ -348,7 +348,7 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.startCompose(inbox.KindSkip)
 	case "?":
 		m.explain()
-	case ">":
+	case ">", " ":
 		m.emit(inbox.Event{Kind: inbox.KindNext})
 	case "e":
 		return m.openEditor()

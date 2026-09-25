@@ -275,3 +275,28 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 		t.Fatal("n must land on note heads only")
 	}
 }
+
+func TestButtons(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.Update(key(" "))
+	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindNext {
+		t.Fatalf("space must send next: %+v", *sent)
+	}
+	out := ansi.Strip(m.View())
+	last := out[strings.LastIndex(out, "\n")+1:]
+	for _, b := range []string{"✓ дальше", "✎ написать", "? поясни", "↷ пропустить"} {
+		if !strings.Contains(last, b) {
+			t.Fatalf("footer lacks %q: %q", b, last)
+		}
+	}
+	x := ansi.StringWidth(last[:strings.Index(last, "✓ дальше")])
+	m.Update(tea.MouseMsg{X: x + 2, Y: m.height - 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
+		t.Fatalf("click on дальше: %+v", *sent)
+	}
+	x = ansi.StringWidth(last[:strings.Index(last, "✎ написать")])
+	m.Update(tea.MouseMsg{X: x + 2, Y: m.height - 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if !m.composing {
+		t.Fatal("click on написать must open the input")
+	}
+}

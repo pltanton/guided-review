@@ -29,7 +29,53 @@ var (
 	}
 )
 
-const hints = "c message  ? explain  > next  S skip  v select  n note  s split  p plan  e editor  a agent  q quit"
+const (
+	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  s split  p plan  e editor  a agent  q quit"
+)
+
+var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
+
+type button struct {
+	label, key string
+	press      func(*model)
+}
+
+var buttons = []button{
+	{"✓ дальше", "space", func(m *model) { m.emit(inbox.Event{Kind: inbox.KindNext}) }},
+	{"✎ написать", "c", func(m *model) { m.startCompose(inbox.KindMessage) }},
+	{"? поясни", "?", func(m *model) { m.explain() }},
+	{"↷ пропустить", "S", func(m *model) { m.startCompose(inbox.KindSkip) }},
+}
+
+type span struct {
+	from, to int
+	b        button
+}
+
+func (m *model) footer() (string, []span) {
+	line := m.agentStatus() + "  "
+	tail := moreHints
+	if m.status != "" {
+		tail = m.status
+	}
+	if m.step == nil {
+		if m.status == "" {
+			tail = hints
+		}
+		return line + dimStyle.Render(tail), nil
+	}
+	x := ansi.StringWidth(line)
+	var spans []span
+	for _, b := range buttons {
+		text := " " + b.label + " · " + b.key + " "
+		w := ansi.StringWidth(text)
+		spans = append(spans, span{x, x + w, b})
+		line += buttonStyle.Render(text) + " "
+		x += w + 1
+	}
+	return line + " " + dimStyle.Render(tail), spans
+}
 
 func (m *model) planWidth() int {
 	if !m.showPlan || m.review == nil || len(m.review.Steps) == 0 || m.width < minPlanWidth {
@@ -141,10 +187,8 @@ func (m *model) bottomLines() []string {
 		last = cursorStyle.Render(prompt) + string(m.input) + "█"
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
-	case m.status != "":
-		last = m.agentStatus() + "  " + dimStyle.Render(m.status)
 	default:
-		last = m.agentStatus() + "  " + dimStyle.Render(hints)
+		last, _ = m.footer()
 	}
 	return append(lines, last)
 }
