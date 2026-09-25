@@ -75,3 +75,15 @@ func cmdProgress(ctx context.Context, e env, args []string) error {
 	r.Progress = &state.Progress{Text: text, Time: time.Now()}
 	return s.store.Save(r)
 }
+
+func cmdIdle(ctx context.Context, e env) error {
+	s, err := openSession(ctx, e.dir)
+	if err != nil {
+		return nil
+	}
+	id, err := s.store.Current()
+	if err != nil {
+		return nil
+	}
+	return inbox.MarkIdle(s.store.ReviewDir(id))
+}

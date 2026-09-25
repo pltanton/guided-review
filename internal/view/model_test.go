@@ -432,3 +432,11 @@ func TestStepPreview(t *testing.T) {
 		t.Fatalf("esc must return to current, got %s", m.step.ID)
 	}
 }
+
+func TestAgentStopped(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.agentIdle = true
+	if got := ansi.Strip(m.agentStatus()); !strings.Contains(got, "agent stopped") {
+		t.Fatalf("idle status: %q", got)
+	}
+}

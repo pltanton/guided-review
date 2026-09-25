@@ -159,7 +159,7 @@ func (m *model) conversation() []chatLine {
 	}
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
 	for _, e := range m.events {
-		if m.pending(e) {
+		if m.pending(e) && !m.agentIdle {
 			out = append(out, chatLine{e.Time, agentStyle.Render("claude: ") + hotStyle.Render(string(spinner[m.frame%len(spinner)])+" thinking…")})
 			break
 		}
@@ -485,6 +485,9 @@ var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 func (m *model) agentStatus() string {
 	if m.agentWaiting {
 		return addStyle.Render("● your turn")
+	}
+	if m.agentIdle {
+		return delStyle.Render("○ agent stopped — answer in its window (a)")
 	}
 	text := "agent working"
 	if m.review != nil && m.review.Progress != nil {

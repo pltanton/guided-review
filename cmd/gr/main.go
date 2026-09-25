@@ -28,6 +28,7 @@ const usage = `usage: gr <command> [args]
   wait [--timeout 9m]
   say TEXT... | say -
   progress TEXT...
+  idle                 (Stop hook: tells the viewer the agent ended its turn)
   view
 `
 
@@ -87,6 +88,8 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdWait(ctx, e, args[1:])
 	case "say":
 		return cmdSay(ctx, e, args[1:])
+	case "idle":
+		return cmdIdle(ctx, e)
 	case "progress":
 		return cmdProgress(ctx, e, args[1:])
 	case "view":

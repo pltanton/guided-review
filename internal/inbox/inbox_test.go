@@ -103,3 +103,16 @@ func TestLastWait(t *testing.T) {
 		t.Fatalf("LastWait = %v, %v", at, ok)
 	}
 }
+
+func TestIdle(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := inbox.IdleSince(dir); ok {
+		t.Fatal("no idle marker yet")
+	}
+	if err := inbox.MarkIdle(dir); err != nil {
+		t.Fatal(err)
+	}
+	if at, ok := inbox.IdleSince(dir); !ok || time.Since(at) > time.Minute {
+		t.Fatalf("IdleSince = %v, %v", at, ok)
+	}
+}

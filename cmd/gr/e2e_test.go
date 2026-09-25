@@ -303,3 +303,16 @@ func TestProgress(t *testing.T) {
 		t.Fatalf("progress: %+v", r.Progress)
 	}
 }
+
+func TestIdleCommand(t *testing.T) {
+	h := newHarness(t)
+	if _, err := h.run("", "idle"); err != nil {
+		t.Fatalf("idle without a review must be a silent no-op: %v", err)
+	}
+	h.mustRun("", "init")
+	h.mustRun("", "idle")
+	s, r, _ := loadReview(context.Background(), h.repo.Dir)
+	if _, ok := inbox.IdleSince(s.store.ReviewDir(r.ID)); !ok {
+		t.Fatal("idle marker not written")
+	}
+}

@@ -25,6 +25,7 @@ const (
 	offsetFile   = "inbox.offset"
 	waitingFile  = "waiting"
 	lastWaitFile = "last-wait"
+	idleFile     = "idle"
 )
 
 type Event struct {
@@ -169,4 +170,15 @@ func readStamp(path string) (time.Time, bool) {
 	}
 	t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(string(data)))
 	return t, err == nil
+}
+
+func MarkIdle(dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, idleFile), []byte(time.Now().Format(time.RFC3339Nano)), 0o644)
+}
+
+func IdleSince(dir string) (time.Time, bool) {
+	return readStamp(filepath.Join(dir, idleFile))
 }

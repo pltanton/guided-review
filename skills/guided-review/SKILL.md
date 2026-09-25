@@ -14,6 +14,11 @@ with your annotations, your messages, and types replies there. You talk to them 
 `gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
 turn — they are not looking at it.
 
+Never end your turn while a review is open: every question — including «закрываем?» at
+the end — goes through `gr say` and then `gr wait`. The turn ends only after `gr done`
+or when the human says to stop. If you end it anyway, the viewer shows "agent stopped"
+and their replies sit unread.
+
 `gr` holds all review state: when unsure where you are, run `gr step show` or
 `gr status` instead of relying on memory. Answer in the user's language.
 
@@ -152,5 +157,5 @@ a discussed line, say whether the code answers it.
    `gr status`.
 3. Publishing to GitLab is not available yet: print `gr comment list` in the chat as a
    ready-to-paste summary.
-4. When they confirm the review is over, `gr done` removes the worktree; the state
-   stays for a re-review.
+4. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the
+   worktree; the state stays for a re-review) and end the turn.

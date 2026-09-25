@@ -81,6 +81,7 @@ type model struct {
 
 	now          func() time.Time
 	agentWaiting bool
+	agentIdle    bool
 	agentSince   time.Time
 	lastWait     time.Time
 	frame        int
@@ -281,9 +282,11 @@ func (m *model) refreshAgent() {
 		}
 	}
 	if since, ok := inbox.WaitingSince(m.store.ReviewDir(m.review.ID)); ok {
-		m.agentWaiting, m.agentSince = true, since
+		m.agentWaiting, m.agentIdle, m.agentSince = true, false, since
 		return
 	}
+	idle, ok := inbox.IdleSince(m.store.ReviewDir(m.review.ID))
+	m.agentIdle = ok && idle.After(m.lastWait)
 	if m.agentWaiting || m.agentSince.IsZero() {
 		m.agentSince = m.clock()
 	}
