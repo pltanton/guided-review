@@ -1,0 +1,51 @@
+package gitx_test
+
+import (
+	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/aplotnikov/guided-review/internal/gitx"
+	"github.com/aplotnikov/guided-review/internal/testrepo"
+)
+
+func TestRepo(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("a.txt", "one\n")
+	base := tr.Commit("base")
+	tr.Git("checkout", "-q", "-b", "feature")
+	tr.Write("a.txt", "one\ntwo\n")
+	head := tr.Commit("head")
+
+	repo, err := gitx.Open(ctx, tr.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := repo.Commit(ctx, "HEAD"); err != nil || got != head {
+		t.Fatalf("Commit(HEAD) = %q, %v; want %q", got, err, head)
+	}
+	if _, err := repo.Commit(ctx, "nope"); err == nil {
+		t.Fatal("Commit(nope): want error")
+	}
+	if got, err := repo.MergeBase(ctx, "main", "feature"); err != nil || got != base {
+		t.Fatalf("MergeBase = %q, %v; want %q", got, err, base)
+	}
+	d, err := repo.Diff(ctx, base, head)
+	if err != nil || !strings.Contains(d, "@@ -1,0 +2 @@") {
+		t.Fatalf("Diff = %q, %v", d, err)
+	}
+	if got, err := repo.Show(ctx, head, "a.txt"); err != nil || got != "one\ntwo\n" {
+		t.Fatalf("Show = %q, %v", got, err)
+	}
+	if got, err := repo.CommonDir(ctx); err != nil || filepath.Base(got) != ".git" {
+		t.Fatalf("CommonDir = %q, %v", got, err)
+	}
+	if got := repo.BranchName(ctx, "HEAD"); got != "feature" {
+		t.Fatalf("BranchName(HEAD) = %q", got)
+	}
+	if got := repo.BranchName(ctx, base); got != "" {
+		t.Fatalf("BranchName(sha) = %q, want empty", got)
+	}
+}
