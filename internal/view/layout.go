@@ -32,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  o fold  O all  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -225,11 +225,18 @@ func (m *model) View() string {
 
 	main := m.header()
 	for i := m.offset; len(main) < bodyH; i++ {
-		if i < len(m.list) {
-			main = append(main, m.renderRow(i, mw))
-		} else {
+		if i >= len(m.list) {
 			main = append(main, "")
+			continue
 		}
+		line := fit(m.renderRow(i, mw), mw)
+		switch {
+		case i == m.cursor:
+			line = paint(line, cursorBg)
+		case m.selected(i):
+			line = paint(line, selectBg)
+		}
+		main = append(main, line)
 	}
 	main = main[:bodyH]
 
@@ -341,21 +348,11 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	return out[:h]
 }
 
-func (m *model) gutter(i int) string {
-	switch {
-	case i == m.cursor:
-		return cursorStyle.Render("▶")
-	case m.selected(i):
-		return selectStyle.Render("▌")
-	}
-	return " "
-}
-
 func (m *model) renderRow(i, w int) string {
 	if m.useSplit() {
 		return m.renderSplit(i, w)
 	}
-	return m.gutter(i) + renderUnified(m.animate(m.disp[i]))
+	return renderUnified(m.animate(m.disp[i]))
 }
 
 func renderUnified(r Row) string {
@@ -366,6 +363,12 @@ func renderUnified(r Row) string {
 		return dimStyle.Render("      ⋯")
 	case RowNote:
 		return renderNote(r)
+	case RowFold:
+		style := foldStyle
+		if strings.HasPrefix(r.Text, "↕") {
+			style = dimStyle
+		}
+		return "      " + style.Render(r.Text) + dimStyle.Render("  · o to show")
 	}
 	marker, num, text := " ", fmt.Sprintf("%4d", r.Line), r.Text
 	switch r.Kind {
@@ -374,10 +377,58 @@ func renderUnified(r Row) string {
 	case RowRemoved:
 		marker, num, text = delStyle.Render("-"), "    ", delStyle.Render(r.Text)
 	}
+	switch {
+	case r.Moved:
+		marker, text = dimStyle.Render("↕"), dimStyle.Render(r.Plain)
+	case r.Reformat:
+		marker = dimStyle.Render("≈")
+	case r.Emph != nil:
+		text = renderEmph(r.Plain, r.Emph, r.Kind)
+	}
 	if r.Hotspot {
 		marker = hotStyle.Render("⚑")
 	}
 	return marker + dimStyle.Render(num+" │ ") + text
+}
+
+const (
+	cursorBg = "236"
+	selectBg = "238"
+)
+
+var (
+	foldStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
+	addEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("22")).Bold(true)
+	delEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("52")).Bold(true)
+)
+
+func renderEmph(plain string, emph [][2]int, kind RowKind) string {
+	base, strong := addStyle, addEmphStyle
+	if kind == RowRemoved {
+		base, strong = delStyle, delEmphStyle
+	}
+	runes := []rune(plain)
+	var b strings.Builder
+	pos := 0
+	for _, e := range emph {
+		from, to := min(e[0], len(runes)), min(e[1], len(runes))
+		if from > pos {
+			b.WriteString(base.Render(string(runes[pos:from])))
+		}
+		if to > from {
+			b.WriteString(strong.Render(string(runes[from:to])))
+		}
+		pos = max(pos, to)
+	}
+	if pos < len(runes) {
+		b.WriteString(base.Render(string(runes[pos:])))
+	}
+	return b.String()
+}
+
+func paint(line, bg string) string {
+	seq := "\x1b[48;5;" + bg + "m"
+	return seq + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+seq) + "\x1b[0m"
 }
 
 const noteIndent = 1 + 7 + 2
@@ -432,12 +483,12 @@ func renderNote(r Row) string {
 func (m *model) renderSplit(i, w int) string {
 	r := m.split[i]
 	if r.Full != nil {
-		return m.gutter(i) + renderUnified(m.animate(*r.Full))
+		return renderUnified(m.animate(*r.Full))
 	}
 	side := (w - 2) / 2
 	left := renderCell(r.Left, side, false)
 	right := renderCell(r.Right, side, r.Hotspot)
-	return m.gutter(i) + fit(left, side) + dimStyle.Render("┃") + right
+	return fit(left, side) + dimStyle.Render("┃") + right
 }
 
 func renderCell(c Cell, w int, hot bool) string {
@@ -450,6 +501,12 @@ func renderCell(c Cell, w int, hot bool) string {
 		marker = addStyle.Render("+")
 	case RowRemoved:
 		marker, text = delStyle.Render("-"), delStyle.Render(c.Text)
+	}
+	switch {
+	case c.Moved:
+		marker, text = dimStyle.Render("↕"), dimStyle.Render(c.Plain)
+	case c.Emph != nil:
+		text = renderEmph(c.Plain, c.Emph, c.Kind)
 	}
 	if hot {
 		marker = hotStyle.Render("⚑")

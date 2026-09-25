@@ -37,6 +37,9 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if i, ok := m.rowAt(msg.Y); ok {
 			m.cursor, m.anchor, m.dragging, m.visual = i, i, true, false
 			m.clamp()
+			if i < len(m.disp) && !m.useSplit() && m.disp[i].Kind == RowFold {
+				m.toggleFold()
+			}
 		}
 	case msg.Action == tea.MouseActionMotion && m.dragging:
 		if i, ok := m.rowAt(msg.Y); ok {

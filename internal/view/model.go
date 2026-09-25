@@ -44,6 +44,7 @@ type item struct {
 	HunkStart bool
 	Note      bool
 	FileHead  bool
+	Fold      string
 }
 
 type model struct {
@@ -70,6 +71,9 @@ type model struct {
 	focusFiles bool
 	fileCursor int
 	viewStep   string
+
+	showRemoved bool
+	unfolded    map[string]bool
 
 	composing   bool
 	composeKind string
@@ -210,20 +214,24 @@ func (m *model) useSplit() bool {
 
 func (m *model) relist() {
 	keep := m.current()
-	m.disp = expandNotes(m.rows, m.mainWidth()-noteIndent)
+	base := m.rows
+	if !m.useSplit() && !m.showRemoved {
+		base = foldRemoved(base, m.unfolded)
+	}
+	m.disp = expandNotes(base, m.mainWidth()-noteIndent)
 	m.split = pairRows(m.disp)
 	m.list = m.list[:0]
 	if m.useSplit() {
 		for _, r := range m.split {
 			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile})
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey})
 				continue
 			}
 			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
 		}
 	} else {
 		for _, r := range m.disp {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile})
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey})
 		}
 	}
 	if keep.File != "" {
@@ -353,6 +361,25 @@ func (m *model) jumpToFile(file string) {
 	}
 }
 
+func (m *model) toggleFold() {
+	key := m.current().Fold
+	if key == "" {
+		return
+	}
+	if m.unfolded == nil {
+		m.unfolded = map[string]bool{}
+	}
+	m.unfolded[key] = !m.unfolded[key]
+	m.relist()
+	for i, it := range m.list {
+		if it.Fold == key {
+			m.cursor = i
+			break
+		}
+	}
+	m.clamp()
+}
+
 func (m *model) showStep(id string) {
 	st := m.review.Step(id)
 	if st == nil {
@@ -419,6 +446,11 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		}
 		m.showPlan, m.focusFiles = true, true
 		m.fileCursor = max(0, slices.Index(files, m.current().File))
+		m.relist()
+	case "o":
+		m.toggleFold()
+	case "O":
+		m.showRemoved = !m.showRemoved
 		m.relist()
 	case "}":
 		m.jump(1, func(it item) bool { return it.FileHead })

@@ -1,9 +1,16 @@
 package view
 
 type Cell struct {
-	Line int
-	Text string
-	Kind RowKind
+	Line  int
+	Text  string
+	Kind  RowKind
+	Plain string
+	Emph  [][2]int
+	Moved bool
+}
+
+func cellOf(r Row, line int) Cell {
+	return Cell{Line: line, Text: r.Text, Kind: r.Kind, Plain: r.Plain, Emph: r.Emph, Moved: r.Moved}
 }
 
 type SplitRow struct {
@@ -22,8 +29,8 @@ func pairRows(rows []Row) []SplitRow {
 		switch r.Kind {
 		case RowCode:
 			out = append(out, SplitRow{
-				Left:  Cell{Line: r.OldLine, Text: r.Text, Kind: RowCode},
-				Right: Cell{Line: r.Line, Text: r.Text, Kind: RowCode},
+				Left:  cellOf(r, r.OldLine),
+				Right: cellOf(r, r.Line),
 				File:  r.File, Line: r.Line, HunkStart: r.HunkStart, Hotspot: r.Hotspot,
 			})
 			i++
@@ -40,11 +47,11 @@ func pairRows(rows []Row) []SplitRow {
 			for n := range max(len(rem), len(add)) {
 				sr := SplitRow{File: r.File, HunkStart: n == 0 && r.HunkStart}
 				if n < len(rem) {
-					sr.Left = Cell{Line: rem[n].OldLine, Text: rem[n].Text, Kind: RowRemoved}
+					sr.Left = cellOf(rem[n], rem[n].OldLine)
 					sr.Line = rem[n].Line
 				}
 				if n < len(add) {
-					sr.Right = Cell{Line: add[n].Line, Text: add[n].Text, Kind: RowAdded}
+					sr.Right = cellOf(add[n], add[n].Line)
 					sr.Line, sr.Hotspot = add[n].Line, add[n].Hotspot
 				}
 				out = append(out, sr)

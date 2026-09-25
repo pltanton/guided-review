@@ -51,7 +51,7 @@ func (r Repo) CommonDir(ctx context.Context) (string, error) {
 }
 
 func (r Repo) Diff(ctx context.Context, base, head string, paths ...string) (string, error) {
-	args := []string{"diff", "--no-color", "--no-ext-diff", "-U0", "-M", base, head}
+	args := []string{"diff", "--no-color", "--no-ext-diff", "--diff-algorithm=histogram", "-U0", "-M", base, head}
 	if len(paths) > 0 {
 		args = append(append(args, "--"), paths...)
 	}

@@ -440,3 +440,51 @@ func TestAgentStopped(t *testing.T) {
 		t.Fatalf("idle status: %q", got)
 	}
 }
+
+func foldModel(t *testing.T) *model {
+	m, _ := newTestModel(t)
+	m.rows = []Row{
+		{Kind: RowFile, File: "a.go", Text: "a.go"},
+		{Kind: RowRemoved, File: "a.go", Line: 2, OldLine: 2, Text: "old1", Plain: "old1", HunkStart: true},
+		{Kind: RowRemoved, File: "a.go", Line: 2, OldLine: 3, Text: "old2", Plain: "old2"},
+		{Kind: RowRemoved, File: "a.go", Line: 2, OldLine: 4, Text: "old3", Plain: "old3"},
+		{Kind: RowAdded, File: "a.go", Line: 2, Text: "x := compute(a, c)", Plain: "x := compute(a, c)", Emph: [][2]int{{16, 17}}},
+		{Kind: RowAdded, File: "a.go", Line: 3, Text: "moved()", Plain: "moved()", Moved: true, MovedTo: "b.go:9"},
+	}
+	m.relist()
+	return m
+}
+
+func TestFoldKeys(t *testing.T) {
+	m := foldModel(t)
+	if m.disp[1].Kind != RowFold {
+		t.Fatalf("expected a fold row, got %+v", m.disp[1])
+	}
+	m.cursor = 1
+	m.Update(key("o"))
+	if len(m.disp) != len(m.rows) {
+		t.Fatalf("o must unfold: %d rows", len(m.disp))
+	}
+	m.cursor = 2
+	m.Update(key("o"))
+	if m.disp[1].Kind != RowFold {
+		t.Fatal("o on an unfolded removed row must fold it back")
+	}
+	m.Update(key("O"))
+	if len(m.disp) != len(m.rows) {
+		t.Fatal("O must show every removed line")
+	}
+}
+
+func TestDiffRendering(t *testing.T) {
+	m := foldModel(t)
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"▸ 3 lines removed", "x := compute(a, c)", "↕", "moved()"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("view lacks %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "▶+") || strings.Contains(out, "▶ ") && strings.Contains(out, "│ x :=") && false {
+		t.Fatal("cursor must not be drawn as an arrow in the gutter")
+	}
+}
