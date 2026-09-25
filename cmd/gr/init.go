@@ -1,0 +1,215 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/aplotnikov/guided-review/internal/classify"
+	"github.com/aplotnikov/guided-review/internal/config"
+	"github.com/aplotnikov/guided-review/internal/diff"
+	"github.com/aplotnikov/guided-review/internal/gitlab"
+	"github.com/aplotnikov/guided-review/internal/gitx"
+	"github.com/aplotnikov/guided-review/internal/state"
+)
+
+type target struct {
+	id, source        string
+	base, start, head string
+	branch            string
+	mr                *state.MR
+}
+
+func cmdInit(ctx context.Context, e env, args []string) error {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(e.stdout)
+	base := fs.String("base", "", "base revision (default: merge-base with the default branch)")
+	id := fs.String("id", "", "review id (default: derived from the MR or branch)")
+	force := fs.Bool("force", false, "start over if the review already exists")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	s, err := openSession(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	t, err := resolveTarget(ctx, s.repo, e.glab, fs.Arg(0), *base)
+	if err != nil {
+		return err
+	}
+	if *id != "" {
+		t.id = *id
+	}
+	head, err := s.repo.Commit(ctx, "HEAD")
+	if err != nil {
+		return err
+	}
+	if head != t.head {
+		hint := t.branch
+		if hint == "" {
+			hint = short(t.head)
+		}
+		return fmt.Errorf("HEAD is %s, review target is %s: check out %s first (the viewer reads the working tree)", short(head), short(t.head), hint)
+	}
+	if s.store.Exists(t.id) && !*force {
+		if err := s.store.SetCurrent(t.id); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.stdout, "review %s already exists, resuming (--force to start over)\n\n", t.id)
+		return cmdStatus(ctx, e, nil)
+	}
+	r, files, err := buildReview(ctx, s.repo, t)
+	if err != nil {
+		return err
+	}
+	if err := s.store.Save(r); err != nil {
+		return err
+	}
+	if err := s.store.SetCurrent(r.ID); err != nil {
+		return err
+	}
+	printInit(e.stdout, r, files)
+	return nil
+}
+
+func cmdHunks(ctx context.Context, e env) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	files, err := s.diffFiles(ctx, r)
+	if err != nil {
+		return err
+	}
+	printHunks(e.stdout, r, files)
+	return nil
+}
+
+func resolveTarget(ctx context.Context, repo gitx.Repo, glab gitlab.Runner, arg, base string) (target, error) {
+	switch {
+	case gitlab.IsMRURL(arg):
+		ref, err := gitlab.ParseMRURL(arg)
+		if err != nil {
+			return target{}, err
+		}
+		mr, err := gitlab.FetchMR(ctx, glab, ref)
+		if err != nil {
+			return target{}, err
+		}
+		for _, sha := range []string{mr.DiffRefs.BaseSHA, mr.DiffRefs.HeadSHA} {
+			if _, err := repo.Commit(ctx, sha); err != nil {
+				return target{}, fmt.Errorf("commit %s not found locally: run git fetch origin", short(sha))
+			}
+		}
+		return target{
+			id: fmt.Sprintf("mr-%d", ref.IID), source: arg, branch: mr.SourceBranch,
+			base: mr.DiffRefs.BaseSHA, start: mr.DiffRefs.StartSHA, head: mr.DiffRefs.HeadSHA,
+			mr: &state.MR{URL: mr.WebURL, Host: ref.Host, Project: ref.Project, IID: ref.IID, Title: mr.Title},
+		}, nil
+	case strings.Contains(arg, ".."):
+		a, b, _ := strings.Cut(arg, "..")
+		baseSHA, err := repo.Commit(ctx, a)
+		if err != nil {
+			return target{}, err
+		}
+		headSHA, err := repo.Commit(ctx, b)
+		if err != nil {
+			return target{}, err
+		}
+		return target{id: short(baseSHA) + "-" + short(headSHA), source: arg, base: baseSHA, head: headSHA, branch: repo.BranchName(ctx, b)}, nil
+	default:
+		rev := arg
+		if rev == "" {
+			rev = "HEAD"
+		}
+		headSHA, err := repo.Commit(ctx, rev)
+		if err != nil {
+			return target{}, err
+		}
+		if base == "" {
+			if base, err = defaultBase(ctx, repo); err != nil {
+				return target{}, err
+			}
+		}
+		baseSHA, err := repo.MergeBase(ctx, base, headSHA)
+		if err != nil {
+			return target{}, err
+		}
+		branch := repo.BranchName(ctx, rev)
+		id := sanitizeID(branch)
+		if id == "" {
+			id = short(headSHA)
+		}
+		return target{id: id, source: rev, base: baseSHA, head: headSHA, branch: branch}, nil
+	}
+}
+
+func defaultBase(ctx context.Context, repo gitx.Repo) (string, error) {
+	for _, c := range []string{"origin/HEAD", "origin/main", "origin/master", "main", "master"} {
+		if _, err := repo.Commit(ctx, c); err == nil {
+			return c, nil
+		}
+	}
+	return "", errors.New("cannot find the default branch: pass --base")
+}
+
+var unsafeID = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
+
+func sanitizeID(s string) string {
+	return strings.Trim(unsafeID.ReplaceAllString(s, "-"), "-")
+}
+
+func buildReview(ctx context.Context, repo gitx.Repo, t target) (*state.Review, []diff.File, error) {
+	raw, err := repo.Diff(ctx, t.base, t.head)
+	if err != nil {
+		return nil, nil, err
+	}
+	files, err := diff.Parse(raw)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(files) == 0 {
+		return nil, nil, errors.New("no changes between base and head")
+	}
+	cfg, err := config.Load(repo.Dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	attrs, _ := os.ReadFile(filepath.Join(repo.Dir, ".gitattributes"))
+	cls := classify.New(classify.DefaultPatterns, cfg.Generated, classify.GitattributesPatterns(string(attrs)))
+
+	r := &state.Review{ID: t.id, Source: t.source, BaseSHA: t.base, StartSHA: t.start, HeadSHA: t.head, MR: t.mr, Domain: cfg.Domain}
+	for _, f := range files {
+		tier := state.TierCore
+		if cls.Generated(f.Path) || f.Status != diff.Deleted && !f.Binary && hasMarker(ctx, repo, t.head, f.Path) {
+			tier = state.TierGenerated
+		}
+		added, deleted := f.Stat()
+		r.Files = append(r.Files, state.File{Path: f.Path, OldPath: f.OldPath, Status: string(f.Status), Tier: tier, Added: added, Deleted: deleted})
+	}
+	return r, files, nil
+}
+
+func hasMarker(ctx context.Context, repo gitx.Repo, sha, path string) bool {
+	content, err := repo.Show(ctx, sha, path)
+	return err == nil && classify.HasMarker(content)
+}
+
+func printInit(w io.Writer, r *state.Review, files []diff.File) {
+	fmt.Fprintf(w, "review %s  %s..%s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA))
+	if r.MR != nil {
+		fmt.Fprintf(w, "MR !%d %s\n%s\n", r.MR.IID, r.MR.Title, r.MR.URL)
+	}
+	if r.Domain != "" {
+		fmt.Fprintf(w, "domain: %s\n", r.Domain)
+	}
+	fmt.Fprintln(w)
+	printHunks(w, r, files)
+	fmt.Fprintln(w, "\nnext: pipe a plan (YAML) to `gr plan set`")
+}
