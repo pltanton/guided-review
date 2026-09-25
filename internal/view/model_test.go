@@ -609,3 +609,25 @@ func TestOpenFeedbackAndScrollHints(t *testing.T) {
 		t.Fatalf("missing above hint:\n%s", out)
 	}
 }
+
+func TestQuitWhenReviewCloses(t *testing.T) {
+	store := state.Store{Dir: t.TempDir(), Key: "k"}
+	r := &state.Review{ID: "mr-1"}
+	if err := store.Save(r); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCurrent("mr-1"); err != nil {
+		t.Fatal(err)
+	}
+	m := &model{store: store, context: defaultContext}
+	m.reload()
+	if m.review == nil {
+		t.Fatal("review not loaded")
+	}
+	if err := store.ClearCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	if _, cmd := m.Update(reloadMsg{}); cmd == nil {
+		t.Fatal("viewer must quit when the review it showed is closed")
+	}
+}

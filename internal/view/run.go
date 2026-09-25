@@ -12,7 +12,7 @@ import (
 	"github.com/aplotnikov/guided-review/internal/state"
 )
 
-func Run(ctx context.Context, store state.Store, repo gitx.Repo) error {
+func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane string) error {
 	if err := os.MkdirAll(store.Dir, 0o755); err != nil {
 		return err
 	}
@@ -24,9 +24,12 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo) error {
 	if err := watchTree(w, store.Dir); err != nil {
 		return err
 	}
-	p := tea.NewProgram(newModel(ctx, store, repo), tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
+	m := newModel(ctx, store, repo)
+	m.returnPane = returnPane
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
 	go forward(w, p)
 	_, err = p.Run()
+	_ = focusAgent(returnPane)
 	if ctx.Err() != nil {
 		return nil
 	}

@@ -3,6 +3,7 @@ package view
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -87,6 +88,8 @@ type model struct {
 	unfolded    map[string]bool
 	algo        string
 	loading     string
+	returnPane  string
+	closed      bool
 	reveal      map[string][][2]int
 
 	composing   bool
@@ -127,6 +130,7 @@ func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 func (m *model) reload() {
 	r, err := m.store.LoadCurrent()
 	if err != nil {
+		m.closed = m.review != nil && errors.Is(err, state.ErrNoReview)
 		m.review, m.step, m.rows, m.split, m.list, m.err = nil, nil, nil, nil, nil, err
 		return
 	}
@@ -329,6 +333,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relist()
 	case reloadMsg:
 		m.reload()
+		if m.closed {
+			return m, tea.Quit
+		}
 	case rowsMsg:
 		if m.step == nil || msg.step != m.step.ID || msg.step != m.loading {
 			return m, nil
@@ -685,10 +692,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case "e":
 		return m.openEditor()
 	case "a":
-		if os.Getenv("TMUX") != "" {
-			if err := exec.Command("tmux", "last-window").Run(); err != nil {
-				m.err = err
-			}
+		if err := focusAgent(m.returnPane); err != nil {
+			m.err = err
 		}
 	}
 	return nil
@@ -753,4 +758,17 @@ func editorCmd(dir, file string, line int) *exec.Cmd {
 
 func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func focusAgent(pane string) error {
+	if os.Getenv("TMUX") == "" {
+		return nil
+	}
+	if pane == "" {
+		return exec.Command("tmux", "last-window").Run()
+	}
+	if err := exec.Command("tmux", "select-window", "-t", pane).Run(); err != nil {
+		return err
+	}
+	return exec.Command("tmux", "select-pane", "-t", pane).Run()
 }

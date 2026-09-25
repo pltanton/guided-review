@@ -29,7 +29,7 @@ const usage = `usage: gr <command> [args]
   say TEXT... | say -
   progress TEXT...
   idle                 (Stop hook: tells the viewer the agent ended its turn)
-  view
+  view [--return PANE]
 `
 
 type env struct {
@@ -93,7 +93,7 @@ func run(ctx context.Context, e env, args []string) error {
 	case "progress":
 		return cmdProgress(ctx, e, args[1:])
 	case "view":
-		return cmdView(ctx, e)
+		return cmdView(ctx, e, args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(e.stdout, usage)
 		return nil

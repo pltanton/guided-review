@@ -35,8 +35,9 @@ and their replies sit unread.
      ask to start over.
 2. If `$TMUX` is set and no window is named `review`
    (`tmux list-windows -F '#{window_name}'`), open the viewer full screen in its own
-   window: `tmux new-window -n review gr view`. It takes focus; tell the user in one
-   chat line that `prefix l` (or `a` in the viewer) brings them back to you.
+   window: `tmux new-window -n review "gr view --return $TMUX_PANE"`. It takes focus;
+   `a` in the viewer brings the user back to you, and closing it (or `gr done`) returns
+   them to your pane automatically.
 
 Before anything that takes more than a few seconds — reading the diff, building the
 plan, reading a step's code, answering an explain — run
