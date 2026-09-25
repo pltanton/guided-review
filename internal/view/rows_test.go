@@ -51,8 +51,8 @@ func summary(rows []Row) string {
 func TestBuildRowsWholeFile(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
-			{NewStart: 3, NewLines: 1, Lines: []diff.Line{{'-', "old3"}, {'+', "L3"}}},
-			{NewStart: 12, NewLines: 0, Lines: []diff.Line{{'-', "gone"}}},
+			{NewStart: 3, NewLines: 1, Lines: []diff.Line{{Kind: '-', Text: "old3"}, {Kind: '+', Text: "L3"}}},
+			{NewStart: 12, NewLines: 0, Lines: []diff.Line{{Kind: '-', Text: "gone"}}},
 		}}},
 		lines: map[string][]string{"a.go": numbered(20)},
 	}
@@ -69,7 +69,7 @@ func TestBuildRowsWholeFile(t *testing.T) {
 func TestBuildRowsRangeAndHotspot(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
-			{NewStart: 5, NewLines: 2, Lines: []diff.Line{{'+', "L5"}, {'+', "L6"}}},
+			{NewStart: 5, NewLines: 2, Lines: []diff.Line{{Kind: '+', Text: "L5"}, {Kind: '+', Text: "L6"}}},
 		}}},
 		lines: map[string][]string{"a.go": numbered(10)},
 	}
@@ -90,7 +90,7 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 func TestBuildRowsDeletedFile(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"gone.go": {Path: "gone.go", Status: diff.Deleted, Hunks: []diff.Hunk{
-			{OldStart: 1, OldLines: 2, Lines: []diff.Line{{'-', "a"}, {'-', "b"}}},
+			{OldStart: 1, OldLines: 2, Lines: []diff.Line{{Kind: '-', Text: "a"}, {Kind: '-', Text: "b"}}},
 		}}},
 		lines: map[string][]string{},
 	}

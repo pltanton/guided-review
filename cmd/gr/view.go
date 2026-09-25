@@ -2,7 +2,14 @@ package main
 
 import (
 	"context"
-	"errors"
+
+	"github.com/aplotnikov/guided-review/internal/view"
 )
 
-func cmdView(context.Context, env) error { return errors.New("not implemented") }
+func cmdView(ctx context.Context, e env) error {
+	s, err := openSession(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	return view.Run(ctx, s.store, s.repo)
+}
