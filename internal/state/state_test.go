@@ -2,6 +2,8 @@ package state_test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -92,5 +94,15 @@ func TestStoreKeysAndList(t *testing.T) {
 	}
 	if !state.IsCurrentFile("current-aaa") || state.IsCurrentFile("state.yaml") {
 		t.Fatal("IsCurrentFile")
+	}
+}
+
+func TestLegacyCurrent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "current"), []byte("mr-69\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if id, err := (state.Store{Dir: dir, Key: "abc"}).Current(); err != nil || id != "mr-69" {
+		t.Fatalf("Current with legacy file = %q, %v", id, err)
 	}
 }

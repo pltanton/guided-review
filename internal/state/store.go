@@ -102,6 +102,9 @@ func (s Store) List() ([]string, error) {
 
 func (s Store) Current() (string, error) {
 	data, err := os.ReadFile(s.currentPath())
+	if errors.Is(err, fs.ErrNotExist) && s.Key != "" {
+		data, err = os.ReadFile(filepath.Join(s.Dir, currentPrefix))
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", ErrNoReview
 	}
