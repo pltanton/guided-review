@@ -18,7 +18,9 @@ Codex:
 
     ln -s "$PWD/skills/guided-review" ~/.codex/skills/guided-review
 
-Requirements: git, tmux for the viewer pane, `glab` (authenticated) for MR URLs.
+Requirements: git, tmux for the viewer pane, `glab` (authenticated) for MR URLs. LSP
+navigation uses `gopls`, `kotlin-lsp`, `basedpyright-langserver` and friends when they
+are on `PATH`; the server starts in the review's worktree on first use.
 
 ## Use
 
@@ -41,6 +43,8 @@ Optional `.review.yaml` in the repository root:
 
     domain: finance          # raises the bar for money-related changes
     diff: histogram          # histogram (default) | patience | myers | minimal
+    lsp:                     # override LSP servers per language
+      kotlin: [kotlin-lsp, --stdio]
     generated:               # extra generated-file patterns
       - api/gen/**
 
@@ -74,6 +78,8 @@ both sides in full.
 | `s` | split / unified diff |
 | `p` | show/hide the plan |
 | `m` | mouse capture on/off (off lets the terminal select text) |
+| `w` / `b`, click a word | move the symbol cursor within the line |
+| `gd` / `gr` / `K` | LSP: definition (peek), references (list → `enter` peeks), hover; `esc` / `ctrl+o` back, `e` opens the editor there |
 | `tab` / `shift+tab` | more / default context |
 | `e` | open `$EDITOR` at the line (tmux popup) |
 | `a` | back to the agent's tmux window |

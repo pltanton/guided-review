@@ -93,7 +93,17 @@ type model struct {
 	preview     string
 	previewTop  int
 	runGr       func(args ...string) (string, error)
-	reveal      map[string][][2]int
+
+	col        int
+	pendingG   bool
+	popup      *popup
+	popupStack []*popup
+	lspDo      func(kind, file string, line, col int) tea.Cmd
+	peekFile   func(path string) []string
+	lspBusy    string
+	lsp        *lspManager
+	lspServers map[string][]string
+	reveal     map[string][][2]int
 
 	composing   bool
 	composeKind string
@@ -119,7 +129,9 @@ func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true, algo: gitx.DefaultDiffAlgorithm}
 	if cfg, err := config.Load(repo.Dir); err == nil {
 		m.algo = cfg.DiffAlgorithm(m.algo)
+		m.lspServers = cfg.LSP
 	}
+	m.lspDo = m.defaultLSP
 	m.runGr = func(args ...string) (string, error) {
 		bin, err := os.Executable()
 		if err != nil {
@@ -349,6 +361,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.closed {
 			return m, tea.Quit
 		}
+	case lspMsg:
+		m.handleLSP(msg)
 	case rowsMsg:
 		if m.step == nil || msg.step != m.step.ID || msg.step != m.loading {
 			return m, nil
@@ -636,8 +650,24 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if m.preview != "" {
 		return m.handlePreviewKey(msg)
 	}
+	if m.popup != nil {
+		return m.handlePopupKey(msg)
+	}
 	if m.focusFiles {
 		return m.handleFilesKey(msg)
+	}
+	if m.pendingG {
+		m.pendingG = false
+		switch msg.String() {
+		case "g":
+			m.cursor = 0
+			m.clamp()
+			return nil
+		case "d":
+			return m.lspRequest("definition")
+		case "r":
+			return m.lspRequest("references")
+		}
 	}
 	switch msg.String() {
 	case "f":
@@ -684,9 +714,21 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.move(m.bodyHeight() / 2)
 	case "ctrl+u":
 		m.move(-m.bodyHeight() / 2)
-	case "g", "home":
+	case "g":
+		m.pendingG = true
+	case "home":
 		m.cursor = 0
 		m.clamp()
+	case "w":
+		if plain, ok := m.currentCode(); ok {
+			m.col = nextWord(plain, wordStart(plain, m.col))
+		}
+	case "b":
+		if plain, ok := m.currentCode(); ok {
+			m.col = prevWord(plain, wordStart(plain, m.col))
+		}
+	case "K":
+		return m.lspRequest("hover")
 	case "G", "end":
 		m.cursor = len(m.list) - 1
 		m.clamp()

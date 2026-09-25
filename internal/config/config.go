@@ -13,9 +13,10 @@ import (
 const FileName = ".review.yaml"
 
 type Config struct {
-	Domain    string   `yaml:"domain"`
-	Diff      string   `yaml:"diff"`
-	Generated []string `yaml:"generated"`
+	Domain    string              `yaml:"domain"`
+	Diff      string              `yaml:"diff"`
+	Generated []string            `yaml:"generated"`
+	LSP       map[string][]string `yaml:"lsp"`
 }
 
 func (c Config) DiffAlgorithm(fallback string) string {

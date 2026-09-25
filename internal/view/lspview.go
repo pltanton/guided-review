@@ -1,0 +1,457 @@
+package view
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/aplotnikov/guided-review/internal/lsp"
+)
+
+var languages = map[string]string{
+	".go": "go", ".kt": "kotlin", ".kts": "kotlin", ".py": "python",
+	".ts": "typescript", ".tsx": "typescript", ".java": "java", ".rs": "rust",
+}
+
+var DefaultServers = map[string][]string{
+	"go":         {"gopls"},
+	"kotlin":     {"kotlin-lsp", "--stdio"},
+	"python":     {"basedpyright-langserver", "--stdio"},
+	"typescript": {"typescript-language-server", "--stdio"},
+	"java":       {"jdtls"},
+	"rust":       {"rust-analyzer"},
+}
+
+const lspTimeout = 90 * time.Second
+
+type lspLoc struct {
+	Path string
+	Line int
+	Text string
+}
+
+type lspMsg struct {
+	kind  string
+	locs  []lspLoc
+	hover string
+	err   error
+}
+
+type popup struct {
+	kind   string
+	title  string
+	items  []lspLoc
+	sel    int
+	top    int
+	lines  []string
+	target int
+	loc    lspLoc
+}
+
+type lspManager struct {
+	mu      sync.Mutex
+	root    string
+	servers map[string][]string
+	clients map[string]*lsp.Client
+	opened  map[string]bool
+}
+
+func newLSPManager(root string, overrides map[string][]string) *lspManager {
+	servers := map[string][]string{}
+	for k, v := range DefaultServers {
+		servers[k] = v
+	}
+	for k, v := range overrides {
+		if len(v) > 0 {
+			servers[k] = v
+		}
+	}
+	return &lspManager{root: root, servers: servers, clients: map[string]*lsp.Client{}, opened: map[string]bool{}}
+}
+
+func (lm *lspManager) client(ctx context.Context, path string) (*lsp.Client, string, error) {
+	ext := filepath.Ext(path)
+	lang, ok := languages[ext]
+	if !ok {
+		return nil, "", fmt.Errorf("no LSP support for %s files", ext)
+	}
+	argv := lm.servers[lang]
+	if _, err := exec.LookPath(argv[0]); err != nil {
+		return nil, "", fmt.Errorf("no LSP server for %s: install %s or set lsp.%s in .review.yaml", ext, argv[0], lang)
+	}
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	if c, ok := lm.clients[lang]; ok {
+		return c, lang, nil
+	}
+	c, err := lsp.Start(ctx, argv, lm.root)
+	if err != nil {
+		return nil, "", err
+	}
+	lm.clients[lang] = c
+	return c, lang, nil
+}
+
+func (lm *lspManager) open(c *lsp.Client, path, lang, text string) {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	if lm.opened[path] {
+		return
+	}
+	lm.opened[path] = true
+	_ = c.DidOpen(path, lang, text)
+}
+
+func (lm *lspManager) close() {
+	lm.mu.Lock()
+	defer lm.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	for _, c := range lm.clients {
+		_ = c.Shutdown(ctx)
+	}
+	lm.clients = map[string]*lsp.Client{}
+}
+
+func (m *model) codeDir() string {
+	if m.review != nil && m.review.Worktree != "" {
+		return m.review.Worktree
+	}
+	return m.repo.Dir
+}
+
+func (m *model) manager() *lspManager {
+	root := m.codeDir()
+	if m.lsp != nil && m.lsp.root == root {
+		return m.lsp
+	}
+	if m.lsp != nil {
+		m.lsp.close()
+	}
+	m.lsp = newLSPManager(root, m.lspServers)
+	return m.lsp
+}
+
+func (m *model) defaultLSP(kind, file string, line, col int) tea.Cmd {
+	mgr, root, parent := m.manager(), m.codeDir(), m.ctx
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, lspTimeout)
+		defer cancel()
+		abs := filepath.Join(root, file)
+		c, lang, err := mgr.client(ctx, abs)
+		if err != nil {
+			return lspMsg{kind: kind, err: err}
+		}
+		content, err := os.ReadFile(abs)
+		if err != nil {
+			return lspMsg{kind: kind, err: err}
+		}
+		mgr.open(c, abs, lang, string(content))
+		lines := strings.Split(string(content), "\n")
+		char := 0
+		if line-1 < len(lines) {
+			char = lsp.UTF16Column(lines[line-1], col, 4)
+		}
+		switch kind {
+		case "hover":
+			h, err := c.Hover(ctx, abs, line-1, char)
+			return lspMsg{kind: kind, hover: h, err: err}
+		case "definition":
+			locs, err := c.Definition(ctx, abs, line-1, char)
+			return lspMsg{kind: kind, locs: toLocs(root, locs), err: err}
+		default:
+			locs, err := c.References(ctx, abs, line-1, char)
+			return lspMsg{kind: kind, locs: toLocs(root, locs), err: err}
+		}
+	}
+}
+
+func toLocs(root string, locs []lsp.Location) []lspLoc {
+	cache := map[string][]string{}
+	out := make([]lspLoc, 0, len(locs))
+	for _, l := range locs {
+		lines, ok := cache[l.Path]
+		if !ok {
+			data, _ := os.ReadFile(l.Path)
+			lines = strings.Split(string(data), "\n")
+			cache[l.Path] = lines
+		}
+		text := ""
+		if l.Line < len(lines) {
+			text = expandTabs(strings.TrimSpace(lines[l.Line]))
+		}
+		path := l.Path
+		if rel, err := filepath.Rel(root, l.Path); err == nil && !strings.HasPrefix(rel, "..") {
+			path = rel
+		}
+		out = append(out, lspLoc{Path: path, Line: l.Line + 1, Text: text})
+	}
+	return out
+}
+
+func (m *model) defaultPeek(path string) []string {
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(m.codeDir(), path)
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	return Highlight(path, expandTabs(string(data)))
+}
+
+func isIdent(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func wordStart(line string, col int) int {
+	rs := []rune(line)
+	col = max(0, min(col, len(rs)))
+	if col < len(rs) && isIdent(rs[col]) {
+		for col > 0 && isIdent(rs[col-1]) {
+			col--
+		}
+		return col
+	}
+	for i := col; i < len(rs); i++ {
+		if isIdent(rs[i]) {
+			return i
+		}
+	}
+	for i := min(col, len(rs)-1); i >= 0; i-- {
+		if isIdent(rs[i]) {
+			return wordStart(line, i)
+		}
+	}
+	return 0
+}
+
+func nextWord(line string, col int) int {
+	rs := []rune(line)
+	i := col
+	for i < len(rs) && isIdent(rs[i]) {
+		i++
+	}
+	for i < len(rs) && !isIdent(rs[i]) {
+		i++
+	}
+	if i >= len(rs) {
+		return col
+	}
+	return i
+}
+
+func prevWord(line string, col int) int {
+	rs := []rune(line)
+	i := min(col, len(rs)) - 1
+	for i >= 0 && !isIdent(rs[i]) {
+		i--
+	}
+	if i < 0 {
+		return col
+	}
+	for i > 0 && isIdent(rs[i-1]) {
+		i--
+	}
+	return i
+}
+
+func wordBounds(line string, col int) (int, int) {
+	rs := []rune(line)
+	from := wordStart(line, col)
+	to := from
+	for to < len(rs) && isIdent(rs[to]) {
+		to++
+	}
+	return from, to
+}
+
+func (m *model) currentCode() (string, bool) {
+	if m.cursor >= len(m.list) {
+		return "", false
+	}
+	if m.useSplit() {
+		r := m.split[m.cursor]
+		if r.Full != nil || r.Right.Line == 0 {
+			return "", false
+		}
+		return r.Right.Plain, true
+	}
+	r := m.disp[m.cursor]
+	if r.Kind != RowCode && r.Kind != RowAdded {
+		return "", false
+	}
+	plain := r.Plain
+	if plain == "" {
+		plain = ansi.Strip(r.Text)
+	}
+	return plain, true
+}
+
+func (m *model) lspRequest(kind string) tea.Cmd {
+	plain, ok := m.currentCode()
+	if !ok {
+		m.status = "LSP works on lines of the new code: put the cursor on one"
+		return nil
+	}
+	m.col = wordStart(plain, m.col)
+	it := m.current()
+	m.lspBusy = kind
+	if m.lspDo == nil {
+		return nil
+	}
+	return m.lspDo(kind, it.File, it.Line, m.col)
+}
+
+func (m *model) handleLSP(msg lspMsg) {
+	m.lspBusy = ""
+	if msg.err != nil {
+		m.err = msg.err
+		return
+	}
+	switch msg.kind {
+	case "hover":
+		if strings.TrimSpace(msg.hover) == "" {
+			m.status = "nothing to show here"
+			return
+		}
+		w := max(m.mainWidth()-6, 20)
+		m.popup = &popup{kind: "hover", title: "hover", lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n")}
+	case "definition":
+		switch len(msg.locs) {
+		case 0:
+			m.status = "no definition found"
+		case 1:
+			m.openPeek(msg.locs[0])
+		default:
+			m.popup = &popup{kind: "definition", title: fmt.Sprintf("definitions · %d", len(msg.locs)), items: msg.locs}
+		}
+	default:
+		if len(msg.locs) == 0 {
+			m.status = "no references found"
+			return
+		}
+		m.popup = &popup{kind: "references", title: fmt.Sprintf("references · %d", len(msg.locs)), items: msg.locs}
+	}
+	m.popupStack = nil
+}
+
+func (m *model) openPeek(loc lspLoc) {
+	peek := m.peekFile
+	if peek == nil {
+		peek = m.defaultPeek
+	}
+	target := max(loc.Line-1, 0)
+	m.popup = &popup{kind: "peek", title: fmt.Sprintf("%s:%d", loc.Path, loc.Line), lines: peek(loc.Path), target: target, top: max(target-3, 0), loc: loc}
+}
+
+func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
+	p := m.popup
+	isList := p.kind == "references" || p.kind == "definition"
+	switch msg.String() {
+	case "j", "down":
+		if isList {
+			p.sel = min(p.sel+1, len(p.items)-1)
+		} else {
+			p.top = min(p.top+1, max(len(p.lines)-1, 0))
+		}
+	case "k", "up":
+		if isList {
+			p.sel = max(p.sel-1, 0)
+		} else {
+			p.top = max(p.top-1, 0)
+		}
+	case "ctrl+d":
+		p.top = min(p.top+10, max(len(p.lines)-1, 0))
+	case "ctrl+u":
+		p.top = max(p.top-10, 0)
+	case "enter":
+		if isList && len(p.items) > 0 {
+			m.popupStack = append(m.popupStack, p)
+			m.openPeek(p.items[p.sel])
+		}
+	case "e":
+		loc := p.loc
+		if isList && len(p.items) > 0 {
+			loc = p.items[p.sel]
+		}
+		if loc.Path != "" {
+			cmd := editorCmd(m.codeDir(), loc.Path, max(loc.Line, 1))
+			return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorDoneMsg{err} })
+		}
+	case "esc", "q", "ctrl+o":
+		if n := len(m.popupStack); n > 0 {
+			m.popup, m.popupStack = m.popupStack[n-1], m.popupStack[:n-1]
+		} else {
+			m.popup = nil
+		}
+	}
+	return nil
+}
+
+func (m *model) popupLines(width, height int) []string {
+	p := m.popup
+	border := dimStyle.Render("│ ")
+	hint := "esc close"
+	switch p.kind {
+	case "references", "definition":
+		hint = "j/k select · enter peek · e editor · esc close"
+	case "peek":
+		hint = "j/k scroll · e editor · esc back"
+	}
+	head := fmt.Sprintf("┌─ %s ", p.title)
+	head += strings.Repeat("─", max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)) + " " + hint
+	out := []string{hotStyle.Render(ansi.Truncate(head, width, ""))}
+	rows := height - 1
+	switch p.kind {
+	case "references", "definition":
+		start := max(0, min(p.sel-rows/2, len(p.items)-rows))
+		for i := start; i < len(p.items) && len(out) <= rows; i++ {
+			it := p.items[i]
+			line := fmt.Sprintf("%s:%d  %s", it.Path, it.Line, dimStyle.Render(it.Text))
+			if i == p.sel {
+				line = cursorStyle.Render("▶ ") + line
+			} else {
+				line = "  " + line
+			}
+			out = append(out, border+line)
+		}
+	case "peek":
+		for i := p.top; i < len(p.lines) && len(out) <= rows; i++ {
+			num := dimStyle.Render(fmt.Sprintf("%4d │ ", i+1))
+			if i == p.target {
+				num = hotStyle.Render(fmt.Sprintf("%4d ▶ ", i+1))
+			}
+			out = append(out, border+num+p.lines[i])
+		}
+	default:
+		for i := p.top; i < len(p.lines) && len(out) <= rows; i++ {
+			out = append(out, border+p.lines[i])
+		}
+	}
+	for len(out) <= rows {
+		out = append(out, border)
+	}
+	return out
+}
+
+func underlineWord(plain string, col int) string {
+	from, to := wordBounds(plain, col)
+	rs := []rune(plain)
+	if from >= to || to > len(rs) {
+		return plain
+	}
+	u := lipgloss.NewStyle().Underline(true).Bold(true)
+	return string(rs[:from]) + u.Render(string(rs[from:to])) + string(rs[to:])
+}

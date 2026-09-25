@@ -29,6 +29,9 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane stri
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
 	go forward(w, p)
 	_, err = p.Run()
+	if m.lsp != nil {
+		m.lsp.close()
+	}
 	_ = focusAgent(returnPane)
 	if ctx.Err() != nil {
 		return nil

@@ -32,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  E edit comment  o open  O all removed  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
+	moreHints = "gd def  gr refs  K hover  w/b word  v select  n note  E edit comment  o open  O all removed  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -61,6 +61,9 @@ func (m *model) footer() (string, []span) {
 	tail := moreHints
 	if m.status != "" {
 		tail = m.status
+	}
+	if m.lspBusy != "" {
+		tail = fmt.Sprintf("%c lsp %s…", spinner[m.frame%len(spinner)], m.lspBusy)
 	}
 	if m.step == nil {
 		if m.status == "" {
@@ -275,7 +278,15 @@ func (m *model) View() string {
 			main = append(main, "")
 			continue
 		}
-		line := fit(m.renderRow(i, mw), mw)
+		row := m.renderRow(i, mw)
+		if i == m.cursor && !m.useSplit() {
+			if plain, ok := m.currentCode(); ok {
+				r := m.disp[i]
+				r.Text, r.Emph, r.Moved = underlineWord(plain, m.col), nil, false
+				row = renderUnified(r)
+			}
+		}
+		line := fit(row, mw)
 		switch {
 		case i == m.cursor:
 			line = paint(line, cursorBg)
@@ -285,6 +296,11 @@ func (m *model) View() string {
 		main = append(main, line)
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
+	if m.popup != nil {
+		ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
+		box := m.popupLines(mw, ph)
+		copy(main[len(main)-len(box):], box)
+	}
 
 	pw := m.planWidth()
 	var plan []string

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -65,7 +66,7 @@ func TestNavigation(t *testing.T) {
 	steps := []struct {
 		key  string
 		want int
-	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 5}, {"g", 0}}
+	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 5}, {"gg", 0}}
 	for _, s := range steps {
 		m.Update(key(s.key))
 		if m.cursor != s.want {
@@ -660,5 +661,86 @@ func TestPublishButton(t *testing.T) {
 	}
 	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindPublished {
 		t.Fatalf("agent must be told: %+v", *sent)
+	}
+}
+
+func TestWordMotions(t *testing.T) {
+	line := "    x := compute(a, b)"
+	if got := wordStart(line, 0); got != 4 {
+		t.Fatalf("wordStart from 0 = %d", got)
+	}
+	if got := nextWord(line, 4); got != 9 {
+		t.Fatalf("nextWord = %d", got)
+	}
+	if got := nextWord(line, 9); got != 17 {
+		t.Fatalf("nextWord 2 = %d", got)
+	}
+	if got := prevWord(line, 17); got != 9 {
+		t.Fatalf("prevWord = %d", got)
+	}
+	if from, to := wordBounds(line, 11); from != 9 || to != 16 {
+		t.Fatalf("wordBounds = %d %d", from, to)
+	}
+}
+
+func TestLSPFlow(t *testing.T) {
+	m, _ := newTestModel(t)
+	var asked []string
+	m.lspDo = func(kind, file string, line, col int) tea.Cmd {
+		asked = append(asked, fmt.Sprintf("%s %s:%d:%d", kind, file, line, col))
+		return nil
+	}
+	m.cursor = 2
+	m.Update(key("w"))
+	m.Update(key("g"))
+	m.Update(key("d"))
+	m.Update(key("g"))
+	m.Update(key("r"))
+	m.Update(key("K"))
+	want := []string{"definition a.go:2:5", "references a.go:2:5", "hover a.go:2:5"}
+	if !reflect.DeepEqual(asked, want) {
+		t.Fatalf("asked %v, want %v", asked, want)
+	}
+
+	m.Update(lspMsg{kind: "references", locs: []lspLoc{
+		{Path: "a.go", Line: 3, Text: "use(x)"},
+		{Path: "b.go", Line: 9, Text: "x = 2"},
+	}})
+	if m.popup == nil || m.popup.kind != "references" || len(m.popup.items) != 2 {
+		t.Fatalf("popup %+v", m.popup)
+	}
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "references · 2") || !strings.Contains(out, "b.go:9") {
+		t.Fatalf("popup not rendered:\n%s", out)
+	}
+	m.peekFile = func(path string) []string { return numbered(20) }
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if m.popup.kind != "peek" || m.popup.loc.Path != "b.go" || len(m.popupStack) != 1 {
+		t.Fatalf("enter must peek the selected reference: %+v stack %d", m.popup, len(m.popupStack))
+	}
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "L9") {
+		t.Fatalf("peek must show the target line:\n%s", out)
+	}
+	m.Update(key("esc"))
+	if m.popup == nil || m.popup.kind != "references" {
+		t.Fatal("esc in peek must return to the list")
+	}
+	m.Update(key("esc"))
+	if m.popup != nil {
+		t.Fatal("esc in the list must close the popup")
+	}
+
+	m.Update(lspMsg{kind: "hover", hover: "func compute(a, b int) int\n\tfield int"})
+	if strings.Contains(strings.Join(m.popup.lines, ""), "\t") {
+		t.Fatal("hover must not contain raw tabs")
+	}
+	if m.popup == nil || !strings.Contains(strings.Join(m.popup.lines, "\n"), "func compute") {
+		t.Fatalf("hover popup %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	m.Update(lspMsg{kind: "definition", err: fmt.Errorf("no LSP server for .kt")})
+	if m.err == nil || m.popup != nil {
+		t.Fatal("lsp errors go to the status line")
 	}
 }
