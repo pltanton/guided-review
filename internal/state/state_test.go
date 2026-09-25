@@ -58,3 +58,39 @@ func TestParseLines(t *testing.T) {
 		}
 	}
 }
+
+func TestStoreKeysAndList(t *testing.T) {
+	dir := t.TempDir()
+	a := state.Store{Dir: dir, Key: "aaa"}
+	b := state.Store{Dir: dir, Key: "bbb"}
+	for _, id := range []string{"mr-1", "mr-2"} {
+		if err := a.Save(&state.Review{ID: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := a.SetCurrent("mr-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.SetCurrent("mr-2"); err != nil {
+		t.Fatal(err)
+	}
+	if id, _ := a.Current(); id != "mr-1" {
+		t.Fatalf("a.Current = %q", id)
+	}
+	if id, _ := b.Current(); id != "mr-2" {
+		t.Fatalf("b.Current = %q", id)
+	}
+	ids, err := a.List()
+	if err != nil || !reflect.DeepEqual(ids, []string{"mr-1", "mr-2"}) {
+		t.Fatalf("List = %v, %v", ids, err)
+	}
+	if err := a.ClearCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Current(); !errors.Is(err, state.ErrNoReview) {
+		t.Fatalf("after ClearCurrent: %v", err)
+	}
+	if !state.IsCurrentFile("current-aaa") || state.IsCurrentFile("state.yaml") {
+		t.Fatal("IsCurrentFile")
+	}
+}

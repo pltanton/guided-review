@@ -63,7 +63,7 @@ func forward(w *fsnotify.Watcher, p *tea.Program) {
 					_ = w.Add(ev.Name)
 				}
 			}
-			if name := filepath.Base(ev.Name); name == state.FileName || name == state.CurrentFile {
+			if name := filepath.Base(ev.Name); name == state.FileName || state.IsCurrentFile(name) {
 				p.Send(reloadMsg{})
 			}
 		case _, ok := <-w.Errors:

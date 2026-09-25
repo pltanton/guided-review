@@ -16,6 +16,7 @@ import (
 	"github.com/aplotnikov/guided-review/internal/diff"
 	"github.com/aplotnikov/guided-review/internal/gitlab"
 	"github.com/aplotnikov/guided-review/internal/gitx"
+	"github.com/aplotnikov/guided-review/internal/plan"
 	"github.com/aplotnikov/guided-review/internal/state"
 )
 
@@ -50,31 +51,110 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
+	var worktree string
 	if head != t.head {
-		hint := t.branch
-		if hint == "" {
-			hint = short(t.head)
+		worktree = filepath.Join(e.cacheDir, "guided-review", filepath.Base(s.repo.Dir)+"-"+t.id)
+		if err := ensureWorktree(ctx, s.repo, worktree, t.head); err != nil {
+			return err
 		}
-		return fmt.Errorf("HEAD is %s, review target is %s: check out %s first (the viewer reads the working tree)", short(head), short(t.head), hint)
 	}
 	if s.store.Exists(t.id) && !*force {
+		r, err := s.store.Load(t.id)
+		if err != nil {
+			return err
+		}
+		r.Worktree = worktree
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
 		if err := s.store.SetCurrent(t.id); err != nil {
 			return err
 		}
-		fmt.Fprintf(e.stdout, "review %s already exists, resuming (--force to start over)\n\n", t.id)
+		fmt.Fprintf(e.stdout, "review %s already exists, resuming (--force to start over)\ncode: %s\n\n", t.id, codeDir(s, r))
 		return cmdStatus(ctx, e, nil)
 	}
 	r, files, err := buildReview(ctx, s.repo, t)
 	if err != nil {
 		return err
 	}
+	r.Worktree = worktree
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
 	if err := s.store.SetCurrent(r.ID); err != nil {
 		return err
 	}
-	printInit(e.stdout, r, files)
+	printInit(e.stdout, r, files, codeDir(s, r))
+	return nil
+}
+
+func ensureWorktree(ctx context.Context, repo gitx.Repo, path, sha string) error {
+	if _, err := os.Stat(path); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		return repo.WorktreeAdd(ctx, path, sha)
+	}
+	if cur, err := (gitx.Repo{Dir: path}).Commit(ctx, "HEAD"); err == nil && cur == sha {
+		return nil
+	}
+	return repo.WorktreeCheckout(ctx, path, sha)
+}
+
+func codeDir(s session, r *state.Review) string {
+	if r.Worktree != "" {
+		return r.Worktree
+	}
+	return s.repo.Dir
+}
+
+func cmdList(ctx context.Context, e env) error {
+	s, err := openSession(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	ids, err := s.store.List()
+	if err != nil {
+		return err
+	}
+	current, _ := s.store.Current()
+	for _, id := range ids {
+		r, err := s.store.Load(id)
+		if err != nil {
+			return err
+		}
+		marker := " "
+		if id == current {
+			marker = "*"
+		}
+		cov := plan.CoverageOf(r)
+		title := r.Source
+		if r.MR != nil {
+			title = r.MR.Title
+		}
+		fmt.Fprintf(e.stdout, "%s %s  %d/%d steps  %s\n", marker, id, cov.Done+cov.Skipped, cov.Total, title)
+	}
+	return nil
+}
+
+func cmdDone(ctx context.Context, e env) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	if r.Worktree != "" {
+		if err := s.repo.WorktreeRemove(ctx, r.Worktree); err != nil {
+			return err
+		}
+		r.Worktree = ""
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
+	}
+	if err := s.store.ClearCurrent(); err != nil {
+		return err
+	}
+	fmt.Fprintf(e.stdout, "review %s closed; state kept for a re-review\n", r.ID)
 	return nil
 }
 
@@ -201,8 +281,8 @@ func hasMarker(ctx context.Context, repo gitx.Repo, sha, path string) bool {
 	return err == nil && classify.HasMarker(content)
 }
 
-func printInit(w io.Writer, r *state.Review, files []diff.File) {
-	fmt.Fprintf(w, "review %s  %s..%s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA))
+func printInit(w io.Writer, r *state.Review, files []diff.File, code string) {
+	fmt.Fprintf(w, "review %s  %s..%s\ncode: %s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA), code)
 	if r.MR != nil {
 		fmt.Fprintf(w, "MR !%d %s\n%s\n", r.MR.IID, r.MR.Title, r.MR.URL)
 	}

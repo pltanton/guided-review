@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -26,7 +28,9 @@ func openSession(ctx context.Context, dir string) (session, error) {
 	if err != nil {
 		return session{}, err
 	}
-	return session{repo: repo, store: state.Store{Dir: filepath.Join(common, "guided-review")}}, nil
+	key := sha1.Sum([]byte(repo.Dir))
+	store := state.Store{Dir: filepath.Join(common, "guided-review"), Key: hex.EncodeToString(key[:])[:12]}
+	return session{repo: repo, store: store}, nil
 }
 
 func loadReview(ctx context.Context, dir string) (session, *state.Review, error) {

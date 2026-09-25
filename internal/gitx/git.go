@@ -82,3 +82,18 @@ func looksLikeSHA(s string) bool {
 	}
 	return true
 }
+
+func (r Repo) WorktreeAdd(ctx context.Context, path, sha string) error {
+	_, err := r.Run(ctx, "worktree", "add", "--detach", path, sha)
+	return err
+}
+
+func (r Repo) WorktreeCheckout(ctx context.Context, path, sha string) error {
+	_, err := Repo{Dir: path}.Run(ctx, "checkout", "-q", "--detach", sha)
+	return err
+}
+
+func (r Repo) WorktreeRemove(ctx context.Context, path string) error {
+	_, err := r.Run(ctx, "worktree", "remove", "--force", path)
+	return err
+}

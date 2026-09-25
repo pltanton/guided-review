@@ -310,7 +310,11 @@ func (m *model) openEditor() tea.Cmd {
 		return nil
 	}
 	r := m.rows[m.cursor]
-	cmd := editorCmd(m.repo.Dir, r.File, max(r.Line, 1))
+	dir := m.repo.Dir
+	if m.review != nil && m.review.Worktree != "" {
+		dir = m.review.Worktree
+	}
+	cmd := editorCmd(dir, r.File, max(r.Line, 1))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorDoneMsg{err} })
 }
 

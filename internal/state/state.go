@@ -44,6 +44,7 @@ type Review struct {
 	StartSHA string    `yaml:"start_sha,omitempty"`
 	HeadSHA  string    `yaml:"head_sha"`
 	MR       *MR       `yaml:"mr,omitempty"`
+	Worktree string    `yaml:"worktree,omitempty"`
 	Domain   string    `yaml:"domain,omitempty"`
 	Files    []File    `yaml:"files"`
 	Summary  string    `yaml:"summary,omitempty"`

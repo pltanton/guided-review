@@ -12,14 +12,27 @@ import (
 )
 
 const (
-	FileName    = "state.yaml"
-	CurrentFile = "current"
+	FileName      = "state.yaml"
+	currentPrefix = "current"
 )
 
 var ErrNoReview = errors.New("no active review: run gr init")
 
 type Store struct {
 	Dir string
+	Key string
+}
+
+func IsCurrentFile(name string) bool {
+	return strings.HasPrefix(name, currentPrefix)
+}
+
+func (s Store) currentPath() string {
+	name := currentPrefix
+	if s.Key != "" {
+		name += "-" + s.Key
+	}
+	return filepath.Join(s.Dir, name)
 }
 
 func (s Store) path(id string) string {
@@ -55,11 +68,36 @@ func (s Store) Save(r *Review) error {
 }
 
 func (s Store) SetCurrent(id string) error {
-	return writeAtomic(filepath.Join(s.Dir, CurrentFile), []byte(id+"\n"))
+	return writeAtomic(s.currentPath(), []byte(id+"\n"))
+}
+
+func (s Store) ClearCurrent() error {
+	err := os.Remove(s.currentPath())
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func (s Store) List() ([]string, error) {
+	entries, err := os.ReadDir(s.Dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for _, e := range entries {
+		if e.IsDir() && s.Exists(e.Name()) {
+			ids = append(ids, e.Name())
+		}
+	}
+	return ids, nil
 }
 
 func (s Store) Current() (string, error) {
-	data, err := os.ReadFile(filepath.Join(s.Dir, CurrentFile))
+	data, err := os.ReadFile(s.currentPath())
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", ErrNoReview
 	}

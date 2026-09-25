@@ -14,6 +14,8 @@ import (
 const usage = `usage: gr <command> [args]
 
   init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
+  list
+  done
   hunks
   plan set [-f FILE]
   step [show [ID] | next | skip --reason TEXT | goto ID]
@@ -24,10 +26,11 @@ const usage = `usage: gr <command> [args]
 `
 
 type env struct {
-	dir    string
-	stdin  io.Reader
-	stdout io.Writer
-	glab   gitlab.Runner
+	dir      string
+	cacheDir string
+	stdin    io.Reader
+	stdout   io.Writer
+	glab     gitlab.Runner
 }
 
 func main() {
@@ -35,7 +38,10 @@ func main() {
 	defer stop()
 	dir, err := os.Getwd()
 	if err == nil {
-		err = run(ctx, env{dir: dir, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab}, os.Args[1:])
+		var cache string
+		if cache, err = os.UserCacheDir(); err == nil {
+			err = run(ctx, env{dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab}, os.Args[1:])
+		}
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "gr:", err)
@@ -51,6 +57,10 @@ func run(ctx context.Context, e env, args []string) error {
 	switch args[0] {
 	case "init":
 		return cmdInit(ctx, e, args[1:])
+	case "list":
+		return cmdList(ctx, e)
+	case "done":
+		return cmdDone(ctx, e)
 	case "hunks":
 		return cmdHunks(ctx, e)
 	case "plan":

@@ -2,6 +2,7 @@ package gitx_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,5 +48,35 @@ func TestRepo(t *testing.T) {
 	}
 	if got := repo.BranchName(ctx, base); got != "" {
 		t.Fatalf("BranchName(sha) = %q, want empty", got)
+	}
+}
+
+func TestWorktree(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("a.txt", "one\n")
+	first := tr.Commit("first")
+	tr.Write("a.txt", "two\n")
+	second := tr.Commit("second")
+	repo := gitx.Repo{Dir: tr.Dir}
+
+	wt := filepath.Join(t.TempDir(), "wt")
+	if err := repo.WorktreeAdd(ctx, wt, first); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := (gitx.Repo{Dir: wt}).Commit(ctx, "HEAD"); got != first {
+		t.Fatalf("worktree HEAD = %q, want %q", got, first)
+	}
+	if err := repo.WorktreeCheckout(ctx, wt, second); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := (gitx.Repo{Dir: wt}).Commit(ctx, "HEAD"); got != second {
+		t.Fatalf("after checkout HEAD = %q, want %q", got, second)
+	}
+	if err := repo.WorktreeRemove(ctx, wt); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists: %v", err)
 	}
 }
