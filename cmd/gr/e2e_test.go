@@ -166,3 +166,19 @@ func TestStepSkip(t *testing.T) {
 	out = h.mustRun("", "step", "show", "s1")
 	assertContains(t, out, "[skipped]", "skipped: trivial")
 }
+
+func TestNotesAndResolve(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	out := h.mustRun("", "note", "add", "--file", "api/transfer.go", "--line", "4", "guard", "for", "negatives")
+	assertContains(t, out, "note s1 api/transfer.go:4")
+	out = h.mustRun("", "step", "show")
+	assertContains(t, out, "note api/transfer.go:4: guard for negatives")
+
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5", "--severity", "nit", "x")
+	out = h.mustRun("", "comment", "resolve", "1")
+	assertContains(t, out, "comment #1 resolved")
+	out = h.mustRun("", "comment", "list")
+	assertContains(t, out, "#1 nit s1 api/transfer.go:5  x  [resolved]")
+}

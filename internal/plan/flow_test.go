@@ -123,3 +123,29 @@ func TestGateAndCoverage(t *testing.T) {
 		t.Fatalf("CoverageOf = %+v, want %+v", got, want)
 	}
 }
+
+func TestAddNoteAndResolve(t *testing.T) {
+	r := flowReview()
+	if err := plan.AddNote(r, "", state.Annotation{File: "a.go", Line: 3, Kind: "note", Text: "retry wrapper"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Step("s1").Annotations; len(got) != 1 || got[0].Text != "retry wrapper" {
+		t.Fatalf("annotations: %+v", got)
+	}
+	if err := plan.AddNote(r, "s9", state.Annotation{File: "a.go", Line: 3, Kind: "note", Text: "x"}); err == nil {
+		t.Fatal("unknown step must fail")
+	}
+	if err := plan.AddNote(r, "", state.Annotation{File: "a.go", Line: 3, Kind: "note"}); err == nil {
+		t.Fatal("empty text must fail")
+	}
+	c, _, err := plan.AddComment(r, state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := plan.ResolveComment(r, c.ID); err != nil || !r.Comments[0].Resolved {
+		t.Fatalf("resolve: %v %+v", err, r.Comments)
+	}
+	if err := plan.ResolveComment(r, 99); err == nil {
+		t.Fatal("unknown comment must fail")
+	}
+}

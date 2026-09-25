@@ -178,3 +178,35 @@ func CoverageOf(r *state.Review) Coverage {
 	}
 	return c
 }
+
+func AddNote(r *state.Review, stepID string, a state.Annotation) error {
+	if stepID == "" {
+		stepID = r.Current
+	}
+	st := r.Step(stepID)
+	if st == nil {
+		return fmt.Errorf("no step %q", stepID)
+	}
+	if a.Kind == "" {
+		a.Kind = "note"
+	}
+	inDiff := map[string]bool{}
+	for _, f := range r.Files {
+		inDiff[f.Path] = true
+	}
+	if err := checkAnnotation(a, inDiff); err != nil {
+		return err
+	}
+	st.Annotations = append(st.Annotations, a)
+	return nil
+}
+
+func ResolveComment(r *state.Review, id int) error {
+	for i := range r.Comments {
+		if r.Comments[i].ID == id {
+			r.Comments[i].Resolved = true
+			return nil
+		}
+	}
+	return fmt.Errorf("no comment #%d", id)
+}

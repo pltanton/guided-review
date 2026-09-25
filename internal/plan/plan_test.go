@@ -57,6 +57,21 @@ func TestValidate(t *testing.T) {
 		{"hotspot without question", func(p *plan.Plan) { p.Steps[1].Hotspots[0].Q = " " }, "step s2: hotspot money has no question"},
 		{"hotspot bad category", func(p *plan.Plan) { p.Steps[1].Hotspots[0].Cat = "perf" }, `step s2: hotspot category "perf"`},
 		{"boilerplate not in diff", func(p *plan.Plan) { p.Boilerplate = append(p.Boilerplate, "x.go") }, "boilerplate x.go: not in diff"},
+		{"annotation ok", func(p *plan.Plan) {
+			p.Steps[0].Annotations = []state.Annotation{{File: "api/a.go", Line: 12, Kind: "note", Text: "reserves"}}
+		}, ""},
+		{"annotation file", func(p *plan.Plan) {
+			p.Steps[0].Annotations = []state.Annotation{{File: "x.go", Line: 1, Kind: "note", Text: "t"}}
+		}, "step s1: annotation x.go:1: not in diff"},
+		{"annotation kind", func(p *plan.Plan) {
+			p.Steps[0].Annotations = []state.Annotation{{File: "api/a.go", Line: 1, Kind: "todo", Text: "t"}}
+		}, `step s1: annotation api/a.go:1: kind "todo"`},
+		{"annotation line", func(p *plan.Plan) {
+			p.Steps[0].Annotations = []state.Annotation{{File: "api/a.go", Kind: "note", Text: "t"}}
+		}, "step s1: annotation api/a.go:0: line must be >= 1"},
+		{"annotation text", func(p *plan.Plan) {
+			p.Steps[0].Annotations = []state.Annotation{{File: "api/a.go", Line: 1, Kind: "spec"}}
+		}, "step s1: annotation api/a.go:1: empty text"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

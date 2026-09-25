@@ -20,7 +20,8 @@ const usage = `usage: gr <command> [args]
   plan set [-f FILE]
   step [show [ID] | next | skip --reason TEXT | goto ID]
   comment add --file F --lines N[-M] --severity blocker|major|minor|nit [--step ID] [--suggestion TEXT] BODY...
-  comment list
+  comment list | resolve ID
+  note add --file F --line N [--kind note|spec] [--step ID] TEXT...
   status [--gate]
   view
 `
@@ -67,6 +68,8 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdPlan(ctx, e, args[1:])
 	case "step":
 		return cmdStep(ctx, e, args[1:])
+	case "note":
+		return cmdNote(ctx, e, args[1:])
 	case "comment":
 		return cmdComment(ctx, e, args[1:])
 	case "status":

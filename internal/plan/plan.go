@@ -71,6 +71,11 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 				fail("step %s: %v", s.ID, err)
 			}
 		}
+		for _, a := range s.Annotations {
+			if err := checkAnnotation(a, inDiff); err != nil {
+				fail("step %s: %v", s.ID, err)
+			}
+		}
 		for _, h := range s.Hotspots {
 			if !slices.Contains(state.HotspotCategories, h.Cat) {
 				fail("step %s: hotspot category %q, want one of %v", s.ID, h.Cat, state.HotspotCategories)
@@ -105,6 +110,21 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		}
 	}
 	return errs
+}
+
+func checkAnnotation(a state.Annotation, inDiff map[string]bool) error {
+	where := fmt.Sprintf("annotation %s:%d", a.File, a.Line)
+	switch {
+	case !inDiff[a.File]:
+		return fmt.Errorf("%s: not in diff", where)
+	case a.Line < 1:
+		return fmt.Errorf("%s: line must be >= 1", where)
+	case !slices.Contains(state.AnnotationKinds, a.Kind):
+		return fmt.Errorf("%s: kind %q, want one of %v", where, a.Kind, state.AnnotationKinds)
+	case strings.TrimSpace(a.Text) == "":
+		return fmt.Errorf("%s: empty text", where)
+	}
+	return nil
 }
 
 func uncovered(f diff.File, steps []state.Step) []string {

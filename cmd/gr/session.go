@@ -108,6 +108,9 @@ func printStep(w io.Writer, r *state.Review, st *state.Step) {
 	for _, h := range st.Hotspots {
 		fmt.Fprintf(w, "hotspot %s: %s\n", h.Cat, h.Q)
 	}
+	for _, a := range st.Annotations {
+		fmt.Fprintf(w, "%s %s:%d: %s\n", a.Kind, a.File, a.Line, a.Text)
+	}
 	if len(st.DependsOn) > 0 {
 		fmt.Fprintf(w, "depends on: %s\n", strings.Join(st.DependsOn, " "))
 	}

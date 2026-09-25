@@ -35,6 +35,7 @@ const (
 var (
 	Severities        = []Severity{SeverityBlocker, SeverityMajor, SeverityMinor, SeverityNit}
 	HotspotCategories = []string{"security", "consistency", "money", "migration"}
+	AnnotationKinds   = []string{"note", "spec"}
 )
 
 type Review struct {
@@ -71,16 +72,17 @@ type File struct {
 }
 
 type Step struct {
-	ID         string     `yaml:"id"`
-	Title      string     `yaml:"title"`
-	Kind       string     `yaml:"kind"`
-	Hunks      []StepHunk `yaml:"hunks"`
-	Hotspots   []Hotspot  `yaml:"hotspots,omitempty"`
-	DependsOn  []string   `yaml:"depends_on,omitempty"`
-	Note       string     `yaml:"note,omitempty"`
-	Status     StepStatus `yaml:"status,omitempty"`
-	MayChange  bool       `yaml:"may_change,omitempty"`
-	SkipReason string     `yaml:"skip_reason,omitempty"`
+	ID          string       `yaml:"id"`
+	Title       string       `yaml:"title"`
+	Kind        string       `yaml:"kind"`
+	Hunks       []StepHunk   `yaml:"hunks"`
+	Hotspots    []Hotspot    `yaml:"hotspots,omitempty"`
+	DependsOn   []string     `yaml:"depends_on,omitempty"`
+	Annotations []Annotation `yaml:"annotations,omitempty"`
+	Note        string       `yaml:"note,omitempty"`
+	Status      StepStatus   `yaml:"status,omitempty"`
+	MayChange   bool         `yaml:"may_change,omitempty"`
+	SkipReason  string       `yaml:"skip_reason,omitempty"`
 }
 
 type StepHunk struct {
@@ -95,6 +97,13 @@ type Hotspot struct {
 	Line int    `yaml:"line,omitempty"`
 }
 
+type Annotation struct {
+	File string `yaml:"file"`
+	Line int    `yaml:"line"`
+	Kind string `yaml:"kind"`
+	Text string `yaml:"text"`
+}
+
 type Comment struct {
 	ID         int      `yaml:"id"`
 	Step       string   `yaml:"step"`
@@ -104,6 +113,8 @@ type Comment struct {
 	Severity   Severity `yaml:"severity"`
 	Body       string   `yaml:"body"`
 	Suggestion string   `yaml:"suggestion,omitempty"`
+	Round      int      `yaml:"round,omitempty"`
+	Resolved   bool     `yaml:"resolved,omitempty"`
 }
 
 func (r *Review) Step(id string) *Step {

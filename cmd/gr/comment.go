@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/aplotnikov/guided-review/internal/plan"
@@ -13,7 +14,7 @@ import (
 
 func cmdComment(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: gr comment add|list")
+		return errors.New("usage: gr comment add|list|resolve")
 	}
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
@@ -22,11 +23,31 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 	switch args[0] {
 	case "list":
 		for _, c := range r.Comments {
-			fmt.Fprintf(e.stdout, "#%d %s %s %s:%s  %s\n", c.ID, c.Severity, c.Step, c.File, c.Lines, c.Body)
+			status := ""
+			if c.Resolved {
+				status = "  [resolved]"
+			}
+			fmt.Fprintf(e.stdout, "#%d %s %s %s:%s  %s%s\n", c.ID, c.Severity, c.Step, c.File, c.Lines, c.Body, status)
 			if c.Suggestion != "" {
 				fmt.Fprintf(e.stdout, "   suggestion:\n%s\n", indent(c.Suggestion, "     "))
 			}
 		}
+		return nil
+	case "resolve":
+		if len(args) < 2 {
+			return errors.New("usage: gr comment resolve ID")
+		}
+		id, err := strconv.Atoi(strings.TrimPrefix(args[1], "#"))
+		if err != nil {
+			return fmt.Errorf("comment id %q: %w", args[1], err)
+		}
+		if err := plan.ResolveComment(r, id); err != nil {
+			return err
+		}
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.stdout, "comment #%d resolved\n", id)
 		return nil
 	case "add":
 		fs := flag.NewFlagSet("comment add", flag.ContinueOnError)
