@@ -102,7 +102,14 @@ func TestLegacyCurrent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "current"), []byte("mr-69\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if id, err := (state.Store{Dir: dir, Key: "abc"}).Current(); err != nil || id != "mr-69" {
+	s := state.Store{Dir: dir, Key: "abc"}
+	if id, err := s.Current(); err != nil || id != "mr-69" {
 		t.Fatalf("Current with legacy file = %q, %v", id, err)
+	}
+	if err := s.ClearCurrent(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Current(); !errors.Is(err, state.ErrNoReview) {
+		t.Fatalf("after ClearCurrent: %v", err)
 	}
 }
