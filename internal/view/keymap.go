@@ -61,7 +61,13 @@ func DefaultActions() []Action {
 		{"hover", "lsp", "type and docs", []string{"K"}, func(m *model) tea.Cmd { return m.lspRequest("hover") }},
 
 		{"next", "review", "done with this step, go on", []string{">"}, do((*model).next)},
-		{"message", "review", "message the agent (cursor line attached)", []string{"c", "enter"}, do(func(m *model) { m.startCompose(inbox.KindMessage) })},
+		{"message", "review", "message the agent (cursor line attached); opens ⋯ / ▸ rows", []string{"c", "enter"}, do(func(m *model) {
+			if cur := m.current(); cur.Gap[1] > 0 || cur.Fold != "" && m.cursor < len(m.disp) && m.disp[m.cursor].Kind == RowFold {
+				m.toggleFold()
+				return
+			}
+			m.startCompose(inbox.KindMessage)
+		})},
 		{"explain", "review", "ask the agent to explain the line / selection", []string{"?"}, do((*model).explain)},
 		{"select", "review", "select lines", []string{"v"}, do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
 		{"skip", "review", "skip the step with a reason", []string{"S"}, do(func(m *model) { m.startCompose(inbox.KindSkip) })},

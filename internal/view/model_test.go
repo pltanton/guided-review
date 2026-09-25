@@ -788,3 +788,12 @@ func TestApplyViewConfig(t *testing.T) {
 		t.Fatalf("config not applied: split %v plan %v mouse %v ctx %d", m.splitView, m.showPlan, m.mouse, m.baseContext())
 	}
 }
+
+func TestEnterOpensFolds(t *testing.T) {
+	m := foldModel(t)
+	m.cursor = 1
+	m.Update(key("enter"))
+	if m.composing || len(m.disp) != len(m.rows) {
+		t.Fatalf("enter on a fold row must open it: composing %v rows %d", m.composing, len(m.disp))
+	}
+}
