@@ -210,6 +210,12 @@ func (m *model) bottomLines() []string {
 	}
 	var last string
 	switch {
+	case m.composing && m.cmdMode != 0:
+		pos := min(m.inputPos, len(m.input))
+		last = cursorStyle.Render(string(m.cmdMode)) + string(m.input[:pos]) + "█" + string(m.input[pos:])
+		if m.status != "" {
+			last += "   " + dimStyle.Render(m.status)
+		}
 	case m.composing:
 		prompt := "› "
 		switch {

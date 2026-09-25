@@ -46,7 +46,25 @@ func (m *model) startEdit() {
 	}
 }
 
-func (m *model) handleCompose(msg tea.KeyMsg) {
+func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
+	if m.cmdMode != 0 {
+		switch msg.Type {
+		case tea.KeyEnter:
+			return m.submitCmd()
+		case tea.KeyTab:
+			m.complete()
+			return nil
+		case tea.KeyUp:
+			m.historyMove(-1)
+			return nil
+		case tea.KeyDown:
+			m.historyMove(1)
+			return nil
+		case tea.KeyEsc:
+			m.composing, m.input, m.cmdMode = false, nil, 0
+			return nil
+		}
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.composing, m.input = false, nil
@@ -54,7 +72,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) {
 		text := strings.TrimSpace(string(m.input))
 		m.composing, m.input = false, nil
 		if text == "" {
-			return
+			return nil
 		}
 		m.emit(inbox.Event{Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines, Comment: m.composeRef})
 	case tea.KeyCtrlX:
@@ -87,6 +105,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) {
 	case tea.KeyRunes, tea.KeySpace:
 		m.insert(msg.Runes)
 	}
+	return nil
 }
 
 func (m *model) insert(rs []rune) {

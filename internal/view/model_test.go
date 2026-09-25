@@ -797,3 +797,88 @@ func TestEnterOpensFolds(t *testing.T) {
 		t.Fatalf("enter on a fold row must open it: composing %v rows %d", m.composing, len(m.disp))
 	}
 }
+
+func runCmd(m *model, cmd string) {
+	m.Update(key(":"))
+	typeText(m, cmd)
+	m.Update(key("enter"))
+}
+
+func TestCommandMode(t *testing.T) {
+	m, sent := newTestModel(t)
+	runCmd(m, "next-hunk")
+	if m.cursor != 2 {
+		t.Fatalf(":next-hunk → cursor %d", m.cursor)
+	}
+	runCmd(m, "9")
+	if m.cursor != 5 {
+		t.Fatalf(":9 → cursor %d", m.cursor)
+	}
+	runCmd(m, "set split")
+	runCmd(m, "set context=7")
+	if !m.splitView || m.context != 7 {
+		t.Fatalf("set: split %v context %d", m.splitView, m.context)
+	}
+	runCmd(m, "set nosplit")
+	runCmd(m, "s2")
+	if m.step.ID != "s2" {
+		t.Fatalf(":s2 → step %s", m.step.ID)
+	}
+	runCmd(m, "s1")
+	m.cursor = 2
+	runCmd(m, "msg hello there")
+	if len(*sent) != 1 || (*sent)[0].Text != "hello there" || (*sent)[0].Lines != "2" {
+		t.Fatalf(":msg sent %+v", *sent)
+	}
+	runCmd(m, "bogus")
+	if !strings.Contains(m.status, "unknown command") {
+		t.Fatalf("status %q", m.status)
+	}
+	m.Update(key(":"))
+	typeText(m, "next-h")
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if string(m.input) != "next-hunk" {
+		t.Fatalf("tab completion: %q", string(m.input))
+	}
+	m.Update(key("esc"))
+	m.Update(key(":"))
+	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if string(m.input) != "bogus" {
+		t.Fatalf("history up: %q", string(m.input))
+	}
+	m.Update(key("esc"))
+	m.Update(key(":"))
+	typeText(m, "q")
+	if _, cmd := m.Update(key("enter")); cmd == nil {
+		t.Fatal(":q must quit")
+	}
+}
+
+func TestSearch(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key("/"))
+	typeText(m, ":=")
+	m.Update(key("enter"))
+	if m.cursor != 2 || !strings.Contains(m.status, "match 1/3") {
+		t.Fatalf("search: cursor %d status %q", m.cursor, m.status)
+	}
+	m.Update(key("n"))
+	m.Update(key("n"))
+	if m.cursor != 5 {
+		t.Fatalf("n → cursor %d", m.cursor)
+	}
+	m.Update(key("n"))
+	if m.cursor != 2 {
+		t.Fatalf("n wraps → cursor %d", m.cursor)
+	}
+	m.Update(key("N"))
+	if m.cursor != 5 {
+		t.Fatalf("N wraps back → cursor %d", m.cursor)
+	}
+	m.Update(key("esc"))
+	m.cursor = 0
+	m.Update(key("n"))
+	if m.cursor != 3 {
+		t.Fatalf("after esc n goes to notes again, cursor %d", m.cursor)
+	}
+}

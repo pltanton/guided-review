@@ -111,6 +111,10 @@ type model struct {
 
 	composing   bool
 	composeKind string
+	cmdMode     rune
+	history     []string
+	histIdx     int
+	search      string
 	input       []rune
 	inputPos    int
 	composeRef  int
@@ -417,8 +421,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 	if msg.Type != tea.KeyRunes || msg.Paste || len(msg.Runes) < 2 {
 		if m.composing {
-			m.handleCompose(msg)
-			return nil
+			return m.handleCompose(msg)
 		}
 		return m.handleKey(msg)
 	}

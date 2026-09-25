@@ -38,8 +38,21 @@ func DefaultActions() []Action {
 		{"bottom", "navigate", "last line", []string{"G", "end"}, do(func(m *model) { m.cursor = len(m.list) - 1; m.clamp() })},
 		{"next-hunk", "navigate", "next change", []string{"]"}, jump(1, func(it item) bool { return it.HunkStart })},
 		{"prev-hunk", "navigate", "previous change", []string{"["}, jump(-1, func(it item) bool { return it.HunkStart })},
-		{"next-note", "navigate", "next annotation or comment", []string{"n"}, jump(1, func(it item) bool { return it.Note })},
-		{"prev-note", "navigate", "previous annotation or comment", []string{"N"}, jump(-1, func(it item) bool { return it.Note })},
+		{"next-note", "navigate", "next search match, else next annotation", []string{"n"}, do(func(m *model) {
+			if m.search != "" {
+				m.searchStep(1)
+				return
+			}
+			m.jump(1, func(it item) bool { return it.Note })
+		})},
+		{"prev-note", "navigate", "previous search match, else previous annotation", []string{"N"}, do(func(m *model) {
+			if m.search != "" {
+				m.searchStep(-1)
+				return
+			}
+			m.jump(-1, func(it item) bool { return it.Note })
+		})},
+		{"search", "navigate", "search in this step (n/N next/prev, esc clears)", []string{"/"}, do(func(m *model) { m.startCmd('/') })},
 		{"next-file", "navigate", "next file", []string{"}"}, jump(1, func(it item) bool { return it.FileHead })},
 		{"prev-file", "navigate", "previous file", []string{"{"}, jump(-1, func(it item) bool { return it.FileHead })},
 		{"files", "navigate", "focus the files panel", []string{"f"}, do((*model).focusFilesPanel)},
@@ -82,6 +95,7 @@ func DefaultActions() []Action {
 				m.err = err
 			}
 		})},
+		{"command", "view", "command line (:42, :s3, :set split, :msg …, any action)", []string{":"}, do(func(m *model) { m.startCmd(':') })},
 		{"help", "view", "this help", []string{"h", "f1"}, do(func(m *model) { m.help, m.helpTop = true, 0 })},
 		{"quit", "view", "quit the viewer", []string{"q", "ctrl+c"}, func(*model) tea.Cmd { return tea.Quit }},
 	}
@@ -180,6 +194,8 @@ func (m *model) back() tea.Cmd {
 	switch {
 	case m.visual:
 		m.visual = false
+	case m.search != "":
+		m.search = ""
 	case m.viewStep != "":
 		return m.showStep(m.review.Current)
 	}
