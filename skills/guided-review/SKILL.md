@@ -58,7 +58,8 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
    Generated files are already excluded; decide which remaining files are
    boilerplate.
-2. Order and size steps per references/ordering.md; mark hotspots per
+2. Order and size steps per references/ordering.md — the MR's own spec or design doc,
+   if the diff has one, is always s1; mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them.
 3. Add `annotations` where one line saves the reader real effort: what a non-obvious
    call does, where the spec disagrees (`kind: spec`). One to three per step; none

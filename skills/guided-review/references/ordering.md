@@ -2,6 +2,10 @@
 
 Outside in, then depth first along the changed code.
 
+0. The MR's own spec — a design doc, ADR, or acceptance-criteria file changed in this
+   MR (`docs/**/specs/*`, `*.md` design notes, `AGENTS-ACC.md` and the like). Always
+   the first step: the reviewer judges the code against it. In a re-review it goes
+   first too when it changed.
 1. Contracts — what the outside world sees: API specs (OpenAPI, proto), DB schema
    migrations, public interfaces, message formats. Generator sources (.proto,
    openapi.yaml) are contracts even when their output is generated.
