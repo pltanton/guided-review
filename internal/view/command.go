@@ -16,7 +16,7 @@ import (
 
 var commandNames = []string{
 	"q", "quit", "help", "noh", "step", "all", "boilerplate", "generated", "file",
-	"set", "msg", "skip", "next", "explain", "publish", "edit",
+	"set", "msg", "skip", "next", "explain", "publish", "edit", "chat",
 }
 
 var setOptions = []string{
@@ -92,6 +92,9 @@ func (m *model) execCommand(line string) tea.Cmd {
 		return nil
 	case "e", "edit":
 		return m.openEditor()
+	case "chat":
+		m.chatSize, m.chatTop = 2, 0
+		return nil
 	}
 	if m.review != nil && m.stepByID(name) != nil {
 		return m.showStep(name)

@@ -94,6 +94,10 @@ type model struct {
 	previewTop  int
 	runGr       func(args ...string) (string, error)
 
+	chatSize int
+	chatTop  int
+	chatG    bool
+
 	col        int
 	pendingKey string
 	km         *keymap
@@ -687,6 +691,10 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
+	case m.chatSize == 2:
+		if cmd, handled := m.handleChatKey(msg); handled {
+			return cmd
+		}
 	}
 	return m.dispatch(msg.String())
 }
@@ -763,4 +771,34 @@ func focusAgent(pane string) error {
 		return err
 	}
 	return exec.Command("tmux", "select-pane", "-t", pane).Run()
+}
+
+func (m *model) handleChatKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	k := msg.String()
+	if k != "g" {
+		m.chatG = false
+	}
+	switch k {
+	case "j", "down":
+		m.chatTop = max(m.chatTop-1, 0)
+	case "k", "up":
+		m.chatTop++
+	case "ctrl+d":
+		m.chatTop = max(m.chatTop-10, 0)
+	case "ctrl+u":
+		m.chatTop += 10
+	case "G", "end":
+		m.chatTop = 0
+	case "g":
+		if m.chatG {
+			m.chatTop, m.chatG = 1<<20, false
+		} else {
+			m.chatG = true
+		}
+	case "esc":
+		m.chatSize, m.chatTop = 0, 0
+	default:
+		return nil, false
+	}
+	return nil, true
 }

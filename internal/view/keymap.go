@@ -95,6 +95,10 @@ func DefaultActions() []Action {
 				m.err = err
 			}
 		})},
+		{"chat", "view", "chat size: small → half → full screen", []string{"t"}, do(func(m *model) {
+			m.chatSize, m.chatTop = (m.chatSize+1)%3, 0
+			m.clamp()
+		})},
 		{"command", "view", "command line (:42, :s3, :set split, :msg …, any action)", []string{":"}, do(func(m *model) { m.startCmd(':') })},
 		{"help", "view", "this help", []string{"h", "f1"}, do(func(m *model) { m.help, m.helpTop = true, 0 })},
 		{"quit", "view", "quit the viewer", []string{"q", "ctrl+c"}, func(*model) tea.Cmd { return tea.Quit }},
@@ -196,6 +200,8 @@ func (m *model) back() tea.Cmd {
 		m.visual = false
 	case m.search != "":
 		m.search = ""
+	case m.chatSize > 0:
+		m.chatSize, m.chatTop = 0, 0
 	case m.viewStep != "":
 		return m.showStep(m.review.Current)
 	}

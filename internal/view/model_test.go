@@ -321,7 +321,7 @@ func TestPendingRequests(t *testing.T) {
 	if len(notes) != 1 || notes[0].Line != 3 || notes[0].Kind != "pending" {
 		t.Fatalf("pending notes: %+v", notes)
 	}
-	chat := m.conversation()
+	chat := m.conversation(false)
 	if last := ansi.Strip(chat[len(chat)-1].text); !strings.HasPrefix(last, "claude: ") || !strings.Contains(last, "thinking") {
 		t.Fatalf("last chat line: %q", last)
 	}
@@ -329,7 +329,7 @@ func TestPendingRequests(t *testing.T) {
 	if len(m.pendingNotes()) != 0 {
 		t.Fatal("requests answered after the agent waited again")
 	}
-	if last := ansi.Strip(m.conversation()[len(m.conversation())-1].text); strings.Contains(last, "thinking") {
+	if last := ansi.Strip(m.conversation(false)[len(m.conversation(false))-1].text); strings.Contains(last, "thinking") {
 		t.Fatalf("stale thinking line: %q", last)
 	}
 }
@@ -880,5 +880,45 @@ func TestSearch(t *testing.T) {
 	m.Update(key("n"))
 	if m.cursor != 3 {
 		t.Fatalf("after esc n goes to notes again, cursor %d", m.cursor)
+	}
+}
+
+func TestChatPanel(t *testing.T) {
+	m, _ := newTestModel(t)
+	base := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	for i := range 30 {
+		step := "s1"
+		if i < 10 {
+			step = "s0"
+		}
+		m.review.Messages = append(m.review.Messages, state.Message{Time: base.Add(time.Duration(i) * time.Minute), Step: step, Text: fmt.Sprintf("message %02d", i)})
+	}
+	if n := len(m.bottomLines()); n > messageLines+2 {
+		t.Fatalf("normal chat too tall: %d", n)
+	}
+	m.Update(key("t"))
+	if n := len(m.bottomLines()); n < m.height/2-2 {
+		t.Fatalf("half chat: %d lines of %d", n, m.height)
+	}
+	m.Update(key("t"))
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "message 29") || !strings.Contains(out, "── s1") {
+		t.Fatalf("full chat:\n%s", out)
+	}
+	m.Update(key("g"))
+	m.Update(key("g"))
+	out = ansi.Strip(m.View())
+	if !strings.Contains(out, "message 00") || !strings.Contains(out, "── s0") {
+		t.Fatalf("full chat scrolled to top:\n%s", out)
+	}
+	m.Update(key("c"))
+	typeText(m, strings.Repeat("long words here ", 20))
+	if lines := len(m.bottomLines()); lines < 2 {
+		t.Fatal("long input must wrap")
+	}
+	m.Update(key("esc"))
+	m.Update(key("esc"))
+	if m.chatSize != 0 {
+		t.Fatalf("esc must shrink the chat back, size %d", m.chatSize)
 	}
 }

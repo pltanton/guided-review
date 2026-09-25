@@ -151,10 +151,11 @@ func (m *model) separator() string {
 
 type chatLine struct {
 	at   time.Time
+	step string
 	text string
 }
 
-func (m *model) conversation() []chatLine {
+func (m *model) conversation(all bool) []chatLine {
 	if m.review == nil {
 		return nil
 	}
@@ -162,14 +163,15 @@ func (m *model) conversation() []chatLine {
 	if m.step != nil {
 		stepID = m.step.ID
 	}
+	keep := func(step string) bool { return all || step == stepID }
 	var out []chatLine
 	for _, msg := range m.review.Messages {
-		if msg.Step == stepID {
-			out = append(out, chatLine{msg.Time, agentStyle.Render("claude: ") + msg.Text})
+		if keep(msg.Step) {
+			out = append(out, chatLine{msg.Time, msg.Step, agentStyle.Render("claude: ") + msg.Text})
 		}
 	}
 	for _, e := range m.events {
-		if e.Step != stepID || e.Kind == inbox.KindGoto {
+		if !keep(e.Step) || e.Kind == inbox.KindGoto {
 			continue
 		}
 		text := e.Text
@@ -179,34 +181,61 @@ func (m *model) conversation() []chatLine {
 		if e.Kind != inbox.KindMessage {
 			text = "[" + e.Kind + "] " + text
 		}
-		out = append(out, chatLine{e.Time, dimStyle.Render("you: ") + text})
+		out = append(out, chatLine{e.Time, e.Step, dimStyle.Render("you: ") + text})
 	}
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
 	for _, e := range m.events {
 		if m.pending(e) && !m.agentIdle {
-			out = append(out, chatLine{e.Time, agentStyle.Render("claude: ") + hotStyle.Render(string(spinner[m.frame%len(spinner)])+" thinking…")})
+			out = append(out, chatLine{e.Time, e.Step, agentStyle.Render("claude: ") + hotStyle.Render(string(spinner[m.frame%len(spinner)])+" thinking…")})
 			break
 		}
 	}
 	return out
 }
 
+func (m *model) chatLines(width int, all bool) []string {
+	var lines []string
+	prev := "\x00"
+	for _, c := range m.conversation(all) {
+		if all && c.step != prev {
+			label := "intake"
+			if st := m.stepByID(c.step); st != nil {
+				label = st.ID + " " + st.Title
+			} else if c.step != "" {
+				label = c.step
+			}
+			lines = append(lines, dimStyle.Render("── "+label+" ──"))
+			prev = c.step
+		}
+		lines = append(lines, strings.Split(ansi.Wrap(c.text, max(width, 10), ""), "\n")...)
+	}
+	return lines
+}
+
+func window(lines []string, height, fromBottom int) []string {
+	end := max(len(lines)-fromBottom, min(height, len(lines)))
+	start := max(end-height, 0)
+	return lines[start:end]
+}
+
 func (m *model) bottomLines() []string {
 	limit := messageLines
-	if m.step == nil {
+	switch {
+	case m.step == nil:
 		limit = max(m.height-4, 1)
+	case m.chatSize == 1:
+		limit = max(m.height/2, messageLines)
 	}
 	var lines []string
-	if chat := m.conversation(); len(chat) > 0 {
-		var wrapped []string
-		for _, c := range chat {
-			wrapped = append(wrapped, strings.Split(ansi.Wrap(c.text, max(m.width, 10), ""), "\n")...)
+	if m.chatSize < 2 {
+		if chat := m.chatLines(m.width, m.chatSize == 1 || m.step == nil); len(chat) > 0 {
+			label := strings.Repeat("─", max(m.width, 1))
+			if m.chatSize == 0 {
+				label = "── " + m.keys().key("chat") + " enlarges the chat " + strings.Repeat("─", max(m.width-24, 1))
+			}
+			lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
+			lines = append(lines, window(chat, limit, m.chatTop)...)
 		}
-		if len(wrapped) > limit {
-			wrapped = wrapped[len(wrapped)-limit:]
-		}
-		lines = append(lines, dimStyle.Render(strings.Repeat("─", max(m.width, 1))))
-		lines = append(lines, wrapped...)
 	}
 	var last string
 	switch {
@@ -216,6 +245,7 @@ func (m *model) bottomLines() []string {
 		if m.status != "" {
 			last += "   " + dimStyle.Render(m.status)
 		}
+		return append(lines, wrapInput(last, m.width)...)
 	case m.composing:
 		prompt := "› "
 		switch {
@@ -234,6 +264,7 @@ func (m *model) bottomLines() []string {
 			hint = dimStyle.Render("   ctrl+x: no line")
 		}
 		last = cursorStyle.Render(prompt) + string(m.input[:pos]) + "█" + string(m.input[pos:]) + hint
+		return append(lines, wrapInput(last, m.width)...)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
@@ -266,6 +297,15 @@ func (m *model) View() string {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main := m.header()
+	if m.chatSize == 2 {
+		k := m.keys()
+		main = []string{
+			boldStyle.Render("chat"),
+			dimStyle.Render(fmt.Sprintf("j/k scroll · %s write · %s / esc back to the code", k.key("message"), k.key("chat"))),
+			dimStyle.Render(strings.Repeat("─", max(mw, 1))),
+		}
+		main = append(main, window(m.chatLines(mw, true), bodyH-len(main)-1, m.chatTop)...)
+	}
 	if m.help {
 		main = []string{boldStyle.Render("keys"), dimStyle.Render("any key closes · j/k scroll · remap in " + configHint), dimStyle.Render(strings.Repeat("─", max(mw, 1)))}
 		lines := m.helpLines(mw)
@@ -286,7 +326,7 @@ func (m *model) View() string {
 		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.list) || m.preview != "" || m.help {
+		if i >= len(m.list) || m.preview != "" || m.help || m.chatSize == 2 {
 			main = append(main, "")
 			continue
 		}
@@ -333,6 +373,11 @@ func (m *model) View() string {
 		out = append(out, fit(line, m.width))
 	}
 	return strings.Join(out, "\n")
+}
+
+func wrapInput(s string, width int) []string {
+	lines := strings.Split(ansi.Wrap(s, max(width, 10), ""), "\n")
+	return lines[max(len(lines)-5, 0):]
 }
 
 func fit(s string, w int) string {
