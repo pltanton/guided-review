@@ -27,7 +27,7 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
     > /guided-review https://gitlab.example.com/group/project/-/merge_requests/123
 
 The viewer opens full screen in a `review` tmux window. The bottom line shows what the
-agent is doing (spinner, progress text, timer) or `● ждёт тебя` when it is your turn.
+agent is doing (spinner, progress text, timer) or `● your turn` when it is your turn.
 
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.

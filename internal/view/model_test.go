@@ -221,11 +221,11 @@ func TestAgentStatus(t *testing.T) {
 	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return now }
 	m.agentWaiting, m.agentSince = true, now.Add(-10*time.Second)
-	if got := ansi.Strip(m.agentStatus()); got != "● ждёт тебя" {
+	if got := ansi.Strip(m.agentStatus()); got != "● your turn" {
 		t.Fatalf("waiting: %q", got)
 	}
 	m.agentWaiting, m.agentSince = false, now.Add(-80*time.Second)
-	if got := ansi.Strip(m.agentStatus()); got != "⠋ агент работает · 1m20s" {
+	if got := ansi.Strip(m.agentStatus()); got != "⠋ agent working · 1m20s" {
 		t.Fatalf("working: %q", got)
 	}
 	m.review.Progress = &state.Progress{Text: "строю план: читаю diff", Time: now.Add(-5 * time.Second)}
@@ -279,25 +279,29 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 func TestButtons(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.Update(key(" "))
+	if len(*sent) != 0 {
+		t.Fatalf("space must do nothing: %+v", *sent)
+	}
+	m.Update(key(">"))
 	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindNext {
-		t.Fatalf("space must send next: %+v", *sent)
+		t.Fatalf("> must send next: %+v", *sent)
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"✓ дальше", "✎ написать", "? поясни", "↷ пропустить"} {
+	for _, b := range []string{"✓ next", "✎ message", "? explain", "↷ skip"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
 	}
-	x := ansi.StringWidth(last[:strings.Index(last, "✓ дальше")])
+	x := ansi.StringWidth(last[:strings.Index(last, "✓ next")])
 	m.Update(tea.MouseMsg{X: x + 2, Y: m.height - 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
 	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
-		t.Fatalf("click on дальше: %+v", *sent)
+		t.Fatalf("click on next: %+v", *sent)
 	}
-	x = ansi.StringWidth(last[:strings.Index(last, "✎ написать")])
+	x = ansi.StringWidth(last[:strings.Index(last, "✎ message")])
 	m.Update(tea.MouseMsg{X: x + 2, Y: m.height - 1, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
 	if !m.composing {
-		t.Fatal("click on написать must open the input")
+		t.Fatal("click on message must open the input")
 	}
 }
 
@@ -316,14 +320,14 @@ func TestPendingRequests(t *testing.T) {
 		t.Fatalf("pending notes: %+v", notes)
 	}
 	chat := m.conversation()
-	if last := ansi.Strip(chat[len(chat)-1].text); !strings.HasPrefix(last, "claude: ") || !strings.Contains(last, "думает") {
+	if last := ansi.Strip(chat[len(chat)-1].text); !strings.HasPrefix(last, "claude: ") || !strings.Contains(last, "thinking") {
 		t.Fatalf("last chat line: %q", last)
 	}
 	m.lastWait = t0.Add(time.Minute)
 	if len(m.pendingNotes()) != 0 {
 		t.Fatal("requests answered after the agent waited again")
 	}
-	if last := ansi.Strip(m.conversation()[len(m.conversation())-1].text); strings.Contains(last, "думает") {
+	if last := ansi.Strip(m.conversation()[len(m.conversation())-1].text); strings.Contains(last, "thinking") {
 		t.Fatalf("stale thinking line: %q", last)
 	}
 }

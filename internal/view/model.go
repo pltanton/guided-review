@@ -190,7 +190,7 @@ func (m *model) pendingNotes() []Note {
 			continue
 		}
 		if start, _, err := state.ParseLines(e.Lines); err == nil && start > 0 {
-			out = append(out, Note{File: e.File, Line: start, Kind: "pending", Text: "агент поясняет…", Focus: true})
+			out = append(out, Note{File: e.File, Line: start, Kind: "pending", Text: "agent is explaining…", Focus: true})
 		}
 	}
 	return out
@@ -441,7 +441,7 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.startCompose(inbox.KindSkip)
 	case "?":
 		m.explain()
-	case ">", " ":
+	case ">":
 		m.emit(inbox.Event{Kind: inbox.KindNext})
 	case "e":
 		return m.openEditor()
