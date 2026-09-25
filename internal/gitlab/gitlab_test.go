@@ -2,6 +2,8 @@ package gitlab_test
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"reflect"
 	"testing"
 
@@ -81,5 +83,64 @@ func TestFetchDiscussions(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v\nwant %+v", got, want)
+	}
+}
+
+type recorded struct {
+	args []string
+	body string
+}
+
+func recorder(t *testing.T, calls *[]recorded, reply string) gitlab.Runner {
+	return func(_ context.Context, args ...string) ([]byte, error) {
+		rec := recorded{args: args}
+		for i, a := range args {
+			if a == "--input" {
+				data, err := os.ReadFile(args[i+1])
+				if err != nil {
+					t.Fatal(err)
+				}
+				rec.body = string(data)
+			}
+		}
+		*calls = append(*calls, rec)
+		return []byte(reply), nil
+	}
+}
+
+func TestDrafts(t *testing.T) {
+	var calls []recorded
+	ref := gitlab.MRRef{Host: "h", Project: "g/p", IID: 7}
+	run := recorder(t, &calls, `{"id": 42}`)
+	pos := &gitlab.Position{PositionType: "text", BaseSHA: "b", StartSHA: "s", HeadSHA: "h", OldPath: "a.go", NewPath: "a.go", NewLine: 12}
+	id, err := gitlab.CreateDraft(context.Background(), run, ref, gitlab.DraftNote{Note: "why?", Position: pos})
+	if err != nil || id != 42 {
+		t.Fatalf("CreateDraft = %d, %v", id, err)
+	}
+	if err := gitlab.PublishDrafts(context.Background(), run, ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := gitlab.Approve(context.Background(), run, ref); err != nil {
+		t.Fatal(err)
+	}
+	if got := calls[0].args[len(calls[0].args)-1]; got != "projects/g%2Fp/merge_requests/7/draft_notes" {
+		t.Fatalf("draft path %q", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(calls[0].body), &body); err != nil {
+		t.Fatal(err)
+	}
+	p := body["position"].(map[string]any)
+	if body["note"] != "why?" || p["new_line"] != float64(12) || p["base_sha"] != "b" {
+		t.Fatalf("draft body %s", calls[0].body)
+	}
+	if _, hasOld := p["old_line"]; hasOld {
+		t.Fatalf("old_line must be omitted for an added line: %s", calls[0].body)
+	}
+	if got := calls[1].args[len(calls[1].args)-1]; got != "projects/g%2Fp/merge_requests/7/draft_notes/bulk_publish" {
+		t.Fatalf("publish path %q", got)
+	}
+	if got := calls[2].args[len(calls[2].args)-1]; got != "projects/g%2Fp/merge_requests/7/approve" {
+		t.Fatalf("approve path %q", got)
 	}
 }

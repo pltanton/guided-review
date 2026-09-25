@@ -93,3 +93,27 @@ func TestStat(t *testing.T) {
 		t.Fatalf("Stat = +%d -%d, want +2 -2", a, d)
 	}
 }
+
+func TestOldLineFor(t *testing.T) {
+	f := diff.File{Hunks: []diff.Hunk{
+		{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 2},
+		{OldStart: 10, OldLines: 2, NewStart: 11, NewLines: 0},
+	}}
+	tests := []struct {
+		line, old int
+		added     bool
+	}{
+		{1, 1, false},
+		{2, 0, true},
+		{3, 0, true},
+		{5, 4, false},
+		{11, 10, false},
+		{12, 13, false},
+	}
+	for _, tt := range tests {
+		old, added := f.OldLineFor(tt.line)
+		if old != tt.old || added != tt.added {
+			t.Errorf("OldLineFor(%d) = %d, %v; want %d, %v", tt.line, old, added, tt.old, tt.added)
+		}
+	}
+}

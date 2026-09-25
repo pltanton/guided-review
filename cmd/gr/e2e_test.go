@@ -327,3 +327,81 @@ func TestCommentEdit(t *testing.T) {
 	out = h.mustRun("", "comment", "list")
 	assertContains(t, out, "#1 major s1 api/transfer.go:5  return an error")
 }
+
+func publishHarness(t *testing.T) (*harness, *[]string, *[]string) {
+	h := newHarness(t)
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	var calls, bodies []string
+	nextID := 100
+	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		path := args[len(args)-1]
+		calls = append(calls, path)
+		for i, a := range args {
+			if a == "--input" {
+				data, _ := os.ReadFile(args[i+1])
+				bodies = append(bodies, string(data))
+			}
+		}
+		switch {
+		case strings.HasSuffix(path, "/draft_notes"):
+			nextID++
+			return []byte(fmt.Sprintf(`{"id": %d}`, nextID)), nil
+		case strings.Contains(path, "/discussions"):
+			return []byte(`[]`), nil
+		case strings.HasSuffix(path, "/bulk_publish"), strings.HasSuffix(path, "/approve"):
+			return []byte(`{}`), nil
+		}
+		return []byte(fmt.Sprintf(`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
+			"diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`, base, base, head)), nil
+	}
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.mustRun(goodPlan, "plan", "set")
+	return h, &calls, &bodies
+}
+
+func TestPublish(t *testing.T) {
+	h, calls, bodies := publishHarness(t)
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4-6", "--severity", "major", "return an error instead")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "7", "--severity", "nit", "--suggestion", "\treturn a+b", "spacing")
+
+	if _, err := h.run("", "publish", "--verdict", "changes"); err == nil || !strings.Contains(err.Error(), "gate not passed") {
+		t.Fatalf("publish before the gate must fail, got %v", err)
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+
+	*calls = nil
+	out := h.mustRun("", "publish", "--dry-run", "--verdict", "changes", "--decisions", "zero for negatives is a silent reject")
+	assertContains(t, out, "api/transfer.go:6", "**major** return an error instead", "```suggestion:-0+0", "## Guided review: changes requested", "zero for negatives is a silent reject", "| ✓ | s1 Transfer guard |")
+	if len(*calls) != 0 {
+		t.Fatalf("dry run must not call glab: %v", *calls)
+	}
+
+	out = h.mustRun("", "publish", "--verdict", "changes", "--decisions", "zero for negatives is a silent reject")
+	assertContains(t, out, "published 2 comments and the summary")
+	var drafts, publishes int
+	for _, c := range *calls {
+		switch {
+		case strings.HasSuffix(c, "/draft_notes"):
+			drafts++
+		case strings.HasSuffix(c, "/bulk_publish"):
+			publishes++
+		}
+	}
+	if drafts != 3 || publishes != 1 {
+		t.Fatalf("drafts %d publishes %d: %v", drafts, publishes, *calls)
+	}
+	if !strings.Contains((*bodies)[0], `"new_line":6`) {
+		t.Fatalf("first draft must sit on line 6: %s", (*bodies)[0])
+	}
+
+	*calls = nil
+	out = h.mustRun("", "publish", "--verdict", "changes", "--decisions", "x")
+	assertContains(t, out, "nothing new to publish")
+	for _, c := range *calls {
+		if strings.HasSuffix(c, "/draft_notes") {
+			t.Fatalf("second publish must not create drafts: %v", *calls)
+		}
+	}
+}

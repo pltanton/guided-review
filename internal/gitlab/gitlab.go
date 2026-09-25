@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -160,4 +161,72 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 		}
 	}
 	return result, nil
+}
+
+type Position struct {
+	PositionType string `json:"position_type"`
+	BaseSHA      string `json:"base_sha"`
+	StartSHA     string `json:"start_sha"`
+	HeadSHA      string `json:"head_sha"`
+	OldPath      string `json:"old_path"`
+	NewPath      string `json:"new_path"`
+	NewLine      int    `json:"new_line,omitempty"`
+	OldLine      int    `json:"old_line,omitempty"`
+}
+
+type DraftNote struct {
+	Note     string    `json:"note"`
+	Position *Position `json:"position,omitempty"`
+}
+
+func (r MRRef) path(suffix string) string {
+	return fmt.Sprintf("projects/%s/merge_requests/%d%s", url.PathEscape(r.Project), r.IID, suffix)
+}
+
+func post(ctx context.Context, run Runner, ref MRRef, suffix string, body any) ([]byte, error) {
+	args := []string{"api", "--hostname", ref.Host, "-X", "POST"}
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		f, err := os.CreateTemp("", "gr-body-*.json")
+		if err != nil {
+			return nil, err
+		}
+		defer os.Remove(f.Name())
+		if _, err := f.Write(data); err != nil {
+			f.Close()
+			return nil, err
+		}
+		if err := f.Close(); err != nil {
+			return nil, err
+		}
+		args = append(args, "-H", "Content-Type: application/json", "--input", f.Name())
+	}
+	return run(ctx, append(args, ref.path(suffix))...)
+}
+
+func CreateDraft(ctx context.Context, run Runner, ref MRRef, d DraftNote) (int, error) {
+	out, err := post(ctx, run, ref, "/draft_notes", d)
+	if err != nil {
+		return 0, err
+	}
+	var created struct {
+		ID int `json:"id"`
+	}
+	if err := json.Unmarshal(out, &created); err != nil || created.ID == 0 {
+		return 0, fmt.Errorf("create draft note: unexpected reply %q", strings.TrimSpace(string(out)))
+	}
+	return created.ID, nil
+}
+
+func PublishDrafts(ctx context.Context, run Runner, ref MRRef) error {
+	_, err := post(ctx, run, ref, "/draft_notes/bulk_publish", nil)
+	return err
+}
+
+func Approve(ctx context.Context, run Runner, ref MRRef) error {
+	_, err := post(ctx, run, ref, "/approve", nil)
+	return err
 }

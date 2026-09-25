@@ -141,3 +141,16 @@ func parseHunkHeader(line string) (Hunk, error) {
 	}
 	return Hunk{OldStart: n(m[1]), OldLines: n(m[2]), NewStart: n(m[3]), NewLines: n(m[4])}, nil
 }
+
+func (f File) OldLineFor(n int) (old int, added bool) {
+	delta := 0
+	for _, h := range f.Hunks {
+		if h.NewLines > 0 && n >= h.NewStart && n <= h.NewEnd() {
+			return 0, true
+		}
+		if h.NewLines == 0 && h.NewStart < n || h.NewLines > 0 && h.NewEnd() < n {
+			delta += h.NewLines - h.OldLines
+		}
+	}
+	return n - delta, false
+}

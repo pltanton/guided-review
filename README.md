@@ -29,6 +29,11 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
 The viewer opens full screen in a `review` tmux window. The bottom line shows what the
 agent is doing (spinner, progress text, timer) or `● your turn` when it is your turn.
 
+At the end the agent publishes to the MR with `gr publish` — inline comments (nits with an
+obvious fix as GitLab suggestions) and a summary comment with the verdict, decisions,
+the step table and coverage — as draft notes released in one batch, after you confirm the
+preview. It can also draft a Slack message to the author.
+
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.
 

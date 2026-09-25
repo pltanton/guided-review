@@ -163,10 +163,22 @@ a discussed line, say whether the code answers it.
 
 1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them or
    skip each with a reason.
-2. `gr say` the verdict in one line: approve / changes requested / blocked. Then
-   blockers and majors, one line each, the nit count, and the coverage line from
-   `gr status`.
-3. Publishing to GitLab is not available yet: print `gr comment list` in the chat as a
-   ready-to-paste summary.
-4. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the
-   worktree; the state stays for a re-review) and end the turn.
+2. `gr say` the verdict in one line — approve / changes requested / blocked — then
+   blockers and majors, one line each, the nit count, and the coverage line.
+3. Publish to the MR. Write the decisions taken during the review and why (what was
+   accepted as is, what was left for later, why steps were skipped) as a few bullet
+   lines, then preview:
+   `gr publish --dry-run --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
+   `gr say` a short digest of the preview (N inline comments, summary) and ask
+   «публикую?». Only on yes run the same command without `--dry-run`; add `--approve`
+   only if they asked to approve. Never post to the MR any other way.
+4. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
+   `glab mr view <iid>` (username, name), find them with the Slack MCP user search
+   (load the tool via ToolSearch if it is deferred), and create a **draft** DM with
+   `slack_send_message_draft`: one or two lines — MR link, verdict, counts
+   (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`).
+   Send it directly (`slack_send_message`) only if they explicitly say so after seeing
+   the text. No Slack MCP → print the text to copy.
+5. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the worktree,
+   keeps the state for a re-review; the viewer closes and returns them to you) and end
+   the turn.

@@ -16,6 +16,7 @@ const usage = `usage: gr <command> [args]
   init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
   list
   sync
+  publish --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--dry-run] [--approve]
   discussions
   done
   hunks
@@ -68,6 +69,8 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdList(ctx, e)
 	case "sync":
 		return cmdSync(ctx, e)
+	case "publish":
+		return cmdPublish(ctx, e, args[1:])
 	case "discussions":
 		return cmdDiscussions(ctx, e)
 	case "done":
