@@ -15,15 +15,16 @@ import (
 )
 
 var (
-	addStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	delStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	hotStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
-	dimStyle    = lipgloss.NewStyle().Faint(true)
-	boldStyle   = lipgloss.NewStyle().Bold(true)
-	fileStyle   = lipgloss.NewStyle().Bold(true).Underline(true)
-	cursorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	selectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
-	agentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	addStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	delStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	hotStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
+	dimStyle      = lipgloss.NewStyle().Faint(true)
+	boldStyle     = lipgloss.NewStyle().Bold(true)
+	fileStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15"))
+	fileInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
+	selectStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
+	agentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 
 	statusGlyph = map[state.StepStatus]string{
 		state.StatusPending: "·", state.StatusDone: "✓", state.StatusSkipped: "↷", state.StatusStale: "~",
@@ -344,6 +345,8 @@ func (m *model) View() string {
 			line = paint(line, cursorBg)
 		case m.selected(i):
 			line = paint(line, selectBg)
+		case m.list[i].FileHead:
+			line = paint(line, fileBg)
 		}
 		main = append(main, line)
 	}
@@ -488,7 +491,13 @@ func (m *model) renderRow(i, w int) string {
 func renderUnified(r Row) string {
 	switch r.Kind {
 	case RowFile:
-		return fileStyle.Render(r.Text)
+		info := ""
+		if r.FileInfo != "" {
+			info = "   " + fileInfoStyle.Render(r.FileInfo)
+		}
+		return fileStyle.Render("▍ "+r.Text) + info
+	case RowSpacer:
+		return ""
 	case RowGap:
 		if r.GapTo == 0 {
 			return dimStyle.Render("      ⋯")
@@ -527,6 +536,7 @@ func renderUnified(r Row) string {
 const (
 	cursorBg = "236"
 	selectBg = "238"
+	fileBg   = "24"
 )
 
 var (

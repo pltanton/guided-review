@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ const (
 	RowRemoved
 	RowNote
 	RowFold
+	RowSpacer
 )
 
 type Row struct {
@@ -46,6 +48,7 @@ type Row struct {
 	Ref       int
 	GapFrom   int
 	GapTo     int
+	FileInfo  string
 }
 
 type Note struct {
@@ -89,12 +92,27 @@ func BuildRowsWith(src Source, st state.Step, context int, notes []Note, reveal 
 				fileNotes = append(fileNotes, n)
 			}
 		}
-		rows = append(rows, Row{Kind: RowFile, File: sh.File, Text: sh.File})
+		if len(rows) > 0 {
+			rows = append(rows, Row{Kind: RowSpacer, File: sh.File})
+		}
+		rows = append(rows, Row{Kind: RowFile, File: sh.File, Text: sh.File, FileInfo: fileInfo(fd)})
 		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File), fileNotes, reveal[sh.File])...)
 	}
 	markIntraline(rows)
 	markMoved(rows)
 	return rows, nil
+}
+
+func fileInfo(fd diff.File) string {
+	added, deleted := fd.Stat()
+	status := string(fd.Status)
+	if fd.OldPath != "" && fd.OldPath != fd.Path {
+		status = "renamed from " + fd.OldPath
+	}
+	if fd.Binary {
+		status += ", binary"
+	}
+	return fmt.Sprintf("+%d −%d · %s", added, deleted, status)
 }
 
 func hotspotLines(st state.Step, file string) map[int]bool {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/aplotnikov/guided-review/internal/diff"
 	"github.com/aplotnikov/guided-review/internal/state"
 )
@@ -192,5 +194,33 @@ func TestGapsAndReveal(t *testing.T) {
 	}
 	if rows[1].Kind != RowCode || rows[1].Line != 1 {
 		t.Fatalf("revealed rows must start at line 1: %+v", rows[1])
+	}
+}
+
+func TestFileHeaders(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{
+			"a.go": {Path: "a.go", Status: diff.Modified, Hunks: []diff.Hunk{{NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L1"}}}}},
+			"b.go": {Path: "b.go", OldPath: "old/b.go", Status: diff.Renamed, Hunks: []diff.Hunk{{OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1, Lines: []diff.Line{{Kind: '-', Text: "x"}, {Kind: '+', Text: "L1"}}}}},
+		},
+		lines: map[string][]string{"a.go": numbered(1), "b.go": numbered(1)},
+	}
+	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}, {File: "b.go"}}}, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var kinds []RowKind
+	for _, r := range rows {
+		kinds = append(kinds, r.Kind)
+	}
+	want := []RowKind{RowFile, RowAdded, RowSpacer, RowFile, RowRemoved, RowAdded}
+	if !reflect.DeepEqual(kinds, want) {
+		t.Fatalf("kinds = %v, want %v", kinds, want)
+	}
+	if rows[0].FileInfo != "+1 −0 · modified" || rows[3].FileInfo != "+1 −1 · renamed from old/b.go" {
+		t.Fatalf("file info: %q / %q", rows[0].FileInfo, rows[3].FileInfo)
+	}
+	if got := ansi.Strip(renderUnified(rows[3])); !strings.Contains(got, "b.go") || !strings.Contains(got, "renamed from old/b.go") {
+		t.Fatalf("header render: %q", got)
 	}
 }
