@@ -14,7 +14,7 @@ import (
 
 func cmdComment(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: gr comment add|list|resolve")
+		return errors.New("usage: gr comment add|list|edit|resolve")
 	}
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
@@ -32,6 +32,28 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 				fmt.Fprintf(e.stdout, "   suggestion:\n%s\n", indent(c.Suggestion, "     "))
 			}
 		}
+		return nil
+	case "edit":
+		if len(args) < 2 {
+			return errors.New("usage: gr comment edit ID [--severity S] TEXT")
+		}
+		id, err := strconv.Atoi(strings.TrimPrefix(args[1], "#"))
+		if err != nil {
+			return fmt.Errorf("comment id %q: %w", args[1], err)
+		}
+		fs := flag.NewFlagSet("comment edit", flag.ContinueOnError)
+		fs.SetOutput(e.stdout)
+		severity := fs.String("severity", "", "new severity (default: keep)")
+		if err := fs.Parse(args[2:]); err != nil {
+			return err
+		}
+		if err := plan.EditComment(r, id, strings.Join(fs.Args(), " "), state.Severity(*severity)); err != nil {
+			return err
+		}
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.stdout, "comment #%d updated\n", id)
 		return nil
 	case "resolve":
 		if len(args) < 2 {

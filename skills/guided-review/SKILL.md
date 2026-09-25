@@ -123,6 +123,12 @@ steps:
    `--suggestion` is the full replacement text for the lines; use it only for a nit
    or minor with an obvious fix.
 
+   Messages usually carry the line the cursor was on (`file:line`): read the remark
+   against that line. `re #N` means a reply to comment #N — answer it, and if the reply
+   changes the remark, `gr comment edit N [--severity S] TEXT`. `[edit] sN #N: text` is
+   the human rewriting their comment: `gr comment edit N TEXT` (keep the severity unless
+   the new text clearly changes it) and `gr say` one line: `обновил #N`.
+
    An event can carry an earlier step's id: the human is looking back at it in the
    viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
    and do not move the current step; they return to it themselves.

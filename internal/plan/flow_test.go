@@ -149,3 +149,20 @@ func TestAddNoteAndResolve(t *testing.T) {
 		t.Fatal("unknown comment must fail")
 	}
 }
+
+func TestEditComment(t *testing.T) {
+	r := flowReview()
+	c, _, _ := plan.AddComment(r, state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"})
+	if err := plan.EditComment(r, c.ID, "better text", state.SeverityMinor); err != nil {
+		t.Fatal(err)
+	}
+	if got := r.Comments[0]; got.Body != "better text" || got.Severity != state.SeverityMinor {
+		t.Fatalf("edited: %+v", got)
+	}
+	if err := plan.EditComment(r, c.ID, "keep severity", ""); err != nil || r.Comments[0].Severity != state.SeverityMinor {
+		t.Fatalf("empty severity must keep it: %v %+v", err, r.Comments[0])
+	}
+	if plan.EditComment(r, 99, "x", "") == nil || plan.EditComment(r, c.ID, " ", "") == nil || plan.EditComment(r, c.ID, "x", "huge") == nil {
+		t.Fatal("bad edits must fail")
+	}
+}

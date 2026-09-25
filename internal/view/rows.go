@@ -43,9 +43,11 @@ type Row struct {
 	Reformat  bool
 	FoldCount int
 	FoldKey   string
+	Ref       int
 }
 
 type Note struct {
+	Ref   int
 	File  string
 	Line  int
 	Kind  string
@@ -194,7 +196,7 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 			}
 			rows = append(rows, row)
 			for _, note := range notesAt[n] {
-				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, NoteLabel: note.Label, Dim: note.Dim})
+				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, NoteLabel: note.Label, Dim: note.Dim, Ref: note.Ref})
 			}
 		}
 	}

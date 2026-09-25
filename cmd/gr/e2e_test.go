@@ -316,3 +316,14 @@ func TestIdleCommand(t *testing.T) {
 		t.Fatal("idle marker not written")
 	}
 }
+
+func TestCommentEdit(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5", "--severity", "nit", "x")
+	out := h.mustRun("", "comment", "edit", "1", "--severity", "major", "return", "an", "error")
+	assertContains(t, out, "comment #1 updated")
+	out = h.mustRun("", "comment", "list")
+	assertContains(t, out, "#1 major s1 api/transfer.go:5  return an error")
+}

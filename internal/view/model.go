@@ -46,6 +46,7 @@ type item struct {
 	Note      bool
 	FileHead  bool
 	Fold      string
+	Ref       int
 }
 
 type model struct {
@@ -80,6 +81,10 @@ type model struct {
 	composing   bool
 	composeKind string
 	input       []rune
+	inputPos    int
+	composeRef  int
+	anchorFile  string
+	anchorLines string
 
 	send   func(inbox.Event) error
 	status string
@@ -176,7 +181,7 @@ func (m *model) notes() []Note {
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
 		}
-		out = append(out, Note{File: c.File, Line: start, Kind: "comment", Label: string(c.Severity), Text: c.Body, Dim: c.Resolved})
+		out = append(out, Note{Ref: c.ID, File: c.File, Line: start, Kind: "comment", Label: fmt.Sprintf("#%d %s", c.ID, c.Severity), Text: c.Body, Dim: c.Resolved})
 	}
 	out = append(out, m.pendingNotes()...)
 	for _, d := range m.review.Discussions {
@@ -229,14 +234,14 @@ func (m *model) relist() {
 	if m.useSplit() {
 		for _, r := range m.split {
 			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey})
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey, Ref: r.Full.Ref})
 				continue
 			}
 			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
 		}
 	} else {
 		for _, r := range m.disp {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey})
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey, Ref: r.Ref})
 		}
 	}
 	if keep.File != "" {
@@ -338,7 +343,7 @@ func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 	var cmds []tea.Cmd
 	for i, r := range msg.Runes {
 		if m.composing {
-			m.input = append(m.input, msg.Runes[i:]...)
+			m.insert(msg.Runes[i:])
 			break
 		}
 		cmds = append(cmds, m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}}))
@@ -537,6 +542,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.startCompose(inbox.KindMessage)
 	case "S":
 		m.startCompose(inbox.KindSkip)
+	case "E":
+		m.startEdit()
 	case "?":
 		m.explain()
 	case ">":

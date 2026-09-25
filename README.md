@@ -55,7 +55,8 @@ both sides in full.
 | `]`/`[` | next/previous hunk |
 | `n`/`N` | next/previous annotation |
 | `v`, mouse drag | select lines |
-| `c` / `enter` | message the agent (the selection is attached) |
+| `c` / `enter` | message the agent; the cursor line (or selection) is attached, `ctrl+x` detaches it; on one of your comments it is a reply |
+| `E` | edit the comment under the cursor |
 | `?` | ask the agent to explain the selection or the line |
 | `>` | next step |
 | `S` | skip the step with a reason |

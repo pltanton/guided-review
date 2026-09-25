@@ -103,7 +103,7 @@ func TestEventsFromKeys(t *testing.T) {
 	want := []inbox.Event{
 		{Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "2"},
 		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "2-3", Text: "is this safe"},
-		{Kind: inbox.KindMessage, Step: "s1", Text: "ok"},
+		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "3", Text: "ok"},
 		{Kind: inbox.KindSkip, Step: "s1", Text: "trivial"},
 		{Kind: inbox.KindNext, Step: "s1"},
 	}
@@ -501,5 +501,42 @@ func TestCycleDiffAlgorithm(t *testing.T) {
 	}
 	if m.algo != "histogram" {
 		t.Fatalf("cycle must wrap, got %q", m.algo)
+	}
+}
+
+func TestComposeAnchorAndCommentActions(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Comments = []state.Comment{{ID: 7, File: "a.go", Lines: "2", Severity: state.SeverityNit, Body: "rename x"}}
+	m.rows[3] = Row{Kind: RowNote, File: "a.go", Line: 2, NoteKind: "comment", NoteLabel: "#7 nit", Text: "rename x", Ref: 7}
+	m.relist()
+	m.cursor = 1
+	m.Update(key("c"))
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "a.go:1 ›") {
+		t.Fatalf("prompt must show the anchor:\n%s", out)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	typeText(m, "general")
+	m.Update(key("enter"))
+
+	m.cursor = 3
+	m.Update(key("enter"))
+	typeText(m, "why nit?")
+	m.Update(key("enter"))
+
+	m.Update(key("E"))
+	if string(m.input) != "rename x" {
+		t.Fatalf("edit must prefill the comment, got %q", string(m.input))
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	typeText(m, "y")
+	m.Update(key("enter"))
+
+	want := []inbox.Event{
+		{Kind: inbox.KindMessage, Step: "s1", Text: "general"},
+		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "2", Comment: 7, Text: "why nit?"},
+		{Kind: inbox.KindEdit, Step: "s1", Comment: 7, Text: "rename yx"},
+	}
+	if !reflect.DeepEqual(*sent, want) {
+		t.Fatalf("sent\n%+v\nwant\n%+v", *sent, want)
 	}
 }

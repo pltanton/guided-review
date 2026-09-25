@@ -13,7 +13,37 @@ func (m *model) startCompose(kind string) {
 	if m.review == nil || m.step == nil && kind != inbox.KindMessage {
 		return
 	}
-	m.composing, m.composeKind, m.input = true, kind, nil
+	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
+	m.composeRef, m.anchorFile, m.anchorLines = 0, "", ""
+	if kind != inbox.KindMessage {
+		return
+	}
+	cur := m.current()
+	switch {
+	case m.visual:
+		m.anchorFile, m.anchorLines, _ = m.selection()
+	case cur.Ref > 0:
+		m.composeRef, m.anchorFile, m.anchorLines = cur.Ref, cur.File, fmt.Sprint(cur.Line)
+	case cur.File != "" && cur.Line > 0:
+		m.anchorFile, m.anchorLines = cur.File, fmt.Sprint(cur.Line)
+	}
+}
+
+func (m *model) startEdit() {
+	ref := m.current().Ref
+	if ref == 0 || m.review == nil {
+		m.status = "put the cursor on one of your comments to edit it"
+		return
+	}
+	for _, c := range m.review.Comments {
+		if c.ID == ref {
+			m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, ref
+			m.anchorFile, m.anchorLines = "", ""
+			m.input = []rune(c.Body)
+			m.inputPos = len(m.input)
+			return
+		}
+	}
 }
 
 func (m *model) handleCompose(msg tea.KeyMsg) {
@@ -26,22 +56,44 @@ func (m *model) handleCompose(msg tea.KeyMsg) {
 		if text == "" {
 			return
 		}
-		e := inbox.Event{Kind: m.composeKind, Text: text}
-		if m.composeKind == inbox.KindMessage && m.visual {
-			if file, lines, ok := m.selection(); ok {
-				e.File, e.Lines = file, lines
-			}
-		}
-		m.emit(e)
+		m.emit(inbox.Event{Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines, Comment: m.composeRef})
+	case tea.KeyCtrlX:
+		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
+	case tea.KeyLeft:
+		m.inputPos = max(m.inputPos-1, 0)
+	case tea.KeyRight:
+		m.inputPos = min(m.inputPos+1, len(m.input))
+	case tea.KeyCtrlA, tea.KeyHome:
+		m.inputPos = 0
+	case tea.KeyCtrlE, tea.KeyEnd:
+		m.inputPos = len(m.input)
 	case tea.KeyBackspace:
-		if n := len(m.input); n > 0 {
-			m.input = m.input[:n-1]
+		if m.inputPos > 0 {
+			m.input = append(m.input[:m.inputPos-1], m.input[m.inputPos:]...)
+			m.inputPos--
 		}
+	case tea.KeyCtrlW:
+		from := m.inputPos
+		for from > 0 && m.input[from-1] == ' ' {
+			from--
+		}
+		for from > 0 && m.input[from-1] != ' ' {
+			from--
+		}
+		m.input = append(m.input[:from], m.input[m.inputPos:]...)
+		m.inputPos = from
 	case tea.KeyCtrlU:
-		m.input = nil
+		m.input, m.inputPos = nil, 0
 	case tea.KeyRunes, tea.KeySpace:
-		m.input = append(m.input, msg.Runes...)
+		m.insert(msg.Runes)
 	}
+}
+
+func (m *model) insert(rs []rune) {
+	m.inputPos = min(m.inputPos, len(m.input))
+	tail := append([]rune{}, m.input[m.inputPos:]...)
+	m.input = append(append(m.input[:m.inputPos], rs...), tail...)
+	m.inputPos += len(rs)
 }
 
 func (m *model) explain() {

@@ -20,6 +20,7 @@ const (
 	KindNext    = "next"
 	KindSkip    = "skip"
 	KindGoto    = "goto"
+	KindEdit    = "edit"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"
@@ -29,12 +30,13 @@ const (
 )
 
 type Event struct {
-	Time  time.Time `json:"time"`
-	Kind  string    `json:"kind"`
-	Step  string    `json:"step,omitempty"`
-	File  string    `json:"file,omitempty"`
-	Lines string    `json:"lines,omitempty"`
-	Text  string    `json:"text,omitempty"`
+	Time    time.Time `json:"time"`
+	Kind    string    `json:"kind"`
+	Step    string    `json:"step,omitempty"`
+	File    string    `json:"file,omitempty"`
+	Lines   string    `json:"lines,omitempty"`
+	Comment int       `json:"comment,omitempty"`
+	Text    string    `json:"text,omitempty"`
 }
 
 func (e Event) String() string {
@@ -42,6 +44,12 @@ func (e Event) String() string {
 	fmt.Fprintf(&b, "[%s] %s", e.Kind, e.Step)
 	if e.File != "" {
 		fmt.Fprintf(&b, " %s:%s", e.File, e.Lines)
+	}
+	switch {
+	case e.Comment > 0 && e.Kind == KindEdit:
+		fmt.Fprintf(&b, " #%d", e.Comment)
+	case e.Comment > 0:
+		fmt.Fprintf(&b, " re #%d", e.Comment)
 	}
 	if e.Text != "" {
 		fmt.Fprintf(&b, ": %s", e.Text)

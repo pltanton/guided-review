@@ -211,3 +211,23 @@ func ResolveComment(r *state.Review, id int) error {
 	}
 	return fmt.Errorf("no comment #%d", id)
 }
+
+func EditComment(r *state.Review, id int, body string, severity state.Severity) error {
+	if strings.TrimSpace(body) == "" {
+		return errors.New("empty comment")
+	}
+	if severity != "" && !slices.Contains(state.Severities, severity) {
+		return fmt.Errorf("severity %q, want one of %v", severity, state.Severities)
+	}
+	for i := range r.Comments {
+		if r.Comments[i].ID != id {
+			continue
+		}
+		r.Comments[i].Body = body
+		if severity != "" {
+			r.Comments[i].Severity = severity
+		}
+		return nil
+	}
+	return fmt.Errorf("no comment #%d", id)
+}

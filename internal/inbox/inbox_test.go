@@ -56,6 +56,8 @@ func TestFormat(t *testing.T) {
 		{inbox.Event{Kind: inbox.KindNext, Step: "s3"}, "[next] s3"},
 		{inbox.Event{Kind: inbox.KindSkip, Step: "s3", Text: "trivial"}, "[skip] s3: trivial"},
 		{inbox.Event{Kind: inbox.KindGoto, Step: "s5"}, "[goto] s5"},
+		{inbox.Event{Kind: inbox.KindMessage, Step: "s3", File: "a.go", Lines: "57", Comment: 2, Text: "not a nit"}, "[message] s3 a.go:57 re #2: not a nit"},
+		{inbox.Event{Kind: inbox.KindEdit, Step: "s3", Comment: 2, Text: "rename to total"}, "[edit] s3 #2: rename to total"},
 	}
 	for _, tt := range tests {
 		if got := tt.e.String(); got != tt.want {

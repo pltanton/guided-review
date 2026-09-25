@@ -32,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  o fold  O all  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  E edit comment  o fold  O all  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -188,15 +188,22 @@ func (m *model) bottomLines() []string {
 	switch {
 	case m.composing:
 		prompt := "› "
-		if m.composeKind == inbox.KindSkip {
+		switch {
+		case m.composeKind == inbox.KindSkip:
 			prompt = "skip reason › "
+		case m.composeKind == inbox.KindEdit:
+			prompt = fmt.Sprintf("edit #%d › ", m.composeRef)
+		case m.composeRef > 0:
+			prompt = fmt.Sprintf("re #%d %s:%s › ", m.composeRef, m.anchorFile, m.anchorLines)
+		case m.anchorFile != "":
+			prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
 		}
-		if m.visual {
-			if file, l, ok := m.selection(); ok {
-				prompt = fmt.Sprintf("%s:%s › ", file, l)
-			}
+		pos := min(m.inputPos, len(m.input))
+		hint := ""
+		if m.anchorFile != "" {
+			hint = dimStyle.Render("   ctrl+x: no line")
 		}
-		last = cursorStyle.Render(prompt) + string(m.input) + "█"
+		last = cursorStyle.Render(prompt) + string(m.input[:pos]) + "█" + string(m.input[pos:]) + hint
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
