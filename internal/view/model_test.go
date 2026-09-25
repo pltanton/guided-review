@@ -35,3 +35,20 @@ func TestModelNavigation(t *testing.T) {
 		t.Fatal("q must quit")
 	}
 }
+
+func TestFirstFocus(t *testing.T) {
+	tests := []struct {
+		name string
+		rows []Row
+		want int
+	}{
+		{"hunk start", []Row{{Kind: RowFile}, {Kind: RowCode, Line: 1}, {Kind: RowAdded, Line: 2, HunkStart: true}}, 2},
+		{"hunk outside window", []Row{{Kind: RowFile}, {Kind: RowAdded, Line: 76}}, 1},
+		{"empty", nil, 0},
+	}
+	for _, tt := range tests {
+		if got := firstFocus(tt.rows); got != tt.want {
+			t.Errorf("%s: firstFocus = %d, want %d", tt.name, got, tt.want)
+		}
+	}
+}

@@ -93,9 +93,7 @@ func (m *model) rebuild(jumpToHunk bool) {
 	m.rows = rows
 	switch {
 	case jumpToHunk:
-		if i := m.nextHunk(-1); i >= 0 {
-			m.cursor = i
-		}
+		m.cursor = firstFocus(rows)
 	case keep.File != "":
 		for i, r := range rows {
 			if r.File == keep.File && r.Line == keep.Line && r.Kind == keep.Kind {
@@ -105,6 +103,20 @@ func (m *model) rebuild(jumpToHunk bool) {
 		}
 	}
 	m.clamp()
+}
+
+func firstFocus(rows []Row) int {
+	for i, r := range rows {
+		if r.HunkStart {
+			return i
+		}
+	}
+	for i, r := range rows {
+		if r.Line > 0 {
+			return i
+		}
+	}
+	return 0
 }
 
 func (m *model) Init() tea.Cmd { return nil }
