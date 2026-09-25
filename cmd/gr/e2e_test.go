@@ -266,3 +266,30 @@ func TestWaitAndSay(t *testing.T) {
 		t.Fatalf("messages: %+v", r.Messages)
 	}
 }
+
+func TestForceKeepsComments(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5", "--severity", "major", "return an error")
+	out := h.mustRun("", "init", "--force")
+	assertContains(t, out, "kept 1 comments")
+	out = h.mustRun("", "comment", "list")
+	assertContains(t, out, "#1 major s1 api/transfer.go:5  return an error")
+}
+
+func TestDiscussionsFull(t *testing.T) {
+	h := newHarness(t)
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if strings.Contains(args[len(args)-1], "/discussions") {
+			return []byte(`[{"id":"d1","notes":[{"body":"## acc-guard\nline two\nline three","author":{"username":"ci"},"system":false,"resolvable":true},
+				{"body":"reply","author":{"username":"bob"},"system":false}]}]`), nil
+		}
+		return []byte(fmt.Sprintf(`{"title":"T","web_url":"u","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`, base, base, head)), nil
+	}
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	out := h.mustRun("", "discussions")
+	assertContains(t, out, "@ci (1 replies)", "## acc-guard\n  line two\n  line three")
+}

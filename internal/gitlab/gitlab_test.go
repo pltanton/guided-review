@@ -58,7 +58,8 @@ func TestFetchDiscussions(t *testing.T) {
 			{"body":"why float?","author":{"username":"alice"},"system":false,"resolvable":true,"resolved":false,
 			 "position":{"new_path":"api/a.go","new_line":57,"old_path":"api/a.go","old_line":null}},
 			{"body":"ok","author":{"username":"bob"},"system":false}]},
-		 {"id":"d2","notes":[{"body":"added 1 commit","author":{"username":"bob"},"system":true}]}]
+		 {"id":"d2","notes":[{"body":"added 1 commit","author":{"username":"bob"},"system":true}]},
+		 {"id":"d5","notes":[{"body":"<!-- linear-linkback -->","author":{"username":"linear"},"system":false}]}]
 		[{"id":"d3","notes":[{"body":"general remark","author":{"username":"carol"},"system":false,"resolvable":true,"resolved":true}]},
 		 {"id":"d4","notes":[{"body":"on removed line","author":{"username":"dan"},"system":false,
 			 "position":{"new_path":"api/b.go","new_line":null,"old_path":"api/b.go","old_line":12}}]}]`), nil

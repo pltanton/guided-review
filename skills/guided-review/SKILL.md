@@ -19,26 +19,30 @@ turn — they are not looking at it.
 
 ## Setup — no questions
 
-1. `gr init <MR-URL | branch | base..head>` (no argument: current branch against the
-   default branch). Never ask about branches: gr checks the MR out into its own
-   worktree when HEAD is elsewhere and prints `code: <path>`. Read code under that
-   path.
+1. `gr init <what the user gave>` — pass the MR URL verbatim when they gave one; no
+   argument only when they gave nothing (current branch against the default
+   branch). Never ask about branches: gr checks the MR out into its own worktree
+   when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
    - "commit … not found locally": run `git fetch origin` and retry.
    - "already exists, resuming": `gr step show`, then continue the step loop.
    - "round N": this is a re-review, see below.
+   - Never pass `--force`: it throws away the plan and progress. Only the user may
+     ask to start over.
 2. If `$TMUX` is set and no pane runs `gr view`
    (`tmux list-panes -F '#{pane_current_command}'`), open it wide:
    `tmux split-window -h -d -l 65% gr view`.
 
-## Intake — fast
+## Intake — fast and short
 
 Use only what is cheap: the MR description (`glab mr view <iid>`), a linked spec,
-the unresolved MR discussions printed by `gr init`, and `git diff --stat
-<base> <head>`. Do not read code yet.
+the unresolved MR discussions (`gr discussions` prints them in full), and
+`git diff --stat <base> <head>`. Do not read code yet.
 
-`gr say` two or three lines: the task, how the change solves it, real mismatches with
-the spec if any, and «верно понял?». Then `gr wait` (below). Read code only after
-they confirm.
+`gr say` at most three lines: the task in one line, how the change solves it in one
+line, then «верно понял?». Everything else you noticed — failing checks, open
+discussions, spec mismatches, stale examples in the description — is not intake:
+keep it for the step it belongs to and put it there as a `spec` annotation or the
+step's question. Then `gr wait` (below). Read code only after they confirm.
 
 `glab` is read-only for you: never create notes, discussions or approvals with it.
 
@@ -122,8 +126,9 @@ steps:
 
 ## MR discussions
 
-`gr init`, `gr status` and `gr sync` show unresolved discussions of other reviewers;
-the viewer marks the ones on lines. Mention them in intake, and on a step that touches
+`gr init`, `gr status` and `gr sync` list unresolved discussions of other reviewers
+by their first line; `gr discussions` prints them in full. The viewer marks the ones
+on lines. Mention them in intake, and on a step that touches
 a discussed line, say whether the code answers it.
 
 ## Wrap-up

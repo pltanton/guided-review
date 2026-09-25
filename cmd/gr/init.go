@@ -92,6 +92,10 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if old, err := s.store.Load(t.id); err == nil && len(old.Comments) > 0 {
+		r.Comments = old.Comments
+		fmt.Fprintf(e.stdout, "starting over, kept %d comments\n", len(r.Comments))
+	}
 	r.Worktree = worktree
 	if err := syncDiscussions(ctx, e.glab, r); err != nil {
 		return err
@@ -465,4 +469,31 @@ func printDiscussions(w io.Writer, r *state.Review) {
 		}
 		fmt.Fprintf(w, "  @%s%s: %s\n", d.Author, where, body)
 	}
+}
+
+func cmdDiscussions(ctx context.Context, e env) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	if r.MR == nil {
+		return errors.New("not a merge request review")
+	}
+	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+		return err
+	}
+	if err := s.store.Save(r); err != nil {
+		return err
+	}
+	for _, d := range r.Discussions {
+		if d.Resolved {
+			continue
+		}
+		where := ""
+		if d.File != "" {
+			where = fmt.Sprintf(" %s:%d", d.File, d.Line)
+		}
+		fmt.Fprintf(e.stdout, "@%s%s (%d replies)\n%s\n\n", d.Author, where, d.Replies, indent(strings.TrimSpace(d.Body), "  "))
+	}
+	return nil
 }

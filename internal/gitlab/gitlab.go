@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -34,6 +35,8 @@ type MR struct {
 type Runner func(ctx context.Context, args ...string) ([]byte, error)
 
 const mrPathSep = "/-/merge_requests/"
+
+var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
 func IsMRURL(s string) bool {
 	return strings.Contains(s, mrPathSep)
@@ -136,7 +139,7 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 			return nil, fmt.Errorf("decode discussions: %w", err)
 		}
 		for _, d := range page {
-			if len(d.Notes) == 0 || d.Notes[0].System {
+			if len(d.Notes) == 0 || d.Notes[0].System || strings.TrimSpace(htmlComment.ReplaceAllString(d.Notes[0].Body, "")) == "" {
 				continue
 			}
 			first := d.Notes[0]
