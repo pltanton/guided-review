@@ -38,6 +38,14 @@ Optional `.review.yaml` in the repository root:
     generated:               # extra generated-file patterns
       - api/gen/**
 
+## Reading the diff
+
+The unified view shows the resulting code: large removed blocks fold into
+`▸ N lines removed`, code moved elsewhere is marked `↕` and its old copy folds into
+`↕ N lines moved to file:line`, whitespace-only changes are marked `≈`. When a line
+changed only partly, just the changed words are highlighted. Split (`s`) always shows
+both sides in full.
+
 ## Viewer keys
 
 | Key | Action |
@@ -51,6 +59,7 @@ Optional `.review.yaml` in the repository root:
 | `>` | next step |
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
+| `o` / `O` | unfold the removed block under the cursor / show all removed lines |
 | `s` | split / unified diff |
 | `p` | show/hide the plan |
 | `m` | mouse capture on/off (off lets the terminal select text) |
