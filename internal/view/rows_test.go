@@ -147,3 +147,19 @@ func TestBuildRowsNotesAndOldLines(t *testing.T) {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
+
+func TestWholeFileNoteOutsideHunks(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 30, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L30"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(40)},
+	}
+	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, []Note{{File: "a.go", Line: 5, Kind: "note", Text: "far note", Focus: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(summary(rows), "far note") {
+		t.Fatalf("note outside hunk windows is lost:\n%s", summary(rows))
+	}
+}

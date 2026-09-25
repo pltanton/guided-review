@@ -136,14 +136,14 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 	var windows [][2]int
 	if start > 0 {
 		windows = [][2]int{{start - context, end + context}}
-		for _, n := range notes {
-			if n.Focus && n.Line > 0 {
-				windows = append(windows, [2]int{n.Line - context, n.Line + context})
-			}
-		}
 	} else {
 		for _, h := range fd.Hunks {
 			windows = append(windows, [2]int{h.NewStart - context, h.NewEnd() + context})
+		}
+	}
+	for _, n := range notes {
+		if n.Focus && n.Line > 0 {
+			windows = append(windows, [2]int{n.Line - context, n.Line + context})
 		}
 	}
 	oldLine := func(n int) int {
