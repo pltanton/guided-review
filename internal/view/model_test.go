@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/aplotnikov/guided-review/internal/config"
 	"github.com/aplotnikov/guided-review/internal/inbox"
 	"github.com/aplotnikov/guided-review/internal/state"
 )
@@ -742,5 +743,48 @@ func TestLSPFlow(t *testing.T) {
 	m.Update(lspMsg{kind: "definition", err: fmt.Errorf("no LSP server for .kt")})
 	if m.err == nil || m.popup != nil {
 		t.Fatal("lsp errors go to the status line")
+	}
+}
+
+func TestKeymapOverrides(t *testing.T) {
+	km, err := newKeymap(map[string][]string{"next-hunk": {"J"}, "bogus": {"x"}})
+	if err == nil || !strings.Contains(err.Error(), "unknown actions: bogus") {
+		t.Fatalf("want unknown-action error, got %v", err)
+	}
+	m, _ := newTestModel(t)
+	m.km = km
+	m.Update(key("J"))
+	if m.cursor != 2 {
+		t.Fatalf("remapped J must jump to the next hunk, cursor %d", m.cursor)
+	}
+	m.Update(key("]"))
+	if m.cursor != 2 {
+		t.Fatal("] must be unbound after the remap")
+	}
+	if _, err := newKeymap(map[string][]string{"next-hunk": {"j"}}); err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("want a conflict error, got %v", err)
+	}
+}
+
+func TestHelpOverlay(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key("h"))
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"navigate", "lsp", "gd", "go to definition", "publish"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("help lacks %q:\n%s", want, out)
+		}
+	}
+	m.Update(key("x"))
+	if m.help {
+		t.Fatal("any key closes help")
+	}
+}
+
+func TestApplyViewConfig(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.applyConfig(config.UserConfig{View: config.ViewConfig{Split: true, HidePlan: true, NoMouse: true, Context: 8}})
+	if !m.splitView || m.showPlan || m.mouse || m.baseContext() != 8 {
+		t.Fatalf("config not applied: split %v plan %v mouse %v ctx %d", m.splitView, m.showPlan, m.mouse, m.baseContext())
 	}
 }

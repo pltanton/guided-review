@@ -26,7 +26,11 @@ func Run(ctx context.Context, store state.Store, repo gitx.Repo, returnPane stri
 	}
 	m := newModel(ctx, store, repo)
 	m.returnPane = returnPane
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithContext(ctx))
+	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithContext(ctx)}
+	if m.mouse {
+		opts = append(opts, tea.WithMouseCellMotion())
+	}
+	p := tea.NewProgram(m, opts...)
 	go forward(w, p)
 	_, err = p.Run()
 	if m.lsp != nil {

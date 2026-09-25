@@ -30,10 +30,7 @@ var (
 	}
 )
 
-const (
-	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "gd def  gr refs  K hover  w/b word  v select  n note  E edit comment  o open  O all removed  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
-)
+const hints = "c message  h help  q quit"
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
 
@@ -42,12 +39,16 @@ type button struct {
 	press      func(*model)
 }
 
-func footerButtons() []button {
+func (m *model) footerButtons() []button {
+	km := m.keys()
+	b := func(label, action string, press func(*model)) button {
+		return button{label, km.key(action), press}
+	}
 	return []button{
-		{"✓ next", ">", func(m *model) { m.next() }},
-		{"✎ message", "c", func(m *model) { m.startCompose(inbox.KindMessage) }},
-		{"? explain", "?", func(m *model) { m.explain() }},
-		{"↷ skip", "S", func(m *model) { m.startCompose(inbox.KindSkip) }},
+		b("✓ next", "next", (*model).next),
+		b("✎ message", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
+		b("? explain", "explain", (*model).explain),
+		b("↷ skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
 }
 
@@ -58,7 +59,7 @@ type span struct {
 
 func (m *model) footer() (string, []span) {
 	line := m.agentStatus() + "  "
-	tail := moreHints
+	tail := m.keys().key("help") + " help · " + m.keys().key("quit") + " quit"
 	if m.status != "" {
 		tail = m.status
 	}
@@ -73,9 +74,9 @@ func (m *model) footer() (string, []span) {
 	}
 	x := ansi.StringWidth(line)
 	var spans []span
-	btns := footerButtons()
+	btns := m.footerButtons()
 	if m.review != nil && m.review.Publish != nil {
-		btns = append(btns, button{"⬆ publish", "P", func(m *model) { m.publish() }})
+		btns = append(btns, button{"⬆ publish", m.keys().key("publish"), (*model).publish})
 	}
 	for _, b := range btns {
 		text := " " + b.label + " · " + b.key + " "
@@ -88,7 +89,7 @@ func (m *model) footer() (string, []span) {
 }
 
 func (m *model) planWidth() int {
-	if !m.showPlan || m.review == nil || len(m.review.Steps) == 0 || m.width < minPlanWidth {
+	if m.help || !m.showPlan || m.review == nil || len(m.review.Steps) == 0 || m.width < minPlanWidth {
 		return 0
 	}
 	return min(maxPlanWidth, m.width/4)
@@ -259,6 +260,11 @@ func (m *model) View() string {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main := m.header()
+	if m.help {
+		main = []string{boldStyle.Render("keys"), dimStyle.Render("any key closes · j/k scroll · remap in " + configHint), dimStyle.Render(strings.Repeat("─", max(mw, 1)))}
+		lines := m.helpLines(mw)
+		main = append(main, lines[min(m.helpTop, len(lines)):]...)
+	}
 	if m.preview != "" {
 		main = []string{
 			boldStyle.Render(fmt.Sprintf("publish preview → !%d", m.mrIID())),
@@ -274,7 +280,7 @@ func (m *model) View() string {
 		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.list) || m.preview != "" {
+		if i >= len(m.list) || m.preview != "" || m.help {
 			main = append(main, "")
 			continue
 		}
@@ -639,6 +645,8 @@ func (m *model) animate(r Row) Row {
 	}
 	return r
 }
+
+var configHint = "~/.config/guided-review/config.yaml (gr config init)"
 
 func (m *model) mrIID() int {
 	if m.review == nil || m.review.MR == nil {

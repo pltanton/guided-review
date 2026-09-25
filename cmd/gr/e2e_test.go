@@ -420,3 +420,31 @@ func TestPublishPrepareThenConfirm(t *testing.T) {
 	out = h.mustRun("", "publish")
 	assertContains(t, out, "published 1 comments and the summary")
 }
+
+func TestConfigCommands(t *testing.T) {
+	h := newHarness(t)
+	cfgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgDir)
+	out := h.mustRun("", "config")
+	assertContains(t, out, "user config:", "not created", "diff: histogram")
+	out = h.mustRun("", "config", "init")
+	path := filepath.Join(cfgDir, "guided-review", "config.yaml")
+	assertContains(t, out, "wrote "+path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"#   next-hunk: [\"]\"]", "#   definition: [\"g d\"]", "# view:", "#   context: 3"} {
+		if !strings.Contains(string(data), want) {
+			t.Fatalf("template lacks %q:\n%s", want, data)
+		}
+	}
+	if _, err := h.run("", "config", "init"); err == nil {
+		t.Fatal("config init must not overwrite an existing file")
+	}
+	if err := os.WriteFile(path, []byte("keys:\n  next-hunk: [j]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = h.mustRun("", "config")
+	assertContains(t, out, "key conflicts")
+}

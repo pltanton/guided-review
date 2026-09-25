@@ -56,7 +56,16 @@ The unified view shows the resulting code: large removed blocks fold into
 changed only partly, just the changed words are highlighted. Split (`s`) always shows
 both sides in full.
 
-## Viewer keys
+## Settings
+
+- `h` in the viewer lists every key, grouped.
+- `gr config init` writes `~/.config/guided-review/config.yaml` with every setting commented
+  out: default view (split, plan panel, mouse, context lines, syntax style), diff algorithm,
+  LSP servers and the key map (`action: [keys]`, sequences like `"g d"`).
+- `gr config` shows the effective settings and reports unknown actions or key conflicts.
+- A repository's `.review.yaml` overrides `diff` and `lsp`.
+
+## Viewer keys (defaults)
 
 | Key | Action |
 |---|---|

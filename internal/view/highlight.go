@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-const styleName = "monokai"
+var styleName = "monokai"
 
 func Highlight(path, content string) []string {
 	plain := splitLines(content)
@@ -22,6 +22,9 @@ func Highlight(path, content string) []string {
 		return plain
 	}
 	style := styles.Get(styleName)
+	if style == nil {
+		style = styles.Fallback
+	}
 	cache := map[chroma.TokenType]lipgloss.Style{}
 	out := make([]string, 0, len(plain))
 	var b strings.Builder

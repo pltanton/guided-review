@@ -95,7 +95,11 @@ type model struct {
 	runGr       func(args ...string) (string, error)
 
 	col        int
-	pendingG   bool
+	pendingKey string
+	km         *keymap
+	help       bool
+	helpTop    int
+	context0   int
 	popup      *popup
 	popupStack []*popup
 	lspDo      func(kind, file string, line, col int) tea.Cmd
@@ -127,10 +131,10 @@ type model struct {
 
 func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true, algo: gitx.DefaultDiffAlgorithm}
-	if cfg, err := config.Load(repo.Dir); err == nil {
-		m.algo = cfg.DiffAlgorithm(m.algo)
-		m.lspServers = cfg.LSP
-	}
+	user, _, uerr := config.LoadUser()
+	repoCfg, rerr := config.Load(repo.Dir)
+	m.applyConfig(config.Merge(user, repoCfg))
+	m.err = errors.Join(uerr, rerr, m.err)
 	m.lspDo = m.defaultLSP
 	m.runGr = func(args ...string) (string, error) {
 		bin, err := os.Executable()
@@ -182,7 +186,7 @@ func (m *model) reload() {
 	}
 	changed := m.step.ID != prev
 	if changed {
-		m.context, m.cursor, m.offset, m.visual, m.reveal = defaultContext, 0, 0, false, nil
+		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseContext(), 0, 0, false, nil
 	}
 	m.rebuild(changed)
 }
@@ -321,6 +325,30 @@ func firstFocus(list []item) int {
 }
 
 func (m *model) Init() tea.Cmd { return tick() }
+
+func (m *model) applyConfig(c config.UserConfig) {
+	var err error
+	m.km, err = newKeymap(c.Keys)
+	m.err = err
+	m.splitView, m.showPlan, m.mouse = c.View.Split, !c.View.HidePlan, !c.View.NoMouse
+	if c.View.Context > 0 {
+		m.context0, m.context = c.View.Context, c.View.Context
+	}
+	if c.View.Style != "" {
+		styleName = c.View.Style
+	}
+	if c.Diff != "" {
+		m.algo = c.Diff
+	}
+	m.lspServers = c.LSP
+}
+
+func (m *model) baseContext() int {
+	if m.context0 > 0 {
+		return m.context0
+	}
+	return defaultContext
+}
 
 func (m *model) clock() time.Time {
 	if m.now == nil {
@@ -546,7 +574,7 @@ func (m *model) showStep(id string) tea.Cmd {
 		m.viewStep = ""
 	}
 	m.step = st
-	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, defaultContext, nil
+	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseContext(), nil
 	if m.src == nil {
 		return nil
 	}
@@ -647,158 +675,17 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status = ""
-	if m.preview != "" {
+	switch {
+	case m.help:
+		return m.handleHelpKey(msg)
+	case m.preview != "":
 		return m.handlePreviewKey(msg)
-	}
-	if m.popup != nil {
+	case m.popup != nil:
 		return m.handlePopupKey(msg)
-	}
-	if m.focusFiles {
+	case m.focusFiles:
 		return m.handleFilesKey(msg)
 	}
-	if m.pendingG {
-		m.pendingG = false
-		switch msg.String() {
-		case "g":
-			m.cursor = 0
-			m.clamp()
-			return nil
-		case "d":
-			return m.lspRequest("definition")
-		case "r":
-			return m.lspRequest("references")
-		}
-	}
-	switch msg.String() {
-	case "f":
-		files := m.stepFiles()
-		if len(files) == 0 {
-			return nil
-		}
-		m.showPlan, m.focusFiles = true, true
-		m.fileCursor = max(0, slices.Index(files, m.current().File))
-		m.relist()
-	case "d":
-		i := (slices.Index(gitx.DiffAlgorithms, m.algo) + 1) % len(gitx.DiffAlgorithms)
-		m.algo = gitx.DiffAlgorithms[i]
-		m.status = "diff: " + m.algo
-		if m.src != nil {
-			m.src = newGitSource(m.ctx, m.repo, m.algo, m.src.base, m.src.head)
-			m.unfolded = nil
-			m.rebuild(false)
-		}
-	case "o":
-		m.toggleFold()
-	case "O":
-		if !m.showRemoved && !m.hasFolds() {
-			m.status = "no removed lines are folded in this step"
-			return nil
-		}
-		m.showRemoved = !m.showRemoved
-		m.relist()
-		m.status = "folding large removed blocks"
-		if m.showRemoved {
-			m.status = "showing every removed line"
-		}
-	case "}":
-		m.jump(1, func(it item) bool { return it.FileHead })
-	case "{":
-		m.jump(-1, func(it item) bool { return it.FileHead })
-	case "q", "ctrl+c":
-		return tea.Quit
-	case "j", "down":
-		m.move(1)
-	case "k", "up":
-		m.move(-1)
-	case "ctrl+d":
-		m.move(m.bodyHeight() / 2)
-	case "ctrl+u":
-		m.move(-m.bodyHeight() / 2)
-	case "g":
-		m.pendingG = true
-	case "home":
-		m.cursor = 0
-		m.clamp()
-	case "w":
-		if plain, ok := m.currentCode(); ok {
-			m.col = nextWord(plain, wordStart(plain, m.col))
-		}
-	case "b":
-		if plain, ok := m.currentCode(); ok {
-			m.col = prevWord(plain, wordStart(plain, m.col))
-		}
-	case "K":
-		return m.lspRequest("hover")
-	case "G", "end":
-		m.cursor = len(m.list) - 1
-		m.clamp()
-	case "]":
-		m.jump(1, func(it item) bool { return it.HunkStart })
-	case "[":
-		m.jump(-1, func(it item) bool { return it.HunkStart })
-	case "n":
-		m.jump(1, func(it item) bool { return it.Note })
-	case "N":
-		m.jump(-1, func(it item) bool { return it.Note })
-	case "tab":
-		if m.step != nil {
-			m.context += 10
-			m.rebuild(false)
-		}
-	case "shift+tab":
-		if m.step != nil {
-			m.context = defaultContext
-			m.rebuild(false)
-		}
-	case "s":
-		m.splitView = !m.splitView
-		m.relist()
-		if m.splitView && !m.useSplit() {
-			m.status = "too narrow for split: widen the pane or hide the plan (p)"
-		}
-	case "p":
-		m.showPlan = !m.showPlan
-		m.relist()
-	case "m":
-		m.mouse = !m.mouse
-		if m.mouse {
-			return tea.EnableMouseCellMotion
-		}
-		return tea.DisableMouse
-	case "v":
-		m.visual = !m.visual
-		m.anchor = m.cursor
-	case "esc":
-		switch {
-		case m.visual:
-			m.visual = false
-		case m.viewStep != "":
-			return m.showStep(m.review.Current)
-		}
-	case "H":
-		return m.shiftStep(-1)
-	case "L":
-		return m.shiftStep(1)
-	case "c", "enter":
-		m.startCompose(inbox.KindMessage)
-	case "S":
-		m.startCompose(inbox.KindSkip)
-	case "E":
-		m.startEdit()
-	case "P":
-		m.publish()
-	case "?":
-		m.explain()
-	case ">":
-		m.next()
-	case "e":
-		return m.openEditor()
-	case "a":
-		if err := focusAgent(m.returnPane); err != nil {
-			m.err = err
-		}
-	}
-	return nil
+	return m.dispatch(msg.String())
 }
 
 func (m *model) move(d int) {
