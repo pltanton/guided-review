@@ -129,6 +129,10 @@ steps:
    the human rewriting their comment: `gr comment edit N TEXT` (keep the severity unless
    the new text clearly changes it) and `gr say` one line: `обновил #N`.
 
+   Step ids starting with `~` (`~boilerplate`, `~generated`, `~all`) come from the
+   viewer's views outside the plan: treat the event as a remark on that file and record
+   comments with the default step.
+
    An event can carry an earlier step's id: the human is looking back at it in the
    viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
    and do not move the current step; they return to it themselves.

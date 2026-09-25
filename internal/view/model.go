@@ -31,6 +31,14 @@ type reloadMsg struct{}
 
 type tickMsg struct{}
 
+type rowsMsg struct {
+	step string
+	rows []Row
+	err  error
+}
+
+const asyncFiles = 8
+
 const tickEvery = 150 * time.Millisecond
 
 func tick() tea.Cmd {
@@ -77,6 +85,7 @@ type model struct {
 	showRemoved bool
 	unfolded    map[string]bool
 	algo        string
+	loading     string
 
 	composing   bool
 	composeKind string
@@ -130,12 +139,12 @@ func (m *model) reload() {
 	}
 	m.review, m.err = r, nil
 	target := r.Current
-	if m.viewStep != "" && m.viewStep != r.Current && r.Step(m.viewStep) != nil {
+	if m.viewStep != "" && m.viewStep != r.Current && m.stepByID(m.viewStep) != nil {
 		target = m.viewStep
 	} else {
 		m.viewStep = ""
 	}
-	m.step = r.Step(target)
+	m.step = m.stepByID(target)
 	if m.step == nil {
 		m.rows, m.split, m.list = nil, nil, nil
 		return
@@ -318,6 +327,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relist()
 	case reloadMsg:
 		m.reload()
+	case rowsMsg:
+		if m.step == nil || msg.step != m.step.ID || msg.step != m.loading {
+			return m, nil
+		}
+		m.loading, m.err = "", msg.err
+		m.rows = msg.rows
+		m.relist()
+		m.cursor = firstFocus(m.list)
+		m.clamp()
 	case tickMsg:
 		m.frame++
 		m.refreshAgent()
@@ -390,10 +408,73 @@ func (m *model) toggleFold() {
 	m.clamp()
 }
 
-func (m *model) showStep(id string) {
-	st := m.review.Step(id)
+const (
+	extraBoilerplate = "~boilerplate"
+	extraGenerated   = "~generated"
+	extraAll         = "~all"
+)
+
+func isExtra(id string) bool {
+	return strings.HasPrefix(id, "~")
+}
+
+func (m *model) extraSteps() []state.Step {
+	if m.review == nil {
+		return nil
+	}
+	var boilerplate, generated, all []state.StepHunk
+	for _, f := range m.review.Files {
+		h := state.StepHunk{File: f.Path}
+		all = append(all, h)
+		switch f.Tier {
+		case state.TierBoilerplate:
+			boilerplate = append(boilerplate, h)
+		case state.TierGenerated:
+			generated = append(generated, h)
+		}
+	}
+	var out []state.Step
+	for _, e := range []struct {
+		id, title string
+		hunks     []state.StepHunk
+	}{{extraBoilerplate, "boilerplate", boilerplate}, {extraGenerated, "generated", generated}, {extraAll, "all changes", all}} {
+		if len(e.hunks) > 0 {
+			out = append(out, state.Step{ID: e.id, Title: e.title, Kind: "extra", Hunks: e.hunks, Status: state.StatusPending})
+		}
+	}
+	return out
+}
+
+func (m *model) stepByID(id string) *state.Step {
+	if m.review == nil {
+		return nil
+	}
+	if st := m.review.Step(id); st != nil {
+		return st
+	}
+	for _, st := range m.extraSteps() {
+		if st.ID == id {
+			return &st
+		}
+	}
+	return nil
+}
+
+func (m *model) stepIDs() []string {
+	var ids []string
+	for _, st := range m.review.Steps {
+		ids = append(ids, st.ID)
+	}
+	for _, st := range m.extraSteps() {
+		ids = append(ids, st.ID)
+	}
+	return ids
+}
+
+func (m *model) showStep(id string) tea.Cmd {
+	st := m.stepByID(id)
 	if st == nil {
-		return
+		return nil
 	}
 	m.viewStep = id
 	if id == m.review.Current {
@@ -401,18 +482,32 @@ func (m *model) showStep(id string) {
 	}
 	m.step = st
 	m.visual, m.cursor, m.offset, m.context = false, 0, 0, defaultContext
-	if m.src != nil {
+	if m.src == nil {
+		return nil
+	}
+	if len(st.Hunks) <= asyncFiles {
+		m.loading = ""
 		m.rebuild(true)
+		return nil
+	}
+	m.loading, m.rows = st.ID, nil
+	m.relist()
+	src, step, context, notes := m.src, *st, m.context, m.notes()
+	return func() tea.Msg {
+		rows, err := BuildRows(src, step, context, notes)
+		return rowsMsg{step: step.ID, rows: rows, err: err}
 	}
 }
 
-func (m *model) shiftStep(d int) {
+func (m *model) shiftStep(d int) tea.Cmd {
 	if m.step == nil {
-		return
+		return nil
 	}
-	if i := m.review.StepIndex(m.step.ID) + d; i >= 0 && i < len(m.review.Steps) {
-		m.showStep(m.review.Steps[i].ID)
+	ids := m.stepIDs()
+	if i := slices.Index(ids, m.step.ID) + d; i >= 0 && i < len(ids) {
+		return m.showStep(ids[i])
 	}
+	return nil
 }
 
 func (m *model) next() {
@@ -532,12 +627,12 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		case m.visual:
 			m.visual = false
 		case m.viewStep != "":
-			m.showStep(m.review.Current)
+			return m.showStep(m.review.Current)
 		}
 	case "H":
-		m.shiftStep(-1)
+		return m.shiftStep(-1)
 	case "L":
-		m.shiftStep(1)
+		return m.shiftStep(1)
 	case "c", "enter":
 		m.startCompose(inbox.KindMessage)
 	case "S":

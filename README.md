@@ -61,6 +61,7 @@ both sides in full.
 | `>` | next step |
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
+| `L` past the last step | `boilerplate`, `generated` and `all changes` views: every diff of the MR, nothing left out |
 | `o` / `O` | unfold the removed block under the cursor / show all removed lines |
 | `d` | next diff algorithm (histogram → patience → myers → minimal) |
 | `s` | split / unified diff |

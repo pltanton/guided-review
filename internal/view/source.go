@@ -3,12 +3,14 @@ package view
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/aplotnikov/guided-review/internal/diff"
 	"github.com/aplotnikov/guided-review/internal/gitx"
 )
 
 type gitSource struct {
+	mu         sync.Mutex
 	ctx        context.Context
 	repo       gitx.Repo
 	algo       string
@@ -22,6 +24,12 @@ func newGitSource(ctx context.Context, repo gitx.Repo, algo, base, head string) 
 }
 
 func (s *gitSource) FileDiff(path string) (diff.File, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fileDiff(path)
+}
+
+func (s *gitSource) fileDiff(path string) (diff.File, error) {
 	if s.diffs == nil {
 		raw, err := s.repo.DiffWith(s.ctx, s.algo, s.base, s.head)
 		if err != nil {
@@ -44,10 +52,12 @@ func (s *gitSource) FileDiff(path string) (diff.File, error) {
 }
 
 func (s *gitSource) Lines(path string) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if l, ok := s.lines[path]; ok {
 		return l, nil
 	}
-	f, err := s.FileDiff(path)
+	f, err := s.fileDiff(path)
 	if err != nil {
 		return nil, err
 	}

@@ -100,6 +100,13 @@ func (m *model) header() []string {
 		return nil
 	}
 	st := m.step
+	if isExtra(st.ID) {
+		return []string{
+			boldStyle.Render(fmt.Sprintf("%s · %d files", st.Title, len(st.Hunks))),
+			hotStyle.Render(fmt.Sprintf("outside the plan · current is %s — esc to return", m.review.Current)),
+			dimStyle.Render(strings.Repeat("─", max(m.mainWidth(), 1))),
+		}
+	}
 	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, m.review.StepIndex(st.ID)+1, len(m.review.Steps), st.Kind, st.Title)
 	if st.Status != state.StatusPending {
 		title += " [" + string(st.Status) + "]"
@@ -231,6 +238,9 @@ func (m *model) View() string {
 	mw := m.mainWidth()
 
 	main := m.header()
+	if m.loading != "" {
+		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
+	}
 	for i := m.offset; len(main) < bodyH; i++ {
 		if i >= len(m.list) {
 			main = append(main, "")
@@ -283,7 +293,7 @@ type sideEntry struct {
 }
 
 func (m *model) planRows(h int) int {
-	return min(len(m.review.Steps)+1, max(h/2, 2))
+	return min(len(m.review.Steps)+len(m.extraSteps())+1, max(h/2, 2))
 }
 
 func (m *model) sidebar(h, w int) []sideEntry {
@@ -314,6 +324,17 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if len(st.Hotspots) > 0 {
 			line += " ⚑"
 		}
+		out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID})
+	}
+	for _, st := range m.extraSteps() {
+		if len(out) >= rows {
+			break
+		}
+		glyph, style := "◇", dimStyle
+		if m.step != nil && st.ID == m.step.ID {
+			glyph, style = "◆", hotStyle
+		}
+		line := fmt.Sprintf("%s %s · %d files", glyph, st.Title, len(st.Hunks))
 		out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID})
 	}
 	for len(out) < rows {

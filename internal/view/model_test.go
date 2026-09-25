@@ -540,3 +540,47 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 		t.Fatalf("sent\n%+v\nwant\n%+v", *sent, want)
 	}
 }
+
+func TestExtraViews(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Files = []state.File{
+		{Path: "a.go", Tier: state.TierCore},
+		{Path: "wire.go", Tier: state.TierBoilerplate},
+		{Path: "a.pb.go", Tier: state.TierGenerated},
+		{Path: "b.pb.go", Tier: state.TierGenerated},
+	}
+	ids := []string{}
+	for _, st := range m.extraSteps() {
+		ids = append(ids, st.ID)
+	}
+	if !reflect.DeepEqual(ids, []string{"~boilerplate", "~generated", "~all"}) {
+		t.Fatalf("extra steps = %v", ids)
+	}
+	if all := m.extraSteps()[2]; len(all.Hunks) != 4 {
+		t.Fatalf("~all must cover every file: %+v", all.Hunks)
+	}
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"◇ boilerplate · 1 files", "◇ generated · 2 files", "◇ all changes · 4 files"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("sidebar lacks %q:\n%s", want, out)
+		}
+	}
+	m.Update(key("L"))
+	m.Update(key("L"))
+	if m.step.ID != "~boilerplate" || m.review.Current != "s1" {
+		t.Fatalf("L past the plan: step %s current %s", m.step.ID, m.review.Current)
+	}
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "outside the plan") {
+		t.Fatalf("extra view banner missing:\n%s", out)
+	}
+	m.Update(key("c"))
+	typeText(m, "why here")
+	m.Update(key("enter"))
+	if len(*sent) != 1 || (*sent)[0].Step != "~boilerplate" {
+		t.Fatalf("sent %+v", *sent)
+	}
+	m.Update(key("esc"))
+	if m.step.ID != "s1" {
+		t.Fatalf("esc must return to the current step, got %s", m.step.ID)
+	}
+}
