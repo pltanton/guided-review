@@ -52,6 +52,7 @@ type model struct {
 	review *state.Review
 	step   *state.Step
 	rows   []Row
+	disp   []Row
 	split  []SplitRow
 	list   []item
 	events []inbox.Event
@@ -125,7 +126,6 @@ func (m *model) rebuild(jumpToHunk bool) {
 	}
 	keep := m.current()
 	m.rows = rows
-	m.split = pairRows(rows)
 	m.relist()
 	switch {
 	case jumpToHunk:
@@ -152,14 +152,14 @@ func (m *model) notes() []Note {
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
 		}
-		out = append(out, Note{File: c.File, Line: start, Kind: "comment", Text: fmt.Sprintf("%s: %s", c.Severity, c.Body), Dim: c.Resolved})
+		out = append(out, Note{File: c.File, Line: start, Kind: "comment", Label: string(c.Severity), Text: c.Body, Dim: c.Resolved})
 	}
 	for _, d := range m.review.Discussions {
 		if d.File == "" || d.OldLine {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
-		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Text: "@" + d.Author + ": " + body, Dim: d.Resolved})
+		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body, Dim: d.Resolved})
 	}
 	return out
 }
@@ -170,18 +170,20 @@ func (m *model) useSplit() bool {
 
 func (m *model) relist() {
 	keep := m.current()
+	m.disp = expandNotes(m.rows, m.mainWidth()-noteIndent)
+	m.split = pairRows(m.disp)
 	m.list = m.list[:0]
 	if m.useSplit() {
 		for _, r := range m.split {
 			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.Kind == RowNote})
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead})
 				continue
 			}
 			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
 		}
 	} else {
-		for _, r := range m.rows {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.Kind == RowNote})
+		for _, r := range m.disp {
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead})
 		}
 	}
 	if keep.File != "" {

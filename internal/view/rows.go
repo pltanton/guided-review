@@ -28,6 +28,8 @@ type Row struct {
 	Hotspot   bool
 	HunkStart bool
 	NoteKind  string
+	NoteLabel string
+	NoteHead  bool
 	Dim       bool
 }
 
@@ -35,6 +37,7 @@ type Note struct {
 	File  string
 	Line  int
 	Kind  string
+	Label string
 	Text  string
 	Dim   bool
 	Focus bool
@@ -174,7 +177,7 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 			}
 			rows = append(rows, row)
 			for _, note := range notesAt[n] {
-				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, Dim: note.Dim})
+				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, NoteLabel: note.Label, Dim: note.Dim})
 			}
 		}
 	}

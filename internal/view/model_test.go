@@ -56,7 +56,6 @@ func newTestModel(t *testing.T) (*model, *[]inbox.Event) {
 		context: defaultContext, showPlan: true,
 		send: func(e inbox.Event) error { sent = append(sent, e); return nil },
 	}
-	m.split = pairRows(m.rows)
 	m.relist()
 	return m, &sent
 }
@@ -237,5 +236,42 @@ func TestAgentStatus(t *testing.T) {
 	m.review.Steps, m.step = nil, nil
 	if out := ansi.Strip(m.View()); !strings.Contains(out, "⠹ строю план: читаю diff · 1m20s") {
 		t.Fatalf("intake view lacks spinner:\n%s", out)
+	}
+}
+
+func TestNotesWrapIntoBlocks(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width, m.showPlan = 60, false
+	m.rows[3] = Row{Kind: RowNote, File: "a.go", Line: 2, NoteKind: "comment", NoteLabel: "minor",
+		Text: "Event with the same source verdict and a different command becomes a separate key and looks identical in logs"}
+	m.relist()
+	var heads, conts int
+	for _, r := range m.disp {
+		if r.Kind != RowNote {
+			continue
+		}
+		if r.NoteHead {
+			heads++
+		} else {
+			conts++
+		}
+	}
+	if heads != 1 || conts < 1 {
+		t.Fatalf("heads %d conts %d: %+v", heads, conts, m.disp)
+	}
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "▌  minor  Event with the same") || strings.Contains(out, "…") {
+		t.Fatalf("note block:\n%s", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if ansi.StringWidth(line) > m.width {
+			t.Fatalf("line wider than %d: %q", m.width, line)
+		}
+	}
+	m.cursor = 0
+	m.Update(key("n"))
+	m.Update(key("n"))
+	if !m.disp[m.cursor].NoteHead {
+		t.Fatal("n must land on note heads only")
 	}
 }

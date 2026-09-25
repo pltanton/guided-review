@@ -24,15 +24,6 @@ var (
 	selectStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 	agentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 
-	noteStyles = map[string]lipgloss.Style{
-		"note":    lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-		"spec":    lipgloss.NewStyle().Foreground(lipgloss.Color("1")),
-		"hotspot": hotStyle,
-		"comment": lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-		"mr":      lipgloss.NewStyle().Foreground(lipgloss.Color("4")),
-	}
-	noteIcons = map[string]string{"note": "●", "spec": "⚠", "hotspot": "⚑", "comment": "✎", "mr": "💬"}
-
 	statusGlyph = map[state.StepStatus]string{
 		state.StatusPending: "·", state.StatusDone: "✓", state.StatusSkipped: "↷", state.StatusStale: "~",
 	}
@@ -260,7 +251,7 @@ func (m *model) renderRow(i, w int) string {
 	if m.useSplit() {
 		return m.renderSplit(i, w)
 	}
-	return m.gutter(i) + renderUnified(m.rows[i])
+	return m.gutter(i) + renderUnified(m.disp[i])
 }
 
 func renderUnified(r Row) string {
@@ -285,15 +276,53 @@ func renderUnified(r Row) string {
 	return marker + dimStyle.Render(num+" │ ") + text
 }
 
+const noteIndent = 1 + 7 + 2
+
+var noteColors = map[string]string{"note": "6", "spec": "1", "hotspot": "3", "comment": "5", "mr": "4"}
+
+func noteBadge(kind, label string) string {
+	if label == "" {
+		label = map[string]string{"note": "NOTE", "spec": "SPEC", "hotspot": "RISK", "comment": "YOU", "mr": "MR"}[kind]
+	}
+	return " " + label + " "
+}
+
+func expandNotes(rows []Row, width int) []Row {
+	width = max(width, 20)
+	out := make([]Row, 0, len(rows))
+	for _, r := range rows {
+		if r.Kind != RowNote {
+			out = append(out, r)
+			continue
+		}
+		badge := noteBadge(r.NoteKind, r.NoteLabel)
+		pad := ansi.StringWidth(badge) + 1
+		text := r.Text
+		if r.Dim {
+			text += " ✓"
+		}
+		for i, line := range strings.Split(ansi.Wrap(text, max(width-pad, 10), ""), "\n") {
+			row := r
+			row.Text, row.NoteHead = line, i == 0
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 func renderNote(r Row) string {
-	style, ok := noteStyles[r.NoteKind]
-	if !ok {
-		style = noteStyles["note"]
-	}
+	color := lipgloss.Color(noteColors[r.NoteKind])
 	if r.Dim {
-		style = dimStyle
+		color = lipgloss.Color("8")
 	}
-	return dimStyle.Render("       ┆ ") + style.Render(noteIcons[r.NoteKind]+" "+r.Text)
+	bar := lipgloss.NewStyle().Foreground(color).Render("▌")
+	body := lipgloss.NewStyle().Foreground(color)
+	badge := noteBadge(r.NoteKind, r.NoteLabel)
+	lead := strings.Repeat(" ", ansi.StringWidth(badge)+1)
+	if r.NoteHead {
+		lead = lipgloss.NewStyle().Background(color).Foreground(lipgloss.Color("0")).Bold(true).Render(badge) + " "
+	}
+	return "       " + bar + " " + lead + body.Render(r.Text)
 }
 
 func (m *model) renderSplit(i, w int) string {
