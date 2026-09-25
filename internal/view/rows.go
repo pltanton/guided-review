@@ -16,15 +16,28 @@ const (
 	RowCode
 	RowAdded
 	RowRemoved
+	RowNote
 )
 
 type Row struct {
 	Kind      RowKind
 	File      string
 	Line      int
+	OldLine   int
 	Text      string
 	Hotspot   bool
 	HunkStart bool
+	NoteKind  string
+	Dim       bool
+}
+
+type Note struct {
+	File  string
+	Line  int
+	Kind  string
+	Text  string
+	Dim   bool
+	Focus bool
 }
 
 type Source interface {
@@ -32,7 +45,7 @@ type Source interface {
 	Lines(path string) ([]string, error)
 }
 
-func BuildRows(src Source, st state.Step, context int) ([]Row, error) {
+func BuildRows(src Source, st state.Step, context int, notes []Note) ([]Row, error) {
 	var rows []Row
 	for _, sh := range st.Hunks {
 		fd, err := src.FileDiff(sh.File)
@@ -47,8 +60,14 @@ func BuildRows(src Source, st state.Step, context int) ([]Row, error) {
 		if err != nil {
 			return nil, err
 		}
+		var fileNotes []Note
+		for _, n := range notes {
+			if n.File == "" || n.File == sh.File {
+				fileNotes = append(fileNotes, n)
+			}
+		}
 		rows = append(rows, Row{Kind: RowFile, File: sh.File, Text: sh.File})
-		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File))...)
+		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File), fileNotes)...)
 	}
 	return rows, nil
 }
@@ -70,29 +89,42 @@ func removalAnchor(h diff.Hunk) int {
 	return h.NewStart
 }
 
-func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int]bool) []Row {
+func hunkBefore(h diff.Hunk, n int) bool {
+	if h.NewLines == 0 {
+		return h.NewStart < n
+	}
+	return h.NewStart+h.NewLines-1 < n
+}
+
+func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int]bool, notes []Note) []Row {
 	added := map[int]bool{}
-	removed := map[int][]string{}
+	removed := map[int][]Row{}
 	hunkStart := map[int]bool{}
 	for _, h := range fd.Hunks {
 		anchor := removalAnchor(h)
 		hunkStart[anchor] = true
-		n := h.NewStart
+		n, old := h.NewStart, h.OldStart
 		for _, l := range h.Lines {
 			if l.Kind == '+' {
 				added[n] = true
 				n++
-			} else {
-				removed[anchor] = append(removed[anchor], expandTabs(l.Text))
+				continue
 			}
+			removed[anchor] = append(removed[anchor], Row{Kind: RowRemoved, File: fd.Path, OldLine: old, Text: expandTabs(l.Text)})
+			old++
 		}
+	}
+	notesAt := map[int][]Note{}
+	for _, n := range notes {
+		notesAt[n.Line] = append(notesAt[n.Line], n)
 	}
 
 	var rows []Row
 	if len(lines) == 0 {
 		for _, n := range slices.Sorted(maps.Keys(removed)) {
-			for i, t := range removed[n] {
-				rows = append(rows, Row{Kind: RowRemoved, File: fd.Path, Line: 1, Text: t, HunkStart: i == 0})
+			for i, r := range removed[n] {
+				r.Line, r.HunkStart = 1, i == 0
+				rows = append(rows, r)
 			}
 		}
 		return rows
@@ -101,10 +133,24 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 	var windows [][2]int
 	if start > 0 {
 		windows = [][2]int{{start - context, end + context}}
+		for _, n := range notes {
+			if n.Focus && n.Line > 0 {
+				windows = append(windows, [2]int{n.Line - context, n.Line + context})
+			}
+		}
 	} else {
 		for _, h := range fd.Hunks {
 			windows = append(windows, [2]int{h.NewStart - context, h.NewEnd() + context})
 		}
+	}
+	oldLine := func(n int) int {
+		delta := 0
+		for _, h := range fd.Hunks {
+			if hunkBefore(h, n) {
+				delta += h.NewLines - h.OldLines
+			}
+		}
+		return n - delta
 	}
 	for i, w := range mergeWindows(windows, len(lines)) {
 		if i > 0 {
@@ -112,18 +158,24 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 		}
 		for n := w[0]; n <= w[1]+1; n++ {
 			first := hunkStart[n]
-			for _, t := range removed[n] {
-				rows = append(rows, Row{Kind: RowRemoved, File: fd.Path, Line: min(n, len(lines)), Text: t, HunkStart: first})
+			for _, r := range removed[n] {
+				r.Line, r.HunkStart = min(n, len(lines)), first
+				rows = append(rows, r)
 				first = false
 			}
 			if n > w[1] {
 				break
 			}
-			kind := RowCode
+			row := Row{Kind: RowCode, File: fd.Path, Line: n, Text: lines[n-1], Hotspot: hot[n], HunkStart: first}
 			if added[n] {
-				kind = RowAdded
+				row.Kind = RowAdded
+			} else {
+				row.OldLine = oldLine(n)
 			}
-			rows = append(rows, Row{Kind: kind, File: fd.Path, Line: n, Text: lines[n-1], Hotspot: hot[n], HunkStart: first})
+			rows = append(rows, row)
+			for _, note := range notesAt[n] {
+				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, Dim: note.Dim})
+			}
 		}
 	}
 	return rows

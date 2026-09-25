@@ -56,7 +56,7 @@ func TestBuildRowsWholeFile(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(20)},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1)
+	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 		Hunks:    []state.StepHunk{{File: "a.go", Lines: "5-6"}},
 		Hotspots: []state.Hotspot{{Cat: "money", Q: "?", Line: 6}},
 	}
-	rows, err := BuildRows(src, st, 0)
+	rows, err := BuildRows(src, st, 0, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestBuildRowsDeletedFile(t *testing.T) {
 		}}},
 		lines: map[string][]string{},
 	}
-	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "gone.go"}}}, 3)
+	rows, err := BuildRows(src, state.Step{Hunks: []state.StepHunk{{File: "gone.go"}}}, 3, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,5 +104,46 @@ func TestBuildRowsDeletedFile(t *testing.T) {
 	}
 	if !reflect.DeepEqual(kinds, []RowKind{RowFile, RowRemoved, RowRemoved}) || !rows[1].HunkStart {
 		t.Fatalf("rows: %s", summary(rows))
+	}
+}
+
+func TestBuildRowsNotesAndOldLines(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 2, Lines: []diff.Line{{Kind: '-', Text: "old2"}, {Kind: '+', Text: "L2"}, {Kind: '+', Text: "L3"}}},
+			{OldStart: 20, OldLines: 0, NewStart: 21, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L21"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(30)},
+	}
+	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "2-3"}}}
+	notes := []Note{
+		{File: "a.go", Line: 3, Kind: "note", Text: "retry wrapper", Focus: true},
+		{File: "a.go", Line: 21, Kind: "spec", Text: "spec says 409", Focus: true},
+		{File: "a.go", Line: 28, Kind: "mr", Text: "@alice: far away"},
+	}
+	rows, err := BuildRows(src, st, 1, notes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range rows {
+		got = append(got, fmt.Sprintf("%d/%d %d %s", r.OldLine, r.Line, r.Kind, r.Text))
+	}
+	want := []string{
+		fmt.Sprintf("0/0 %d a.go", RowFile),
+		fmt.Sprintf("1/1 %d L1", RowCode),
+		fmt.Sprintf("2/2 %d old2", RowRemoved),
+		fmt.Sprintf("0/2 %d L2", RowAdded),
+		fmt.Sprintf("0/3 %d L3", RowAdded),
+		fmt.Sprintf("0/3 %d retry wrapper", RowNote),
+		fmt.Sprintf("3/4 %d L4", RowCode),
+		fmt.Sprintf("0/0 %d ⋯", RowGap),
+		fmt.Sprintf("19/20 %d L20", RowCode),
+		fmt.Sprintf("0/21 %d L21", RowAdded),
+		fmt.Sprintf("0/21 %d spec says 409", RowNote),
+		fmt.Sprintf("20/22 %d L22", RowCode),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

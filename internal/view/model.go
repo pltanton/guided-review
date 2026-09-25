@@ -85,7 +85,7 @@ func (m *model) rebuild(jumpToHunk bool) {
 	if m.cursor < len(m.rows) {
 		keep = m.rows[m.cursor]
 	}
-	rows, err := BuildRows(m.src, *m.step, m.context)
+	rows, err := BuildRows(m.src, *m.step, m.context, nil)
 	if err != nil {
 		m.err = err
 		return

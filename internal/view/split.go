@@ -1,0 +1,59 @@
+package view
+
+type Cell struct {
+	Line int
+	Text string
+	Kind RowKind
+}
+
+type SplitRow struct {
+	Left, Right Cell
+	Full        *Row
+	File        string
+	Line        int
+	HunkStart   bool
+	Hotspot     bool
+}
+
+func pairRows(rows []Row) []SplitRow {
+	var out []SplitRow
+	for i := 0; i < len(rows); {
+		r := rows[i]
+		switch r.Kind {
+		case RowCode:
+			out = append(out, SplitRow{
+				Left:  Cell{Line: r.OldLine, Text: r.Text, Kind: RowCode},
+				Right: Cell{Line: r.Line, Text: r.Text, Kind: RowCode},
+				File:  r.File, Line: r.Line, HunkStart: r.HunkStart, Hotspot: r.Hotspot,
+			})
+			i++
+		case RowRemoved, RowAdded:
+			j := i
+			for j < len(rows) && rows[j].Kind == RowRemoved {
+				j++
+			}
+			k := j
+			for k < len(rows) && rows[k].Kind == RowAdded && (k == j || !rows[k].HunkStart) {
+				k++
+			}
+			rem, add := rows[i:j], rows[j:k]
+			for n := range max(len(rem), len(add)) {
+				sr := SplitRow{File: r.File, HunkStart: n == 0 && r.HunkStart}
+				if n < len(rem) {
+					sr.Left = Cell{Line: rem[n].OldLine, Text: rem[n].Text, Kind: RowRemoved}
+					sr.Line = rem[n].Line
+				}
+				if n < len(add) {
+					sr.Right = Cell{Line: add[n].Line, Text: add[n].Text, Kind: RowAdded}
+					sr.Line, sr.Hotspot = add[n].Line, add[n].Hotspot
+				}
+				out = append(out, sr)
+			}
+			i = k
+		default:
+			out = append(out, SplitRow{Full: &rows[i]})
+			i++
+		}
+	}
+	return out
+}
