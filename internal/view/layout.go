@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -232,7 +233,9 @@ func (m *model) View() string {
 	pw := m.planWidth()
 	var plan []string
 	if pw > 0 {
-		plan = m.planLines(bodyH, pw)
+		for _, e := range m.sidebar(bodyH, pw) {
+			plan = append(plan, e.text)
+		}
 	}
 	out := make([]string, 0, m.height)
 	for i, line := range main {
@@ -256,19 +259,29 @@ func fit(s string, w int) string {
 	return s
 }
 
-func (m *model) planOffset() int {
-	bodyH := max(m.height-len(m.bottomLines()), 1)
-	idx := m.review.StepIndex(m.review.Current)
-	return max(0, idx-(bodyH-2))
+type sideEntry struct {
+	text string
+	step string
+	file string
 }
 
-func (m *model) planLines(h, w int) []string {
+func (m *model) planRows(h int) int {
+	return min(len(m.review.Steps)+1, max(h/2, 2))
+}
+
+func (m *model) sidebar(h, w int) []sideEntry {
 	title := "plan"
 	if m.review.Round > 1 {
 		title += fmt.Sprintf(" · round %d", m.review.Round)
 	}
-	lines := []string{boldStyle.Render(title)}
-	for _, st := range m.review.Steps[m.planOffset():] {
+	rows := m.planRows(h)
+	idx := m.review.StepIndex(m.review.Current)
+	offset := max(0, idx-(rows-2))
+	out := []sideEntry{{text: boldStyle.Render(title)}}
+	for _, st := range m.review.Steps[offset:] {
+		if len(out) >= rows {
+			break
+		}
 		glyph := statusGlyph[st.Status]
 		style := dimStyle
 		if st.Status == state.StatusPending {
@@ -281,12 +294,45 @@ func (m *model) planLines(h, w int) []string {
 		if len(st.Hotspots) > 0 {
 			line += " ⚑"
 		}
-		lines = append(lines, style.Render(ansi.Truncate(line, w-1, "…")))
+		out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), step: st.ID})
 	}
-	for len(lines) < h {
-		lines = append(lines, "")
+	for len(out) < rows {
+		out = append(out, sideEntry{})
 	}
-	return lines[:h]
+
+	files := m.stepFiles()
+	if len(files) > 0 {
+		out = append(out, sideEntry{}, sideEntry{text: boldStyle.Render("files")})
+		current := m.current().File
+		prevDir := ""
+		for i, f := range files {
+			dir, base := path.Dir(f), path.Base(f)
+			indent := ""
+			if dir != "." {
+				if dir != prevDir {
+					out = append(out, sideEntry{text: dimStyle.Render(ansi.Truncate(dir+"/", w-1, "…"))})
+				}
+				indent = "  "
+			}
+			prevDir = dir
+			line := indent + base
+			if rf := m.review.File(f); rf != nil {
+				line += dimStyle.Render(fmt.Sprintf(" +%d -%d", rf.Added, rf.Deleted))
+			}
+			style := lipgloss.NewStyle()
+			switch {
+			case m.focusFiles && i == m.fileCursor:
+				line, style = "▶ "+line, cursorStyle
+			case !m.focusFiles && f == current:
+				style = cursorStyle
+			}
+			out = append(out, sideEntry{text: style.Render(ansi.Truncate(line, w-1, "…")), file: f})
+		}
+	}
+	for len(out) < h {
+		out = append(out, sideEntry{})
+	}
+	return out[:h]
 }
 
 func (m *model) gutter(i int) string {

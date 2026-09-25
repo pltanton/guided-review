@@ -327,3 +327,56 @@ func TestPendingRequests(t *testing.T) {
 		t.Fatalf("stale thinking line: %q", last)
 	}
 }
+
+func twoFileModel(t *testing.T) (*model, *[]inbox.Event) {
+	m, sent := newTestModel(t)
+	m.rows = append(testRows(),
+		Row{Kind: RowFile, File: "api/b.go", Text: "api/b.go"},
+		Row{Kind: RowAdded, File: "api/b.go", Line: 4, Text: "b := 4", HunkStart: true},
+		Row{Kind: RowFile, File: "api/c.go", Text: "api/c.go"},
+		Row{Kind: RowAdded, File: "api/c.go", Line: 7, Text: "c := 7", HunkStart: true},
+	)
+	m.relist()
+	return m, sent
+}
+
+func TestFilesPanel(t *testing.T) {
+	m, _ := twoFileModel(t)
+	if got := m.stepFiles(); !reflect.DeepEqual(got, []string{"a.go", "api/b.go", "api/c.go"}) {
+		t.Fatalf("stepFiles = %v", got)
+	}
+	m.Update(key("}"))
+	if it := m.current(); it.File != "api/b.go" {
+		t.Fatalf("} → %+v", it)
+	}
+	m.Update(key("}"))
+	m.Update(key("{"))
+	if it := m.current(); it.File != "api/b.go" {
+		t.Fatalf("{ → %+v", it)
+	}
+	m.Update(key("f"))
+	if !m.focusFiles {
+		t.Fatal("f must focus the files panel")
+	}
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if m.focusFiles || m.current().File != "api/c.go" {
+		t.Fatalf("enter in files panel: focus %v item %+v", m.focusFiles, m.current())
+	}
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"files", "api/", "b.go", "c.go"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("view lacks %q:\n%s", want, out)
+		}
+	}
+	y := strings.Split(out, "\n")
+	for i, line := range y {
+		if strings.Contains(line, "  a.go") || strings.HasPrefix(strings.TrimSpace(line), "a.go") {
+			m.Update(tea.MouseMsg{X: 3, Y: i, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+			break
+		}
+	}
+	if m.current().File != "a.go" {
+		t.Fatalf("click on a.go → %+v", m.current())
+	}
+}

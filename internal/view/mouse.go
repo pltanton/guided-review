@@ -24,9 +24,15 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 			return nil
 		}
-		if msg.X < m.planWidth() {
-			if id := m.planStepAt(msg.Y); id != "" {
-				m.emit(inbox.Event{Kind: inbox.KindGoto, Step: id})
+		if pw := m.planWidth(); msg.X < pw {
+			side := m.sidebar(max(m.height-len(m.bottomLines()), 1), pw)
+			if msg.Y < len(side) {
+				switch e := side[msg.Y]; {
+				case e.step != "":
+					m.emit(inbox.Event{Kind: inbox.KindGoto, Step: e.step})
+				case e.file != "":
+					m.jumpToFile(e.file)
+				}
 			}
 			return nil
 		}
@@ -60,12 +66,4 @@ func (m *model) rowAt(y int) (int, bool) {
 	}
 	i := m.offset + y - hdr
 	return i, i < len(m.list)
-}
-
-func (m *model) planStepAt(y int) string {
-	i := m.planOffset() + y - 1
-	if y < 1 || i >= len(m.review.Steps) {
-		return ""
-	}
-	return m.review.Steps[i].ID
 }

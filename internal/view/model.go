@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type item struct {
 	Line      int
 	HunkStart bool
 	Note      bool
+	FileHead  bool
 }
 
 type model struct {
@@ -64,6 +66,9 @@ type model struct {
 	splitView, showPlan, mouse bool
 	visual, dragging           bool
 	anchor                     int
+
+	focusFiles bool
+	fileCursor int
 
 	composing   bool
 	composeKind string
@@ -203,14 +208,14 @@ func (m *model) relist() {
 	if m.useSplit() {
 		for _, r := range m.split {
 			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead})
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile})
 				continue
 			}
 			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
 		}
 	} else {
 		for _, r := range m.disp {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead})
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile})
 		}
 	}
 	if keep.File != "" {
@@ -318,9 +323,64 @@ func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+func (m *model) stepFiles() []string {
+	var out []string
+	for _, it := range m.list {
+		if it.FileHead && (len(out) == 0 || out[len(out)-1] != it.File) {
+			out = append(out, it.File)
+		}
+	}
+	return out
+}
+
+func (m *model) jumpToFile(file string) {
+	for i, it := range m.list {
+		if it.FileHead && it.File == file {
+			m.cursor, m.offset = i, i
+			m.clamp()
+			return
+		}
+	}
+}
+
+func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
+	files := m.stepFiles()
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return tea.Quit
+	case "j", "down":
+		m.fileCursor = min(m.fileCursor+1, len(files)-1)
+	case "k", "up":
+		m.fileCursor = max(m.fileCursor-1, 0)
+	case "enter":
+		if m.fileCursor < len(files) {
+			m.jumpToFile(files[m.fileCursor])
+		}
+		m.focusFiles = false
+	case "esc", "f":
+		m.focusFiles = false
+	}
+	return nil
+}
+
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status = ""
+	if m.focusFiles {
+		return m.handleFilesKey(msg)
+	}
 	switch msg.String() {
+	case "f":
+		files := m.stepFiles()
+		if len(files) == 0 {
+			return nil
+		}
+		m.showPlan, m.focusFiles = true, true
+		m.fileCursor = max(0, slices.Index(files, m.current().File))
+		m.relist()
+	case "}":
+		m.jump(1, func(it item) bool { return it.FileHead })
+	case "{":
+		m.jump(-1, func(it item) bool { return it.FileHead })
 	case "q", "ctrl+c":
 		return tea.Quit
 	case "j", "down":
