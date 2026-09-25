@@ -300,3 +300,30 @@ func TestButtons(t *testing.T) {
 		t.Fatal("click on написать must open the input")
 	}
 }
+
+func TestPendingRequests(t *testing.T) {
+	m, _ := newTestModel(t)
+	t0 := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	m.src = nil
+	m.lastWait = t0
+	m.events = []inbox.Event{
+		{Time: t0.Add(-time.Minute), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "1"},
+		{Time: t0.Add(time.Second), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "3"},
+		{Time: t0.Add(2 * time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"},
+	}
+	notes := m.pendingNotes()
+	if len(notes) != 1 || notes[0].Line != 3 || notes[0].Kind != "pending" {
+		t.Fatalf("pending notes: %+v", notes)
+	}
+	chat := m.conversation()
+	if last := ansi.Strip(chat[len(chat)-1].text); !strings.HasPrefix(last, "claude: ") || !strings.Contains(last, "думает") {
+		t.Fatalf("last chat line: %q", last)
+	}
+	m.lastWait = t0.Add(time.Minute)
+	if len(m.pendingNotes()) != 0 {
+		t.Fatal("requests answered after the agent waited again")
+	}
+	if last := ansi.Strip(m.conversation()[len(m.conversation())-1].text); strings.Contains(last, "думает") {
+		t.Fatalf("stale thinking line: %q", last)
+	}
+}

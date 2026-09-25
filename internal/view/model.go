@@ -76,6 +76,7 @@ type model struct {
 	now          func() time.Time
 	agentWaiting bool
 	agentSince   time.Time
+	lastWait     time.Time
 	frame        int
 }
 
@@ -101,6 +102,7 @@ func (m *model) reload() {
 		m.src = newGitSource(m.ctx, m.repo, r.DiffBase(), r.HeadSHA)
 	}
 	m.events, _ = inbox.All(m.store.ReviewDir(r.ID))
+	m.lastWait, _ = inbox.LastWait(m.store.ReviewDir(r.ID))
 	prev := ""
 	if m.step != nil {
 		prev = m.step.ID
@@ -154,12 +156,37 @@ func (m *model) notes() []Note {
 		}
 		out = append(out, Note{File: c.File, Line: start, Kind: "comment", Label: string(c.Severity), Text: c.Body, Dim: c.Resolved})
 	}
+	out = append(out, m.pendingNotes()...)
 	for _, d := range m.review.Discussions {
 		if d.File == "" || d.OldLine {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
 		out = append(out, Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body, Dim: d.Resolved})
+	}
+	return out
+}
+
+func (m *model) pending(e inbox.Event) bool {
+	if m.step == nil && e.Step != "" || m.step != nil && e.Step != m.step.ID {
+		return false
+	}
+	switch e.Kind {
+	case inbox.KindMessage, inbox.KindExplain, inbox.KindSkip:
+		return e.Time.After(m.lastWait)
+	}
+	return false
+}
+
+func (m *model) pendingNotes() []Note {
+	var out []Note
+	for _, e := range m.events {
+		if e.Kind != inbox.KindExplain || !m.pending(e) {
+			continue
+		}
+		if start, _, err := state.ParseLines(e.Lines); err == nil && start > 0 {
+			out = append(out, Note{File: e.File, Line: start, Kind: "pending", Text: "агент поясняет…", Focus: true})
+		}
 	}
 	return out
 }
@@ -234,6 +261,12 @@ func (m *model) clock() time.Time {
 func (m *model) refreshAgent() {
 	if m.review == nil {
 		return
+	}
+	if lw, ok := inbox.LastWait(m.store.ReviewDir(m.review.ID)); ok && !lw.Equal(m.lastWait) {
+		m.lastWait = lw
+		if m.step != nil && m.src != nil {
+			m.rebuild(false)
+		}
 	}
 	if since, ok := inbox.WaitingSince(m.store.ReviewDir(m.review.ID)); ok {
 		m.agentWaiting, m.agentSince = true, since

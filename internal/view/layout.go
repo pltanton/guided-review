@@ -41,11 +41,13 @@ type button struct {
 	press      func(*model)
 }
 
-var buttons = []button{
-	{"✓ дальше", "space", func(m *model) { m.emit(inbox.Event{Kind: inbox.KindNext}) }},
-	{"✎ написать", "c", func(m *model) { m.startCompose(inbox.KindMessage) }},
-	{"? поясни", "?", func(m *model) { m.explain() }},
-	{"↷ пропустить", "S", func(m *model) { m.startCompose(inbox.KindSkip) }},
+func footerButtons() []button {
+	return []button{
+		{"✓ дальше", "space", func(m *model) { m.emit(inbox.Event{Kind: inbox.KindNext}) }},
+		{"✎ написать", "c", func(m *model) { m.startCompose(inbox.KindMessage) }},
+		{"? поясни", "?", func(m *model) { m.explain() }},
+		{"↷ пропустить", "S", func(m *model) { m.startCompose(inbox.KindSkip) }},
+	}
 }
 
 type span struct {
@@ -67,7 +69,7 @@ func (m *model) footer() (string, []span) {
 	}
 	x := ansi.StringWidth(line)
 	var spans []span
-	for _, b := range buttons {
+	for _, b := range footerButtons() {
 		text := " " + b.label + " · " + b.key + " "
 		w := ansi.StringWidth(text)
 		spans = append(spans, span{x, x + w, b})
@@ -152,6 +154,12 @@ func (m *model) conversation() []chatLine {
 		out = append(out, chatLine{e.Time, dimStyle.Render("you: ") + text})
 	}
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
+	for _, e := range m.events {
+		if m.pending(e) {
+			out = append(out, chatLine{e.Time, agentStyle.Render("claude: ") + hotStyle.Render(string(spinner[m.frame%len(spinner)])+" думает…")})
+			break
+		}
+	}
 	return out
 }
 
@@ -295,7 +303,7 @@ func (m *model) renderRow(i, w int) string {
 	if m.useSplit() {
 		return m.renderSplit(i, w)
 	}
-	return m.gutter(i) + renderUnified(m.disp[i])
+	return m.gutter(i) + renderUnified(m.animate(m.disp[i]))
 }
 
 func renderUnified(r Row) string {
@@ -322,11 +330,11 @@ func renderUnified(r Row) string {
 
 const noteIndent = 1 + 7 + 2
 
-var noteColors = map[string]string{"note": "6", "spec": "1", "hotspot": "3", "comment": "5", "mr": "4"}
+var noteColors = map[string]string{"note": "6", "spec": "1", "hotspot": "3", "comment": "5", "mr": "4", "pending": "3"}
 
 func noteBadge(kind, label string) string {
 	if label == "" {
-		label = map[string]string{"note": "NOTE", "spec": "SPEC", "hotspot": "RISK", "comment": "YOU", "mr": "MR"}[kind]
+		label = map[string]string{"note": "NOTE", "spec": "SPEC", "hotspot": "RISK", "comment": "YOU", "mr": "MR", "pending": "…"}[kind]
 	}
 	return " " + label + " "
 }
@@ -372,7 +380,7 @@ func renderNote(r Row) string {
 func (m *model) renderSplit(i, w int) string {
 	r := m.split[i]
 	if r.Full != nil {
-		return m.gutter(i) + renderUnified(*r.Full)
+		return m.gutter(i) + renderUnified(m.animate(*r.Full))
 	}
 	side := (w - 2) / 2
 	left := renderCell(r.Left, side, false)
@@ -434,4 +442,11 @@ func (m *model) agentStatus() string {
 		text += " · " + m.clock().Sub(m.agentSince).Round(time.Second).String()
 	}
 	return hotStyle.Render(string(spinner[m.frame%len(spinner)]) + " " + text)
+}
+
+func (m *model) animate(r Row) Row {
+	if r.Kind == RowNote && r.NoteKind == "pending" && r.NoteHead {
+		r.NoteLabel = string(spinner[m.frame%len(spinner)])
+	}
+	return r
 }

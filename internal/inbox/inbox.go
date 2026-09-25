@@ -21,9 +21,10 @@ const (
 	KindSkip    = "skip"
 	KindGoto    = "goto"
 
-	FileName    = "inbox.jsonl"
-	offsetFile  = "inbox.offset"
-	waitingFile = "waiting"
+	FileName     = "inbox.jsonl"
+	offsetFile   = "inbox.offset"
+	waitingFile  = "waiting"
+	lastWaitFile = "last-wait"
 )
 
 type Event struct {
@@ -80,7 +81,11 @@ func Wait(ctx context.Context, dir string, timeout, poll time.Duration) ([]Event
 		return nil, err
 	}
 	marker := filepath.Join(dir, waitingFile)
-	if err := os.WriteFile(marker, []byte(time.Now().Format(time.RFC3339Nano)), 0o644); err != nil {
+	stamp := []byte(time.Now().Format(time.RFC3339Nano))
+	if err := os.WriteFile(filepath.Join(dir, lastWaitFile), stamp, 0o644); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(marker, stamp, 0o644); err != nil {
 		return nil, err
 	}
 	defer os.Remove(marker)
@@ -150,7 +155,15 @@ func writeOffset(dir string, offset int64) error {
 }
 
 func WaitingSince(dir string) (time.Time, bool) {
-	data, err := os.ReadFile(filepath.Join(dir, waitingFile))
+	return readStamp(filepath.Join(dir, waitingFile))
+}
+
+func LastWait(dir string) (time.Time, bool) {
+	return readStamp(filepath.Join(dir, lastWaitFile))
+}
+
+func readStamp(path string) (time.Time, bool) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return time.Time{}, false
 	}

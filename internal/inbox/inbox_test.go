@@ -90,3 +90,16 @@ func TestWaitingMarker(t *testing.T) {
 		t.Fatal("marker must be removed after Wait returns")
 	}
 }
+
+func TestLastWait(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := inbox.LastWait(dir); ok {
+		t.Fatal("no last wait yet")
+	}
+	before := time.Now()
+	_, _ = inbox.Wait(context.Background(), dir, 10*time.Millisecond, 5*time.Millisecond)
+	at, ok := inbox.LastWait(dir)
+	if !ok || at.Before(before) {
+		t.Fatalf("LastWait = %v, %v", at, ok)
+	}
+}

@@ -69,6 +69,9 @@ func (m *model) emit(e inbox.Event) {
 	if m.review != nil && m.store.Dir != "" {
 		m.events, _ = inbox.All(m.store.ReviewDir(m.review.ID))
 	}
+	if m.step != nil && m.src != nil {
+		m.rebuild(false)
+	}
 }
 
 func (m *model) selection() (file, lines string, ok bool) {
