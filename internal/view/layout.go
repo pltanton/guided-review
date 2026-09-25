@@ -32,7 +32,7 @@ var (
 
 const (
 	hints     = "c message  v select  n note  s split  p plan  e editor  a agent  q quit"
-	moreHints = "v select  n note  E edit comment  o fold  O all  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
+	moreHints = "v select  n note  E edit comment  o open  O all removed  d diff  H/L step  f files  {/} file  s split  p plan  e editor  a agent  q quit"
 )
 
 var buttonStyle = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
@@ -92,7 +92,7 @@ func (m *model) mainWidth() int {
 }
 
 func (m *model) bodyHeight() int {
-	return max(m.height-len(m.bottomLines())-len(m.header()), 1)
+	return max(m.height-len(m.bottomLines())-len(m.header())-1, 1)
 }
 
 func (m *model) header() []string {
@@ -104,7 +104,7 @@ func (m *model) header() []string {
 		return []string{
 			boldStyle.Render(fmt.Sprintf("%s · %d files", st.Title, len(st.Hunks))),
 			hotStyle.Render(fmt.Sprintf("outside the plan · current is %s — esc to return", m.review.Current)),
-			dimStyle.Render(strings.Repeat("─", max(m.mainWidth(), 1))),
+			m.separator(),
 		}
 	}
 	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, m.review.StepIndex(st.ID)+1, len(m.review.Steps), st.Kind, st.Title)
@@ -129,7 +129,16 @@ func (m *model) header() []string {
 	if st.MayChange {
 		lines = append(lines, delStyle.Render("may change after earlier comments"))
 	}
-	return append(lines, dimStyle.Render(strings.Repeat("─", max(m.mainWidth(), 1))))
+	return append(lines, m.separator())
+}
+
+func (m *model) separator() string {
+	w := max(m.mainWidth(), 1)
+	if m.offset == 0 {
+		return dimStyle.Render(strings.Repeat("─", w))
+	}
+	label := fmt.Sprintf("── ↑ %d lines above ", m.offset)
+	return dimStyle.Render(label + strings.Repeat("─", max(w-ansi.StringWidth(label), 0)))
 }
 
 type chatLine struct {
@@ -237,11 +246,16 @@ func (m *model) View() string {
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
 
+	body := m.bodyHeight()
+	below := ""
+	if rest := len(m.list) - (m.offset + body); rest > 0 {
+		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
+	}
 	main := m.header()
 	if m.loading != "" {
 		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
 	}
-	for i := m.offset; len(main) < bodyH; i++ {
+	for i := m.offset; len(main) < bodyH-1; i++ {
 		if i >= len(m.list) {
 			main = append(main, "")
 			continue
@@ -255,7 +269,7 @@ func (m *model) View() string {
 		}
 		main = append(main, line)
 	}
-	main = main[:bodyH]
+	main = append(main[:min(len(main), bodyH-1)], below)
 
 	pw := m.planWidth()
 	var plan []string
@@ -388,7 +402,10 @@ func renderUnified(r Row) string {
 	case RowFile:
 		return fileStyle.Render(r.Text)
 	case RowGap:
-		return dimStyle.Render("      ⋯")
+		if r.GapTo == 0 {
+			return dimStyle.Render("      ⋯")
+		}
+		return gapStyle.Render(fmt.Sprintf("      ⋯ %d hidden lines (%d–%d)", r.GapTo-r.GapFrom+1, r.GapFrom, r.GapTo)) + dimStyle.Render("  · o to show")
 	case RowNote:
 		return renderNote(r)
 	case RowFold:
@@ -426,6 +443,7 @@ const (
 
 var (
 	foldStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
+	gapStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
 	addEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("22")).Bold(true)
 	delEmphStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("15")).Background(lipgloss.Color("52")).Bold(true)
 )

@@ -479,7 +479,7 @@ func TestFoldKeys(t *testing.T) {
 func TestDiffRendering(t *testing.T) {
 	m := foldModel(t)
 	out := ansi.Strip(m.View())
-	for _, want := range []string{"▸ 3 lines removed", "x := compute(a, c)", "↕", "moved()"} {
+	for _, want := range []string{"▸ 3 removed lines hidden", "x := compute(a, c)", "↕", "moved()"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
@@ -582,5 +582,30 @@ func TestExtraViews(t *testing.T) {
 	m.Update(key("esc"))
 	if m.step.ID != "s1" {
 		t.Fatalf("esc must return to the current step, got %s", m.step.ID)
+	}
+}
+
+func TestOpenFeedbackAndScrollHints(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.cursor = 1
+	m.Update(key("o"))
+	if !strings.Contains(m.status, "nothing to open here") {
+		t.Fatalf("o without a target: status %q", m.status)
+	}
+	m.Update(key("O"))
+	if !strings.Contains(m.status, "no removed lines are folded") {
+		t.Fatalf("O without folds: status %q", m.status)
+	}
+	m.height = 8
+	m.cursor, m.offset = 0, 0
+	m.clamp()
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "more lines below") {
+		t.Fatalf("missing below hint:\n%s", out)
+	}
+	m.Update(key("G"))
+	out = ansi.Strip(m.View())
+	if !strings.Contains(out, "lines above") {
+		t.Fatalf("missing above hint:\n%s", out)
 	}
 }

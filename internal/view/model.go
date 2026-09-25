@@ -55,6 +55,7 @@ type item struct {
 	FileHead  bool
 	Fold      string
 	Ref       int
+	Gap       [2]int
 }
 
 type model struct {
@@ -86,6 +87,7 @@ type model struct {
 	unfolded    map[string]bool
 	algo        string
 	loading     string
+	reveal      map[string][][2]int
 
 	composing   bool
 	composeKind string
@@ -151,13 +153,13 @@ func (m *model) reload() {
 	}
 	changed := m.step.ID != prev
 	if changed {
-		m.context, m.cursor, m.offset, m.visual = defaultContext, 0, 0, false
+		m.context, m.cursor, m.offset, m.visual, m.reveal = defaultContext, 0, 0, false, nil
 	}
 	m.rebuild(changed)
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	rows, err := BuildRows(m.src, *m.step, m.context, m.notes())
+	rows, err := BuildRowsWith(m.src, *m.step, m.context, m.notes(), m.reveal)
 	if err != nil {
 		m.err = err
 		return
@@ -243,14 +245,14 @@ func (m *model) relist() {
 	if m.useSplit() {
 		for _, r := range m.split {
 			if r.Full != nil {
-				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey, Ref: r.Full.Ref})
+				m.list = append(m.list, item{File: r.Full.File, Line: r.Full.Line, HunkStart: r.Full.HunkStart, Note: r.Full.NoteHead, FileHead: r.Full.Kind == RowFile, Fold: r.Full.FoldKey, Ref: r.Full.Ref, Gap: [2]int{r.Full.GapFrom, r.Full.GapTo}})
 				continue
 			}
 			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart})
 		}
 	} else {
 		for _, r := range m.disp {
-			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey, Ref: r.Ref})
+			m.list = append(m.list, item{File: r.File, Line: r.Line, HunkStart: r.HunkStart, Note: r.NoteHead, FileHead: r.Kind == RowFile, Fold: r.FoldKey, Ref: r.Ref, Gap: [2]int{r.GapFrom, r.GapTo}})
 		}
 	}
 	if keep.File != "" {
@@ -389,9 +391,38 @@ func (m *model) jumpToFile(file string) {
 	}
 }
 
+func (m *model) hasFolds() bool {
+	for _, r := range m.disp {
+		if r.Kind == RowFold {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *model) toggleFold() {
-	key := m.current().Fold
+	cur := m.current()
+	if cur.Gap[1] > 0 {
+		if m.reveal == nil {
+			m.reveal = map[string][][2]int{}
+		}
+		m.reveal[cur.File] = append(m.reveal[cur.File], cur.Gap)
+		m.status = fmt.Sprintf("showing lines %d–%d", cur.Gap[0], cur.Gap[1])
+		if m.src != nil {
+			m.rebuild(false)
+		}
+		for i, it := range m.list {
+			if it.File == cur.File && it.Line == cur.Gap[0] {
+				m.cursor = i
+				break
+			}
+		}
+		m.clamp()
+		return
+	}
+	key := cur.Fold
 	if key == "" {
+		m.status = "nothing to open here: o opens ⋯ hidden lines and ▸ folded removed blocks"
 		return
 	}
 	if m.unfolded == nil {
@@ -481,7 +512,7 @@ func (m *model) showStep(id string) tea.Cmd {
 		m.viewStep = ""
 	}
 	m.step = st
-	m.visual, m.cursor, m.offset, m.context = false, 0, 0, defaultContext
+	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, defaultContext, nil
 	if m.src == nil {
 		return nil
 	}
@@ -494,7 +525,7 @@ func (m *model) showStep(id string) tea.Cmd {
 	m.relist()
 	src, step, context, notes := m.src, *st, m.context, m.notes()
 	return func() tea.Msg {
-		rows, err := BuildRows(src, step, context, notes)
+		rows, err := BuildRowsWith(src, step, context, notes, nil)
 		return rowsMsg{step: step.ID, rows: rows, err: err}
 	}
 }
@@ -564,8 +595,16 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case "o":
 		m.toggleFold()
 	case "O":
+		if !m.showRemoved && !m.hasFolds() {
+			m.status = "no removed lines are folded in this step"
+			return nil
+		}
 		m.showRemoved = !m.showRemoved
 		m.relist()
+		m.status = "folding large removed blocks"
+		if m.showRemoved {
+			m.status = "showing every removed line"
+		}
 	case "}":
 		m.jump(1, func(it item) bool { return it.FileHead })
 	case "{":

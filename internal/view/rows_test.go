@@ -60,7 +60,7 @@ func TestBuildRowsWholeFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "F0:a.go\n 2:L2\n->3:old3\n+3:L3\n 4:L4\n~0:⋯\n 11:L11\n 12:L12\n->13:gone\n 13:L13\n"
+	want := "F0:a.go\n~0:⋯\n 2:L2\n->3:old3\n+3:L3\n 4:L4\n~0:⋯\n 11:L11\n 12:L12\n->13:gone\n 13:L13\n~0:⋯\n"
 	if got := summary(rows); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -81,7 +81,7 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "F0:a.go\n+>5:L5\n!6:L6\n"
+	want := "F0:a.go\n~0:⋯\n+>5:L5\n!6:L6\n~0:⋯\n"
 	if got := summary(rows); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
@@ -142,6 +142,7 @@ func TestBuildRowsNotesAndOldLines(t *testing.T) {
 		fmt.Sprintf("0/21 %d L21", RowAdded),
 		fmt.Sprintf("0/21 %d spec says 409", RowNote),
 		fmt.Sprintf("20/22 %d L22", RowCode),
+		fmt.Sprintf("0/0 %d ⋯", RowGap),
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
@@ -161,5 +162,35 @@ func TestWholeFileNoteOutsideHunks(t *testing.T) {
 	}
 	if !strings.Contains(summary(rows), "far note") {
 		t.Fatalf("note outside hunk windows is lost:\n%s", summary(rows))
+	}
+}
+
+func TestGapsAndReveal(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 30, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L30"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(40)},
+	}
+	st := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
+	rows, err := BuildRows(src, st, 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gaps [][2]int
+	for _, r := range rows {
+		if r.Kind == RowGap {
+			gaps = append(gaps, [2]int{r.GapFrom, r.GapTo})
+		}
+	}
+	if !reflect.DeepEqual(gaps, [][2]int{{1, 28}, {32, 40}}) {
+		t.Fatalf("gaps = %v", gaps)
+	}
+	rows, err = BuildRowsWith(src, st, 1, nil, map[string][][2]int{"a.go": {{1, 28}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows[1].Kind != RowCode || rows[1].Line != 1 {
+		t.Fatalf("revealed rows must start at line 1: %+v", rows[1])
 	}
 }

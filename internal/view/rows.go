@@ -44,6 +44,8 @@ type Row struct {
 	FoldCount int
 	FoldKey   string
 	Ref       int
+	GapFrom   int
+	GapTo     int
 }
 
 type Note struct {
@@ -63,6 +65,10 @@ type Source interface {
 }
 
 func BuildRows(src Source, st state.Step, context int, notes []Note) ([]Row, error) {
+	return BuildRowsWith(src, st, context, notes, nil)
+}
+
+func BuildRowsWith(src Source, st state.Step, context int, notes []Note, reveal map[string][][2]int) ([]Row, error) {
 	var rows []Row
 	for _, sh := range st.Hunks {
 		fd, err := src.FileDiff(sh.File)
@@ -84,7 +90,7 @@ func BuildRows(src Source, st state.Step, context int, notes []Note) ([]Row, err
 			}
 		}
 		rows = append(rows, Row{Kind: RowFile, File: sh.File, Text: sh.File})
-		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File), fileNotes)...)
+		rows = append(rows, fileRows(fd, lines, start, end, context, hotspotLines(st, sh.File), fileNotes, reveal[sh.File])...)
 	}
 	markIntraline(rows)
 	markMoved(rows)
@@ -115,7 +121,7 @@ func hunkBefore(h diff.Hunk, n int) bool {
 	return h.NewStart+h.NewLines-1 < n
 }
 
-func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int]bool, notes []Note) []Row {
+func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int]bool, notes []Note, reveal [][2]int) []Row {
 	added := map[int]bool{}
 	reformat := map[int]bool{}
 	removed := map[int][]Row{}
@@ -165,6 +171,7 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 			windows = append(windows, [2]int{n.Line - context, n.Line + context})
 		}
 	}
+	windows = append(windows, reveal...)
 	oldLine := func(n int) int {
 		delta := 0
 		for _, h := range fd.Hunks {
@@ -174,10 +181,15 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 		}
 		return n - delta
 	}
-	for i, w := range mergeWindows(windows, len(lines)) {
-		if i > 0 {
-			rows = append(rows, Row{Kind: RowGap, File: fd.Path, Text: "⋯"})
+	gap := func(from, to int) Row {
+		return Row{Kind: RowGap, File: fd.Path, Text: "⋯", GapFrom: from, GapTo: to}
+	}
+	prevEnd := 0
+	for _, w := range mergeWindows(windows, len(lines)) {
+		if w[0] > prevEnd+1 {
+			rows = append(rows, gap(prevEnd+1, w[0]-1))
 		}
+		prevEnd = w[1]
 		for n := w[0]; n <= w[1]+1; n++ {
 			first := hunkStart[n]
 			for _, r := range removed[n] {
@@ -199,6 +211,9 @@ func fileRows(fd diff.File, lines []string, start, end, context int, hot map[int
 				rows = append(rows, Row{Kind: RowNote, File: fd.Path, Line: n, Text: note.Text, NoteKind: note.Kind, NoteLabel: note.Label, Dim: note.Dim, Ref: note.Ref})
 			}
 		}
+	}
+	if prevEnd > 0 && prevEnd < len(lines) {
+		rows = append(rows, gap(prevEnd+1, len(lines)))
 	}
 	return rows
 }

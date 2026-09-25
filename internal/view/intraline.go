@@ -239,7 +239,7 @@ func foldRun(run []Row, unfolded map[string]bool) []Row {
 	if len(loose) < minFoldLines {
 		return run
 	}
-	f := fold(loose, fmt.Sprintf("▸ %d lines removed", len(loose)))
+	f := fold(loose, fmt.Sprintf("▸ %d removed lines hidden", len(loose)))
 	f.HunkStart = run[0].HunkStart
 	return append([]Row{f}, kept...)
 }
