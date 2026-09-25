@@ -56,8 +56,22 @@ func cmdSay(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	r.Messages = append(r.Messages, state.Message{Time: time.Now(), Step: r.Current, Text: text})
+	r.Progress = nil
 	if n := len(r.Messages); n > state.MaxMessages {
 		r.Messages = r.Messages[n-state.MaxMessages:]
 	}
+	return s.store.Save(r)
+}
+
+func cmdProgress(ctx context.Context, e env, args []string) error {
+	text := strings.TrimSpace(strings.Join(args, " "))
+	if text == "" {
+		return errors.New("usage: gr progress TEXT")
+	}
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	r.Progress = &state.Progress{Text: text, Time: time.Now()}
 	return s.store.Save(r)
 }

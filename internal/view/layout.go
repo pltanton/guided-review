@@ -38,7 +38,7 @@ var (
 	}
 )
 
-const hints = "c message  ? explain  > next  S skip  v select  n note  s split  p plan  e editor  q quit"
+const hints = "c message  ? explain  > next  S skip  v select  n note  s split  p plan  e editor  a agent  q quit"
 
 func (m *model) planWidth() int {
 	if !m.showPlan || m.review == nil || len(m.review.Steps) == 0 || m.width < minPlanWidth {
@@ -151,9 +151,9 @@ func (m *model) bottomLines() []string {
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	case m.status != "":
-		last = dimStyle.Render(m.status)
+		last = m.agentStatus() + "  " + dimStyle.Render(m.status)
 	default:
-		last = dimStyle.Render(hints)
+		last = m.agentStatus() + "  " + dimStyle.Render(hints)
 	}
 	return append(lines, last)
 }
@@ -330,6 +330,9 @@ func (m *model) intakeView() string {
 		title += fmt.Sprintf(" · !%d %s", m.review.MR.IID, m.review.MR.Title)
 	}
 	top := []string{boldStyle.Render(title), dimStyle.Render("no plan yet — answer the agent below (c to write)")}
+	if !m.agentWaiting {
+		top = append(top, "", "  "+m.agentStatus())
+	}
 	bottom := m.bottomLines()
 	out := make([]string, 0, m.height)
 	for _, line := range top {
@@ -342,4 +345,20 @@ func (m *model) intakeView() string {
 		out = append(out, fit(line, m.width))
 	}
 	return strings.Join(out[:min(len(out), max(m.height, len(top)))], "\n")
+}
+
+var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
+
+func (m *model) agentStatus() string {
+	if m.agentWaiting {
+		return addStyle.Render("● ждёт тебя")
+	}
+	text := "агент работает"
+	if m.review != nil && m.review.Progress != nil {
+		text = m.review.Progress.Text
+	}
+	if !m.agentSince.IsZero() {
+		text += " · " + m.clock().Sub(m.agentSince).Round(time.Second).String()
+	}
+	return hotStyle.Render(string(spinner[m.frame%len(spinner)]) + " " + text)
 }

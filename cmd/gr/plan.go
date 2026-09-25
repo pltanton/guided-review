@@ -59,6 +59,7 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 		return fmt.Errorf("plan rejected:\n  - %s", strings.Join(msgs, "\n  - "))
 	}
 	plan.Apply(r, p)
+	r.Progress = nil
 	if err := s.store.Save(r); err != nil {
 		return err
 	}

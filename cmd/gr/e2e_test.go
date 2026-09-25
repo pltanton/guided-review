@@ -293,3 +293,13 @@ func TestDiscussionsFull(t *testing.T) {
 	out := h.mustRun("", "discussions")
 	assertContains(t, out, "@ci (1 replies)", "## acc-guard\n  line two\n  line three")
 }
+
+func TestProgress(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun("", "progress", "строю", "план")
+	_, r, _ := loadReview(context.Background(), h.repo.Dir)
+	if r.Progress == nil || r.Progress.Text != "строю план" {
+		t.Fatalf("progress: %+v", r.Progress)
+	}
+}

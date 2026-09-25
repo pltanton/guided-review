@@ -28,9 +28,16 @@ turn — they are not looking at it.
    - "round N": this is a re-review, see below.
    - Never pass `--force`: it throws away the plan and progress. Only the user may
      ask to start over.
-2. If `$TMUX` is set and no pane runs `gr view`
-   (`tmux list-panes -F '#{pane_current_command}'`), open it wide:
-   `tmux split-window -h -d -l 65% gr view`.
+2. If `$TMUX` is set and no window is named `review`
+   (`tmux list-windows -F '#{window_name}'`), open the viewer full screen in its own
+   window: `tmux new-window -n review gr view`. It takes focus; tell the user in one
+   chat line that `prefix l` (or `a` in the viewer) brings them back to you.
+
+Before anything that takes more than a few seconds — reading the diff, building the
+plan, reading a step's code, answering an explain — run
+`gr progress "<what you are doing>"` (e.g. `строю план: читаю diff, 58 файлов`). The
+viewer shows it with a spinner and a timer; without it the human stares at a frozen
+screen. `gr say` and `gr plan set` clear it.
 
 ## Intake — fast and short
 

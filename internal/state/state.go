@@ -60,6 +60,7 @@ type Review struct {
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
 	Messages     []Message    `yaml:"messages,omitempty"`
+	Progress     *Progress    `yaml:"progress,omitempty"`
 }
 
 type Message struct {
@@ -69,6 +70,11 @@ type Message struct {
 }
 
 const MaxMessages = 50
+
+type Progress struct {
+	Text string    `yaml:"text"`
+	Time time.Time `yaml:"time"`
+}
 
 type Discussion struct {
 	ID       string `yaml:"id"`

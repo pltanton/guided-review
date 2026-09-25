@@ -26,6 +26,9 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
 
     > /guided-review https://gitlab.example.com/group/project/-/merge_requests/123
 
+The viewer opens full screen in a `review` tmux window. The bottom line shows what the
+agent is doing (spinner, progress text, timer) or `● ждёт тебя` when it is your turn.
+
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.
 
@@ -53,6 +56,7 @@ Optional `.review.yaml` in the repository root:
 | `m` | mouse capture on/off (off lets the terminal select text) |
 | `tab` / `shift+tab` | more / default context |
 | `e` | open `$EDITOR` at the line (tmux popup) |
+| `a` | back to the agent's tmux window |
 | `q` | quit |
 
 Design: [docs/specs/2026-09-25-guided-review-design.md](docs/specs/2026-09-25-guided-review-design.md)

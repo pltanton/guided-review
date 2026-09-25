@@ -27,6 +27,7 @@ const usage = `usage: gr <command> [args]
   status [--gate]
   wait [--timeout 9m]
   say TEXT... | say -
+  progress TEXT...
   view
 `
 
@@ -86,6 +87,8 @@ func run(ctx context.Context, e env, args []string) error {
 		return cmdWait(ctx, e, args[1:])
 	case "say":
 		return cmdSay(ctx, e, args[1:])
+	case "progress":
+		return cmdProgress(ctx, e, args[1:])
 	case "view":
 		return cmdView(ctx, e)
 	case "help", "-h", "--help":

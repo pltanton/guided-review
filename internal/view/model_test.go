@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -213,5 +214,28 @@ func TestIntakeBeforePlan(t *testing.T) {
 	m.Update(key(">"))
 	if len(sent) != 1 {
 		t.Fatalf("next without a plan must not be sent: %+v", sent)
+	}
+}
+
+func TestAgentStatus(t *testing.T) {
+	m, _ := newTestModel(t)
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return now }
+	m.agentWaiting, m.agentSince = true, now.Add(-10*time.Second)
+	if got := ansi.Strip(m.agentStatus()); got != "● ждёт тебя" {
+		t.Fatalf("waiting: %q", got)
+	}
+	m.agentWaiting, m.agentSince = false, now.Add(-80*time.Second)
+	if got := ansi.Strip(m.agentStatus()); got != "⠋ агент работает · 1m20s" {
+		t.Fatalf("working: %q", got)
+	}
+	m.review.Progress = &state.Progress{Text: "строю план: читаю diff", Time: now.Add(-5 * time.Second)}
+	m.frame = 2
+	if got := ansi.Strip(m.agentStatus()); got != "⠹ строю план: читаю diff · 1m20s" {
+		t.Fatalf("progress: %q", got)
+	}
+	m.review.Steps, m.step = nil, nil
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "⠹ строю план: читаю diff · 1m20s") {
+		t.Fatalf("intake view lacks spinner:\n%s", out)
 	}
 }

@@ -63,3 +63,30 @@ func TestFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestWaitingMarker(t *testing.T) {
+	dir := t.TempDir()
+	if _, ok := inbox.WaitingSince(dir); ok {
+		t.Fatal("no marker yet")
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = inbox.Wait(context.Background(), dir, time.Second, 10*time.Millisecond)
+	}()
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for {
+		if _, ok := inbox.WaitingSince(dir); ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("marker not set while waiting")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	_ = inbox.Append(dir, inbox.Event{Kind: inbox.KindNext})
+	<-done
+	if _, ok := inbox.WaitingSince(dir); ok {
+		t.Fatal("marker must be removed after Wait returns")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -25,6 +26,14 @@ const (
 )
 
 type reloadMsg struct{}
+
+type tickMsg struct{}
+
+const tickEvery = 150 * time.Millisecond
+
+func tick() tea.Cmd {
+	return tea.Tick(tickEvery, func(time.Time) tea.Msg { return tickMsg{} })
+}
 
 type editorDoneMsg struct{ err error }
 
@@ -62,6 +71,11 @@ type model struct {
 	send   func(inbox.Event) error
 	status string
 	err    error
+
+	now          func() time.Time
+	agentWaiting bool
+	agentSince   time.Time
+	frame        int
 }
 
 func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
@@ -206,7 +220,28 @@ func firstFocus(list []item) int {
 	return 0
 }
 
-func (m *model) Init() tea.Cmd { return nil }
+func (m *model) Init() tea.Cmd { return tick() }
+
+func (m *model) clock() time.Time {
+	if m.now == nil {
+		return time.Now()
+	}
+	return m.now()
+}
+
+func (m *model) refreshAgent() {
+	if m.review == nil {
+		return
+	}
+	if since, ok := inbox.WaitingSince(m.store.ReviewDir(m.review.ID)); ok {
+		m.agentWaiting, m.agentSince = true, since
+		return
+	}
+	if m.agentWaiting || m.agentSince.IsZero() {
+		m.agentSince = m.clock()
+	}
+	m.agentWaiting = false
+}
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -215,6 +250,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relist()
 	case reloadMsg:
 		m.reload()
+	case tickMsg:
+		m.frame++
+		m.refreshAgent()
+		return m, tick()
 	case editorDoneMsg:
 		m.err = msg.err
 	case tea.MouseMsg:
@@ -311,6 +350,12 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.emit(inbox.Event{Kind: inbox.KindNext})
 	case "e":
 		return m.openEditor()
+	case "a":
+		if os.Getenv("TMUX") != "" {
+			if err := exec.Command("tmux", "last-window").Run(); err != nil {
+				m.err = err
+			}
+		}
 	}
 	return nil
 }
