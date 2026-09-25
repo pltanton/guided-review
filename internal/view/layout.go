@@ -70,7 +70,11 @@ func (m *model) footer() (string, []span) {
 	}
 	x := ansi.StringWidth(line)
 	var spans []span
-	for _, b := range footerButtons() {
+	btns := footerButtons()
+	if m.review != nil && m.review.Publish != nil {
+		btns = append(btns, button{"⬆ publish", "P", func(m *model) { m.publish() }})
+	}
+	for _, b := range btns {
 		text := " " + b.label + " · " + b.key + " "
 		w := ansi.StringWidth(text)
 		spans = append(spans, span{x, x + w, b})
@@ -252,11 +256,22 @@ func (m *model) View() string {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main := m.header()
+	if m.preview != "" {
+		main = []string{
+			boldStyle.Render(fmt.Sprintf("publish preview → !%d", m.mrIID())),
+			hotStyle.Render("P publishes all of this to the MR · esc cancels · j/k scroll"),
+			dimStyle.Render(strings.Repeat("─", max(mw, 1))),
+		}
+		lines := strings.Split(strings.TrimRight(m.preview, "\n"), "\n")
+		for _, l := range lines[min(m.previewTop, len(lines)):] {
+			main = append(main, l)
+		}
+	}
 	if m.loading != "" {
 		main = append(main, "", "  "+hotStyle.Render(fmt.Sprintf("%c loading %d files…", spinner[m.frame%len(spinner)], len(m.step.Hunks))))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.list) {
+		if i >= len(m.list) || m.preview != "" {
 			main = append(main, "")
 			continue
 		}
@@ -607,4 +622,11 @@ func (m *model) animate(r Row) Row {
 		r.NoteLabel = string(spinner[m.frame%len(spinner)])
 	}
 	return r
+}
+
+func (m *model) mrIID() int {
+	if m.review == nil || m.review.MR == nil {
+		return 0
+	}
+	return m.review.MR.IID
 }

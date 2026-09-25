@@ -36,11 +36,9 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	decisions := fs.String("decisions", "", "decisions taken during the review and why (markdown)")
 	decisionsFile := fs.String("decisions-file", "", "read decisions from a file (- for stdin)")
 	approve := fs.Bool("approve", false, "also approve the MR")
+	prepare := fs.Bool("prepare", false, "store the verdict and decisions for the viewer's publish button and print the preview")
 	if err := fs.Parse(args); err != nil {
 		return err
-	}
-	if _, ok := verdicts[*verdict]; !ok {
-		return errors.New("--verdict must be approve, changes or blocked")
 	}
 	if *decisionsFile != "" {
 		data, err := readInput(e, *decisionsFile)
@@ -52,6 +50,15 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
 		return err
+	}
+	if *verdict == "" && r.Publish != nil {
+		*verdict, *approve = r.Publish.Verdict, *approve || r.Publish.Approve
+		if *decisions == "" {
+			*decisions = r.Publish.Decisions
+		}
+	}
+	if _, ok := verdicts[*verdict]; !ok {
+		return errors.New("--verdict must be approve, changes or blocked (or prepare one with --prepare)")
 	}
 	if r.MR == nil {
 		return errors.New("not a merge request review: nothing to publish to")
@@ -84,13 +91,29 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	withSummary := r.SummaryRound != round
 	summary := summaryMarkdown(r, *verdict, *decisions)
 
-	if *dryRun {
+	preview := func() {
 		for _, d := range drafts {
 			fmt.Fprintf(e.stdout, "--- %s\n%s\n\n", d.where, d.draft.Note)
 		}
 		if withSummary {
 			fmt.Fprintf(e.stdout, "--- summary\n%s\n", summary)
 		}
+	}
+	if *prepare {
+		r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
+		what := fmt.Sprintf("%d comments", len(drafts))
+		if withSummary {
+			what += " and the summary"
+		}
+		fmt.Fprintf(e.stdout, "prepared: %s — press P in the viewer to preview and publish\n\n", what)
+		preview()
+		return nil
+	}
+	if *dryRun {
+		preview()
 		return nil
 	}
 	if len(drafts) == 0 && !withSummary {
@@ -131,6 +154,7 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	if withSummary {
 		r.SummaryRound, r.SummaryDraft = round, 0
 	}
+	r.Publish = nil
 	if err := s.store.Save(r); err != nil {
 		return err
 	}

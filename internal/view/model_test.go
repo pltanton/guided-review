@@ -631,3 +631,34 @@ func TestQuitWhenReviewCloses(t *testing.T) {
 		t.Fatal("viewer must quit when the review it showed is closed")
 	}
 }
+
+func TestPublishButton(t *testing.T) {
+	m, sent := newTestModel(t)
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) {
+		ran = append(ran, args)
+		if len(args) > 1 && args[1] == "--dry-run" {
+			return "--- summary\n## Guided review: approve\n", nil
+		}
+		return "published 2 comments and the summary to !7\n", nil
+	}
+	m.Update(key("P"))
+	if !strings.Contains(m.status, "nothing prepared") || len(ran) != 0 {
+		t.Fatalf("P before prepare: status %q ran %v", m.status, ran)
+	}
+	m.review.Publish = &state.PublishPlan{Verdict: "approve"}
+	m.Update(key("P"))
+	if m.preview == "" || !strings.Contains(ansi.Strip(m.View()), "## Guided review: approve") {
+		t.Fatalf("first P must show the preview:\n%s", ansi.Strip(m.View()))
+	}
+	m.Update(key("P"))
+	if len(ran) != 2 || ran[1][0] != "publish" || len(ran[1]) != 1 {
+		t.Fatalf("second P must run gr publish: %v", ran)
+	}
+	if m.preview != "" || !strings.Contains(m.status, "published 2 comments") {
+		t.Fatalf("after publish: preview %q status %q", m.preview, m.status)
+	}
+	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindPublished {
+		t.Fatalf("agent must be told: %+v", *sent)
+	}
+}

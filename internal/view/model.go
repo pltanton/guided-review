@@ -90,6 +90,9 @@ type model struct {
 	loading     string
 	returnPane  string
 	closed      bool
+	preview     string
+	previewTop  int
+	runGr       func(args ...string) (string, error)
 	reveal      map[string][][2]int
 
 	composing   bool
@@ -116,6 +119,16 @@ func newModel(ctx context.Context, store state.Store, repo gitx.Repo) *model {
 	m := &model{ctx: ctx, store: store, repo: repo, context: defaultContext, showPlan: true, mouse: true, algo: gitx.DefaultDiffAlgorithm}
 	if cfg, err := config.Load(repo.Dir); err == nil {
 		m.algo = cfg.DiffAlgorithm(m.algo)
+	}
+	m.runGr = func(args ...string) (string, error) {
+		bin, err := os.Executable()
+		if err != nil {
+			return "", err
+		}
+		cmd := exec.CommandContext(ctx, bin, args...)
+		cmd.Dir = repo.Dir
+		out, err := cmd.CombinedOutput()
+		return string(out), err
 	}
 	m.send = func(e inbox.Event) error {
 		if m.review == nil {
@@ -576,8 +589,53 @@ func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
+func (m *model) publish() {
+	if m.review == nil || m.runGr == nil {
+		return
+	}
+	if m.preview == "" {
+		if m.review.Publish == nil {
+			m.status = "nothing prepared: the agent prepares the publication when the review is done"
+			return
+		}
+		out, err := m.runGr("publish", "--dry-run")
+		if err != nil {
+			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+			return
+		}
+		m.preview, m.previewTop = out, 0
+		return
+	}
+	out, err := m.runGr("publish")
+	m.preview = ""
+	if err != nil {
+		m.err = fmt.Errorf("publish failed: %v: %s", err, strings.TrimSpace(out))
+		return
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(out), "\n")
+	m.emit(inbox.Event{Kind: inbox.KindPublished, Text: first})
+	m.status = first
+}
+
+func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "P":
+		m.publish()
+	case "esc", "q":
+		m.preview = ""
+	case "j", "down":
+		m.previewTop++
+	case "k", "up":
+		m.previewTop = max(m.previewTop-1, 0)
+	}
+	return nil
+}
+
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status = ""
+	if m.preview != "" {
+		return m.handlePreviewKey(msg)
+	}
 	if m.focusFiles {
 		return m.handleFilesKey(msg)
 	}
@@ -685,6 +743,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.startCompose(inbox.KindSkip)
 	case "E":
 		m.startEdit()
+	case "P":
+		m.publish()
 	case "?":
 		m.explain()
 	case ">":

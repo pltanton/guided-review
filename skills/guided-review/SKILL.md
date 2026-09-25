@@ -165,13 +165,15 @@ a discussed line, say whether the code answers it.
    skip each with a reason.
 2. `gr say` the verdict in one line — approve / changes requested / blocked — then
    blockers and majors, one line each, the nit count, and the coverage line.
-3. Publish to the MR. Write the decisions taken during the review and why (what was
-   accepted as is, what was left for later, why steps were skipped) as a few bullet
-   lines, then preview:
-   `gr publish --dry-run --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
-   `gr say` a short digest of the preview (N inline comments, summary) and ask
-   «публикую?». Only on yes run the same command without `--dry-run`; add `--approve`
-   only if they asked to approve. Never post to the MR any other way.
+3. Prepare the publication. Write the decisions taken during the review and why (what
+   was accepted as is, what was left for later, why steps were skipped) as a few bullet
+   lines, then:
+   `gr publish --prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
+   (add `--approve` only if they asked to approve). Nothing is posted yet: the viewer
+   now shows a `⬆ publish · P` button — `P` opens the full preview, `P` again posts it.
+   `gr say` «готово к публикации: P во вьювере» and `gr wait`. `[published] …` means it
+   went out. If they say «публикуй» in chat instead, run `gr publish`. Never post to the
+   MR any other way.
 4. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
    `glab mr view <iid>` (username, name), find them with the Slack MCP user search
    (load the tool via ToolSearch if it is deferred), and create a **draft** DM with

@@ -16,7 +16,7 @@ const usage = `usage: gr <command> [args]
   init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
   list
   sync
-  publish --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--dry-run] [--approve]
+  publish [--prepare | --dry-run] [--verdict approve|changes|blocked] [--decisions TEXT | --decisions-file F] [--approve]
   discussions
   done
   hunks

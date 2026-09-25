@@ -405,3 +405,18 @@ func TestPublish(t *testing.T) {
 		}
 	}
 }
+
+func TestPublishPrepareThenConfirm(t *testing.T) {
+	h, calls, _ := publishHarness(t)
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5", "--severity", "nit", "x")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	*calls = nil
+	out := h.mustRun("", "publish", "--prepare", "--verdict", "approve", "--decisions", "all good")
+	assertContains(t, out, "prepared: 1 comments and the summary", "## Guided review: approve")
+	if len(*calls) != 0 {
+		t.Fatalf("prepare must not call glab: %v", *calls)
+	}
+	out = h.mustRun("", "publish")
+	assertContains(t, out, "published 1 comments and the summary")
+}

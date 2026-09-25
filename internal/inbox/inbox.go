@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	KindMessage = "message"
-	KindExplain = "explain"
-	KindNext    = "next"
-	KindSkip    = "skip"
-	KindGoto    = "goto"
-	KindEdit    = "edit"
+	KindMessage   = "message"
+	KindExplain   = "explain"
+	KindNext      = "next"
+	KindSkip      = "skip"
+	KindGoto      = "goto"
+	KindEdit      = "edit"
+	KindPublished = "published"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"

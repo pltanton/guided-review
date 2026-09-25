@@ -62,6 +62,7 @@ both sides in full.
 | `v`, mouse drag | select lines |
 | `c` / `enter` | message the agent; the cursor line (or selection) is attached, `ctrl+x` detaches it; on one of your comments it is a reply |
 | `E` | edit the comment under the cursor |
+| `P` | publish: first press shows the full preview, second posts it to the MR (after the agent prepared it) |
 | `?` | ask the agent to explain the selection or the line |
 | `>` | next step |
 | `S` | skip the step with a reason |

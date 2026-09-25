@@ -63,6 +63,7 @@ type Review struct {
 	Progress     *Progress    `yaml:"progress,omitempty"`
 	SummaryDraft int          `yaml:"summary_draft,omitempty"`
 	SummaryRound int          `yaml:"summary_round,omitempty"`
+	Publish      *PublishPlan `yaml:"publish,omitempty"`
 }
 
 type Message struct {
@@ -72,6 +73,12 @@ type Message struct {
 }
 
 const MaxMessages = 50
+
+type PublishPlan struct {
+	Verdict   string `yaml:"verdict"`
+	Decisions string `yaml:"decisions,omitempty"`
+	Approve   bool   `yaml:"approve,omitempty"`
+}
 
 type Progress struct {
 	Text string    `yaml:"text"`
