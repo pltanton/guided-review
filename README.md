@@ -1,7 +1,8 @@
 # guided-review
 
-A big merge request usually gets one of two reviews: an hour of reading every line, or a
-skim and "LGTM". guided-review is for the part in between.
+Agents write code faster than people can review it. Merge requests got longer and more
+frequent, reading each one properly takes an hour nobody has, and review turns into a
+skim and "LGTM". guided-review keeps the human review and takes the grind out of it.
 
 An agent reads the MR first and cuts it into small steps in an order that makes sense:
 the spec, then contracts, then each entry point and the code it calls, tests right after
