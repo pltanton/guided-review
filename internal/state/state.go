@@ -73,7 +73,6 @@ type Review struct {
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
 	Messages     []Message    `yaml:"messages,omitempty"`
 	Progress     *Progress    `yaml:"progress,omitempty"`
-	SummaryDraft int          `yaml:"summary_draft,omitempty"`
 	SummaryRound int          `yaml:"summary_round,omitempty"`
 	Publish      *PublishPlan `yaml:"publish,omitempty"`
 }
@@ -169,7 +168,6 @@ type Comment struct {
 	Suggestion string   `yaml:"suggestion,omitempty"`
 	Round      int      `yaml:"round,omitempty"`
 	Resolved   bool     `yaml:"resolved,omitempty"`
-	DraftID    int      `yaml:"draft_id,omitempty"`
 	Published  bool     `yaml:"published,omitempty"`
 }
 

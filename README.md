@@ -31,10 +31,12 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
 The viewer opens full screen in a `review` tmux window. The bottom line shows what the
 agent is doing (spinner, progress text, timer) or `● your turn` when it is your turn.
 
-At the end the agent publishes to the MR with `gr publish` — inline comments (nits with an
-obvious fix as GitLab suggestions) and a summary comment with the verdict, decisions,
-the step table and coverage — as draft notes released in one batch, after you confirm the
-preview. It can also draft a Slack message to the author.
+`gr` never writes to GitLab. At the end `P` in the viewer (or `gr export`) writes the
+result to `/tmp/guided-review/<id>/`: `review.md` to read, `review.json` and one ready
+GitLab draft-note body per inline comment (nits with an obvious fix as suggestions) plus a
+summary with the verdict, decisions, the step table and coverage. The agent shows what
+goes out, asks, posts the drafts with `glab` in one batch and runs `gr mark-published`.
+It can also draft a Slack message to the author.
 
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.
@@ -94,7 +96,7 @@ both sides in full.
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `t` / `T` | enlarge / shrink the chat (small → half → full screen) |
-| `P` | publish: first press shows the full preview, second posts it to the MR (after the agent prepared it) |
+| `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/` and hands it to the agent, which asks you and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step |
 | `S` | skip the step with a reason |

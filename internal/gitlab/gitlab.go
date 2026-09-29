@@ -7,9 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -190,54 +188,6 @@ type DraftNote struct {
 	Position *Position `json:"position,omitempty"`
 }
 
-func (r MRRef) path(suffix string) string {
+func (r MRRef) Path(suffix string) string {
 	return fmt.Sprintf("projects/%s/merge_requests/%d%s", url.PathEscape(r.Project), r.IID, suffix)
-}
-
-func post(ctx context.Context, run Runner, ref MRRef, suffix string, body any) ([]byte, error) {
-	args := []string{"api", "--hostname", ref.Host, "-X", "POST"}
-	if body != nil {
-		data, err := json.Marshal(body)
-		if err != nil {
-			return nil, err
-		}
-		dir, err := os.MkdirTemp("", "gr-body-")
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = os.RemoveAll(dir) }()
-		path := filepath.Join(dir, "body.json")
-		if err := os.WriteFile(path, data, 0o600); err != nil {
-			return nil, err
-		}
-		args = append(args, "-H", "Content-Type: application/json", "--input", path)
-	}
-	return run(ctx, append(args, ref.path(suffix))...)
-}
-
-func CreateDraft(ctx context.Context, run Runner, ref MRRef, d DraftNote) (int, error) {
-	out, err := post(ctx, run, ref, "/draft_notes", d)
-	if err != nil {
-		return 0, err
-	}
-	var created struct {
-		ID int `json:"id"`
-	}
-	if err := json.Unmarshal(out, &created); err != nil || created.ID == 0 {
-		return 0, fmt.Errorf(
-			"create draft note: unexpected reply %q",
-			strings.TrimSpace(string(out)),
-		)
-	}
-	return created.ID, nil
-}
-
-func PublishDrafts(ctx context.Context, run Runner, ref MRRef) error {
-	_, err := post(ctx, run, ref, "/draft_notes/bulk_publish", nil)
-	return err
-}
-
-func Approve(ctx context.Context, run Runner, ref MRRef) error {
-	_, err := post(ctx, run, ref, "/approve", nil)
-	return err
 }

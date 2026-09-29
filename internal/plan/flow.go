@@ -217,7 +217,7 @@ func DeleteComment(r *state.Review, id int) (restored []string, err error) {
 	switch {
 	case i < 0:
 		return nil, fmt.Errorf("no comment #%d", id)
-	case r.Comments[i].Published || r.Comments[i].DraftID != 0:
+	case r.Comments[i].Published:
 		return nil, fmt.Errorf("comment #%d is already on the MR: delete it there", id)
 	}
 	r.Comments = slices.Delete(r.Comments, i, i+1)

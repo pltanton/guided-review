@@ -70,7 +70,7 @@ func (m *model) footerButtons() []button {
 		b("↷ skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
 	if m.review != nil && m.review.Publish != nil {
-		btns = append(btns, button{"⬆ publish", km.key("publish"), (*model).publish})
+		btns = append(btns, button{"✓ finish", km.key("finish"), (*model).finish})
 	}
 	return btns
 }
@@ -91,9 +91,6 @@ func (m *model) footer() (string, []span) {
 	}
 	if m.lspBusy != "" {
 		tail = m.spin() + " lsp " + m.lspBusy + "…"
-	}
-	if m.publishing {
-		tail = m.spin() + " publishing to the MR…"
 	}
 	if typed := m.count + m.pendingKey; typed != "" {
 		tail = typed
@@ -376,14 +373,11 @@ func (m *model) View() string {
 		for _, l := range strings.Split(expandTabs(strings.TrimRight(m.preview, "\n")), "\n") {
 			lines = append(lines, strings.Split(ansi.Wrap(l, max(mw, 20), ""), "\n")...)
 		}
-		title := "publish preview"
+		title := "review result"
 		if m.review.MR != nil {
 			title += fmt.Sprintf(" → !%d", m.review.MR.IID)
 		}
-		hint := "P publishes all of this to the MR · esc cancels · j/k scroll"
-		if m.publishing {
-			hint = m.spin() + " publishing…"
-		}
+		hint := "P hands this to the agent, it asks before publishing · esc cancels · j/k scroll"
 		main = panel(title, hotStyle.Render(hint), lines[min(m.previewTop, len(lines)):])
 	case m.help:
 		lines := m.helpLines(mw)

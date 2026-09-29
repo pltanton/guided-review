@@ -57,7 +57,8 @@ discussions, spec mismatches, stale examples in the description — is not intak
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
 
-`glab` is read-only for you: never create notes, discussions or approvals with it.
+`glab` is read-only for you until the wrap-up: the only writes to the MR are the ones in
+"Publish" below, after the human said yes.
 
 ## Plan
 
@@ -169,22 +170,39 @@ line, say whether the code answers it.
    skip each with a reason.
 2. `gr say` the verdict in one line — approve / changes requested / blocked — then
    blockers and majors, one line each, the nit count, and the coverage line.
-3. Prepare the publication. Write the decisions taken during the review and why (what
-   was accepted as is, what was left for later, why steps were skipped) as a few bullet
+3. Prepare the result. Write the decisions taken during the review and why (what was
+   accepted as is, what was left for later, why steps were skipped) as a few bullet
    lines, then:
-   `gr publish --prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
-   (add `--approve` only if they asked to approve). Nothing is posted yet: the viewer
-   now shows a `⬆ publish · P` button — `P` opens the full preview, `P` again posts it.
-   `gr say` «готово к публикации: P во вьювере» and `gr wait`. `[published] …` means it
-   went out. If they say «публикуй» in chat instead, run `gr publish`. Never post to the
-   MR any other way.
-4. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
+   `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
+   (add `--approve` only if they asked to approve). The viewer now shows `✓ finish · P`:
+   `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/` and sends
+   you `[finished] sN: <dir>`. `gr say` «готово: P во вьювере» and `gr wait`. If they say
+   «заканчиваем» in chat instead, run `gr export` yourself: it prints the same dir.
+4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted),
+   `review.json` (`host`, `api`, `url`, `verdict`, `approve`, `drafts`) and
+   `drafts/NN.json`, each the exact body of one GitLab draft note, the summary last.
+   `gr say` what goes out — N comments, the summary, the verdict, approve or not — and
+   ask «публикую?», then `gr wait`. Only on a clear yes:
+   ```bash
+   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
+   glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
+   for f in $(jq -r '.drafts[]' $dir/review.json); do
+     glab api --hostname $host -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" || break
+   done
+   glab api --hostname $host -X POST "$api/draft_notes/bulk_publish"
+   # only if review.json has "approve": true
+   glab api --hostname $host -X POST "$api/approve"
+   gr mark-published
+   ```
+   If a POST fails, stop: `gr say` the GitLab error and that the drafts created so far sit
+   unpublished on the MR; do not retry blindly. After success `gr say` the MR link.
+5. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
    `glab mr view <iid>` (username, name), find them with the Slack MCP user search
    (load the tool via ToolSearch if it is deferred), and create a **draft** DM with
    `slack_send_message_draft`: one or two lines — MR link, verdict, counts
    (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`).
    Send it directly (`slack_send_message`) only if they explicitly say so after seeing
    the text. No Slack MCP → print the text to copy.
-5. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the worktree,
+6. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the worktree,
    keeps the state for a re-review; the viewer closes and returns them to you) and end
    the turn.

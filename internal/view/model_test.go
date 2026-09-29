@@ -1,7 +1,6 @@
 package view
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -756,39 +755,36 @@ func TestQuitWhenReviewCloses(t *testing.T) {
 	}
 }
 
-func TestPublishButton(t *testing.T) {
+func TestFinishButton(t *testing.T) {
 	m, sent := newTestModel(t)
 	var ran [][]string
 	m.runGr = func(args ...string) (string, error) {
 		ran = append(ran, args)
 		if len(args) > 1 && args[1] == "--dry-run" {
-			return "--- summary\n## Guided review: approve\n", nil
+			return "--- a.go:3\n\tx := 1\n--- summary\n## Guided review: approve\n", nil
 		}
-		return "published 2 comments and the summary to !7\n", nil
+		return "/tmp/guided-review/mr-1\n", nil
 	}
 	m.Update(key("P"))
 	if !strings.Contains(m.status, "nothing prepared") || len(ran) != 0 {
 		t.Fatalf("P before prepare: status %q ran %v", m.status, ran)
 	}
 	m.review.Publish = &state.PublishPlan{Verdict: "approve"}
-	m.Update(key("P"))
-	if m.preview == "" || !strings.Contains(ansi.Strip(m.View()), "## Guided review: approve") {
-		t.Fatalf("first P must show the preview:\n%s", ansi.Strip(m.View()))
-	}
-	_, cmd := m.Update(key("P"))
-	if !m.publishing || cmd == nil || !strings.Contains(ansi.Strip(m.View()), "publishing") {
-		t.Fatal("second P must publish in the background with a spinner")
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "✓ finish · P") {
+		t.Fatalf("finish button missing: %q", ansi.Strip(f))
 	}
 	m.Update(key("P"))
-	m.Update(cmd())
-	if len(ran) != 2 || ran[1][0] != "publish" || len(ran[1]) != 1 {
-		t.Fatalf("second P must run gr publish: %v", ran)
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "## Guided review: approve") || strings.Contains(v, "\t") {
+		t.Fatalf("first P must show a tab-free preview:\n%s", v)
 	}
-	if m.preview != "" || !strings.Contains(m.status, "published 2 comments") {
-		t.Fatalf("after publish: preview %q status %q", m.preview, m.status)
+	m.Update(key("P"))
+	if len(ran) != 2 || ran[1][0] != "export" || len(ran[1]) != 1 {
+		t.Fatalf("second P must run gr export: %v", ran)
 	}
-	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindPublished {
-		t.Fatalf("agent must be told: %+v", *sent)
+	want := inbox.Event{Kind: inbox.KindFinished, Step: "s1", Text: "/tmp/guided-review/mr-1"}
+	if m.preview != "" || len(*sent) != 1 || (*sent)[0] != want {
+		t.Fatalf("agent must get the export path: preview %q sent %+v", m.preview, *sent)
 	}
 }
 
@@ -906,7 +902,7 @@ func TestHelpOverlay(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.Update(key("h"))
 	out := ansi.Strip(m.View())
-	for _, want := range []string{"navigate", "lsp", "gd", "go to definition", "publish"} {
+	for _, want := range []string{"navigate", "lsp", "gd", "go to definition", "finish"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help lacks %q:\n%s", want, out)
 		}
@@ -1273,29 +1269,5 @@ func TestCountPrefix(t *testing.T) {
 	m.Update(key("k"))
 	if l := m.current(); l.Line != 3 || m.count != "" {
 		t.Fatalf("esc must drop the count: line %d count %q", l.Line, m.count)
-	}
-}
-
-func TestPublishFailureKeepsPreview(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.review.Publish = &state.PublishPlan{Verdict: "changes"}
-	m.runGr = func(args ...string) (string, error) {
-		if len(args) > 1 {
-			return "--- a.go:3\n\tx := 1\n", nil
-		}
-		return "glab: 500 Internal Server Error\n", errors.New("exit status 1")
-	}
-	m.Update(key("P"))
-	_, cmd := m.Update(key("P"))
-	m.Update(cmd())
-	v := ansi.Strip(m.View())
-	if m.preview == "" || !strings.Contains(v, "publish failed: exit status 1") ||
-		!strings.Contains(v, "glab: 500") || strings.Contains(v, "\t") {
-		t.Fatalf("failure must stay visible over the tab-free preview:\n%s", v)
-	}
-	_, cmd = m.Update(key("P"))
-	m.Update(cmd())
-	if n := strings.Count(m.preview, "publish failed"); n != 1 {
-		t.Fatalf("retry must replace the old failure, got %d", n)
 	}
 }

@@ -130,8 +130,8 @@ func DefaultActions() []Action {
 			run: do((*model).startEdit)},
 		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (twice)",
 			Keys: k("D"), run: do((*model).deleteComment)},
-		{Name: "publish", Group: rev, Desc: "preview, then publish to the MR", Keys: k("P"),
-			run: (*model).publish},
+		{Name: "finish", Group: rev, Desc: "finish: preview, then hand to the agent",
+			Keys: k("P"), run: (*model).finish},
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
 			run: (*model).openEditor},
 

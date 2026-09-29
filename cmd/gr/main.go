@@ -24,8 +24,9 @@ review
   comment list | resolve ID | delete ID | edit ID [--severity S] TEXT...
   note add --file F --line N [--kind note|spec] [--step ID] TEXT...
   discussions
-  publish [--prepare | --dry-run] [--verdict approve|changes|blocked]
-          [--decisions TEXT | --decisions-file F] [--approve]
+  prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--approve]
+  export [--dry-run]   write the result to /tmp/guided-review/<id> for the agent to publish
+  mark-published       after the agent posted the export to the MR
   done
   list
 
@@ -45,32 +46,35 @@ var commands map[string]command
 
 func init() {
 	commands = map[string]command{
-		"init":        cmdInit,
-		"status":      cmdStatus,
-		"hunks":       cmdHunks,
-		"plan":        cmdPlan,
-		"step":        cmdStep,
-		"comment":     cmdComment,
-		"note":        cmdNote,
-		"discussions": cmdDiscussions,
-		"publish":     cmdPublish,
-		"done":        cmdDone,
-		"list":        cmdList,
-		"view":        cmdView,
-		"wait":        cmdWait,
-		"say":         cmdSay,
-		"progress":    cmdProgress,
-		"idle":        cmdIdle,
-		"config":      cmdConfig,
+		"init":           cmdInit,
+		"status":         cmdStatus,
+		"hunks":          cmdHunks,
+		"plan":           cmdPlan,
+		"step":           cmdStep,
+		"comment":        cmdComment,
+		"note":           cmdNote,
+		"discussions":    cmdDiscussions,
+		"prepare":        cmdPrepare,
+		"export":         cmdExport,
+		"mark-published": cmdMarkPublished,
+		"done":           cmdDone,
+		"list":           cmdList,
+		"view":           cmdView,
+		"wait":           cmdWait,
+		"say":            cmdSay,
+		"progress":       cmdProgress,
+		"idle":           cmdIdle,
+		"config":         cmdConfig,
 	}
 }
 
 type env struct {
-	dir      string
-	cacheDir string
-	stdin    io.Reader
-	stdout   io.Writer
-	glab     gitlab.Runner
+	dir       string
+	cacheDir  string
+	stdin     io.Reader
+	stdout    io.Writer
+	glab      gitlab.Runner
+	exportDir string
 }
 
 func (e env) printf(format string, a ...any) {
@@ -106,7 +110,10 @@ func start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	e := env{dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab}
+	e := env{
+		dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab,
+		exportDir: "/tmp/guided-review",
+	}
 	return run(ctx, e, os.Args[1:])
 }
 

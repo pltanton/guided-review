@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -17,12 +20,6 @@ var verdicts = map[string]string{
 	"approve": "approve ✅",
 	"changes": "changes requested",
 	"blocked": "blocked ⛔",
-}
-
-type draft struct {
-	comment *state.Comment
-	where   string
-	note    gitlab.DraftNote
 }
 
 func cmdDiscussions(ctx context.Context, e env, _ []string) error {
@@ -43,18 +40,12 @@ func cmdDiscussions(ctx context.Context, e env, _ []string) error {
 	return nil
 }
 
-func cmdPublish(ctx context.Context, e env, args []string) error {
-	fs := e.flags("publish")
-	dryRun := fs.Bool("dry-run", false, "print what would be posted and stop")
-	prepare := fs.Bool(
-		"prepare",
-		false,
-		"store verdict and decisions for the viewer's P button, print the preview",
-	)
+func cmdPrepare(ctx context.Context, e env, args []string) error {
+	fs := e.flags("prepare")
 	verdict := fs.String("verdict", "", "approve|changes|blocked")
 	decisions := fs.String("decisions", "", "decisions taken during the review and why (markdown)")
 	decisionsFile := fs.String("decisions-file", "", "read decisions from a file (- for stdin)")
-	approve := fs.Bool("approve", false, "also approve the MR")
+	approve := fs.Bool("approve", false, "the agent also approves the MR when publishing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -69,113 +60,139 @@ func cmdPublish(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	if p := r.Publish; *verdict == "" && p != nil {
-		*verdict, *approve = p.Verdict, *approve || p.Approve
-		if *decisions == "" {
-			*decisions = p.Decisions
-		}
-	}
 	switch _, ok := verdicts[*verdict]; {
 	case !ok:
-		return errors.New(
-			"--verdict must be approve, changes or blocked (or prepare one with --prepare)",
-		)
+		return errors.New("--verdict must be approve, changes or blocked")
 	case r.MR == nil:
 		return errors.New("not a merge request review: nothing to publish to")
 	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
 	}
 	if pending := plan.Gate(r); len(pending) > 0 {
-		return fmt.Errorf(
-			"gate not passed, pending: %s (review or skip them first)",
-			strings.Join(pending, " "),
-		)
+		return fmt.Errorf("gate not passed, pending: %s (review or skip them first)",
+			strings.Join(pending, " "))
+	}
+	r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
+	if err := s.store.Save(r); err != nil {
+		return err
+	}
+	e.println("prepared: the human reviews it and presses P in the viewer to finish")
+	return nil
+}
+
+type export struct {
+	Host     string   `json:"host"`
+	API      string   `json:"api"`
+	URL      string   `json:"url"`
+	Verdict  string   `json:"verdict"`
+	Approve  bool     `json:"approve"`
+	Comments []int    `json:"comments"`
+	Summary  bool     `json:"summary"`
+	Drafts   []string `json:"drafts"`
+}
+
+func cmdExport(ctx context.Context, e env, args []string) error {
+	fs := e.flags("export")
+	dryRun := fs.Bool("dry-run", false, "print review.md and write nothing")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	p := r.Publish
+	if p == nil || r.MR == nil {
+		return errors.New("nothing prepared: run gr prepare first")
 	}
 	mrFiles, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
 	if err != nil {
 		return err
 	}
-	var drafts []draft
-	for i := range r.Comments {
-		if c := &r.Comments[i]; !c.Published {
-			note, where := commentDraft(r, *c, mrFiles)
-			drafts = append(drafts, draft{comment: c, where: where, note: note})
-		}
-	}
-	round := max(r.Round, 1)
-	withSummary := r.SummaryRound != round
-	summary := summaryMarkdown(r, *verdict, *decisions)
-	what := fmt.Sprintf("%d comments", len(drafts))
-	if withSummary {
-		what += " and the summary"
-	}
-	preview := func() {
-		for _, d := range drafts {
-			e.printf("--- %s\n%s\n\n", d.where, d.note.Note)
-		}
-		if withSummary {
-			e.printf("--- summary\n%s\n", summary)
-		}
-	}
-
-	switch {
-	case *prepare:
-		r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
-		if err := s.store.Save(r); err != nil {
-			return err
-		}
-		e.printf("prepared: %s — press P in the viewer to preview and publish\n\n", what)
-		preview()
-		return nil
-	case *dryRun:
-		preview()
-		return nil
-	case len(drafts) == 0 && !withSummary:
-		e.println("nothing new to publish")
-		return nil
-	}
-
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
-	for _, d := range drafts {
-		if d.comment.DraftID != 0 {
+	x := export{
+		Host: ref.Host, API: ref.Path(""), URL: r.MR.URL, Verdict: p.Verdict, Approve: p.Approve,
+	}
+	var md strings.Builder
+	var notes []gitlab.DraftNote
+	for _, c := range r.Comments {
+		if c.Published {
 			continue
 		}
-		if d.comment.DraftID, err = gitlab.CreateDraft(ctx, e.glab, ref, d.note); err != nil {
-			return err
-		}
-		if err := s.store.Save(r); err != nil {
-			return err
-		}
+		note, where := commentDraft(r, c, mrFiles)
+		fmt.Fprintf(&md, "--- %s\n%s\n\n", where, note.Note)
+		notes = append(notes, note)
+		x.Comments = append(x.Comments, c.ID)
 	}
-	if withSummary && r.SummaryDraft == 0 {
-		note := gitlab.DraftNote{Note: summary}
-		if r.SummaryDraft, err = gitlab.CreateDraft(ctx, e.glab, ref, note); err != nil {
-			return err
-		}
-		if err := s.store.Save(r); err != nil {
-			return err
-		}
+	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
+		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
+		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
+		notes = append(notes, gitlab.DraftNote{Note: summary})
 	}
-	if err := gitlab.PublishDrafts(ctx, e.glab, ref); err != nil {
+	if *dryRun {
+		e.printf("%s", md.String())
+		return nil
+	}
+	dir := filepath.Join(e.exportDir, r.ID)
+	if err := os.RemoveAll(dir); err != nil {
 		return err
 	}
-	for _, d := range drafts {
-		d.comment.Published = true
+	if err := os.MkdirAll(filepath.Join(dir, "drafts"), 0o755); err != nil {
+		return err
 	}
-	if withSummary {
-		r.SummaryRound, r.SummaryDraft = round, 0
+	for i, n := range notes {
+		name := fmt.Sprintf("drafts/%02d.json", i+1)
+		if err := writeJSON(filepath.Join(dir, name), n); err != nil {
+			return err
+		}
+		x.Drafts = append(x.Drafts, name)
+	}
+	if err := writeJSON(filepath.Join(dir, "review.json"), x); err != nil {
+		return err
+	}
+	mdPath := filepath.Join(dir, "review.md")
+	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
+		return err
+	}
+	e.println(dir)
+	return nil
+}
+
+func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
+	s, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(filepath.Join(e.exportDir, r.ID, "review.json"))
+	if err != nil {
+		return fmt.Errorf("no export to mark: %w", err)
+	}
+	var x export
+	if err := json.Unmarshal(data, &x); err != nil {
+		return err
+	}
+	for i := range r.Comments {
+		if slices.Contains(x.Comments, r.Comments[i].ID) {
+			r.Comments[i].Published = true
+		}
+	}
+	if x.Summary {
+		r.SummaryRound = max(r.Round, 1)
 	}
 	r.Publish = nil
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
-	if *approve {
-		if err := gitlab.Approve(ctx, e.glab, ref); err != nil {
-			return err
-		}
-	}
-	e.printf("published %s to !%d\n%s\n", what, r.MR.IID, r.MR.URL)
+	e.printf("marked %d comments published\n", len(x.Comments))
 	return nil
+}
+
+func writeJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0o644)
 }
 
 func commentDraft(

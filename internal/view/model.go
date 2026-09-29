@@ -32,11 +32,7 @@ type (
 	reloadMsg     struct{}
 	tickMsg       struct{}
 	editorDoneMsg struct{ err error }
-	publishedMsg  struct {
-		out string
-		err error
-	}
-	rowsMsg struct {
+	rowsMsg       struct {
 		step string
 		rows []Row
 		err  error
@@ -84,8 +80,6 @@ type model struct {
 	closed      bool
 	preview     string
 	previewTop  int
-	publishing  bool
-	lastFailure string
 	runGr       func(args ...string) (string, error)
 
 	chatSize int
@@ -404,8 +398,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.frame++
 		m.refreshAgent()
 		return m, tick()
-	case publishedMsg:
-		m.published(msg)
 	case editorDoneMsg:
 		m.err = msg.err
 	case tea.MouseMsg:
@@ -627,16 +619,16 @@ func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *model) publish() tea.Cmd {
-	if m.review == nil || m.runGr == nil || m.publishing {
+func (m *model) finish() tea.Cmd {
+	if m.review == nil || m.runGr == nil {
+		return nil
+	}
+	if m.review.Publish == nil {
+		m.status = "nothing prepared: the agent prepares it when the review is done"
 		return nil
 	}
 	if m.preview == "" {
-		if m.review.Publish == nil {
-			m.status = "nothing prepared: the agent prepares it when the review is done"
-			return nil
-		}
-		out, err := m.runGr("publish", "--dry-run")
+		out, err := m.runGr("export", "--dry-run")
 		if err != nil {
 			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
 			return nil
@@ -644,33 +636,22 @@ func (m *model) publish() tea.Cmd {
 		m.preview, m.previewTop = out, 0
 		return nil
 	}
-	m.publishing = true
-	run := m.runGr
-	return func() tea.Msg {
-		out, err := run("publish")
-		return publishedMsg{out: strings.TrimSpace(out), err: err}
+	out, err := m.runGr("export")
+	out = strings.TrimSpace(out)
+	if err != nil {
+		m.err = fmt.Errorf("export failed: %v: %s", err, out)
+		return nil
 	}
-}
-
-func (m *model) published(msg publishedMsg) {
-	m.publishing = false
-	if msg.err != nil {
-		const retry = "P retries: drafts already on the MR are reused"
-		failed := fmt.Sprintf("publish failed: %v\n%s\n%s\n\n", msg.err, msg.out, retry)
-		m.preview, m.previewTop = failed+strings.TrimPrefix(m.preview, m.lastFailure), 0
-		m.lastFailure = failed
-		return
-	}
-	m.preview, m.lastFailure = "", ""
-	first, _, _ := strings.Cut(msg.out, "\n")
-	m.emit(inbox.Event{Kind: inbox.KindPublished, Text: first})
-	m.status = first
+	m.preview = ""
+	m.emit(inbox.Event{Kind: inbox.KindFinished, Text: out})
+	m.status = "handed to the agent: " + out
+	return nil
 }
 
 func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "P":
-		return m.publish()
+		return m.finish()
 	case "esc", "q":
 		m.preview = ""
 	case "j", "down":
