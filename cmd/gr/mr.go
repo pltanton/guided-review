@@ -63,7 +63,7 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	switch _, ok := verdicts[*verdict]; {
 	case !ok:
 		return errors.New("--verdict must be approve, changes or blocked")
-	case r.MR == nil:
+	case r.MR == nil && r.Mode != modeSelf:
 		return errors.New("not a merge request review: nothing to publish to")
 	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
@@ -102,8 +102,11 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	p := r.Publish
-	if p == nil || r.MR == nil {
+	if p == nil {
 		return errors.New("nothing prepared: run gr prepare first")
+	}
+	if r.Mode == modeSelf {
+		return exportSelf(e, r, *dryRun)
 	}
 	mrFiles, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
 	if err != nil {
@@ -184,6 +187,62 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 		return err
 	}
 	e.printf("marked %d comments published\n", len(x.Comments))
+	return nil
+}
+
+const modeSelf = "self"
+
+type fix struct {
+	ID         int    `json:"id"`
+	Severity   string `json:"severity"`
+	File       string `json:"file"`
+	Lines      string `json:"lines"`
+	Body       string `json:"body"`
+	Suggestion string `json:"suggestion,omitempty"`
+}
+
+func exportSelf(e env, r *state.Review, dryRun bool) error {
+	p := r.Publish
+	x := struct {
+		Verdict   string `json:"verdict"`
+		Decisions string `json:"decisions"`
+		Fixes     []fix  `json:"fixes"`
+	}{Verdict: p.Verdict, Decisions: p.Decisions}
+	var md strings.Builder
+	for _, c := range r.Comments {
+		if c.Resolved {
+			continue
+		}
+		fmt.Fprintf(&md, "--- %s:%s\n**%s** %s\n", c.File, c.Lines, c.Severity, c.Body)
+		if c.Suggestion != "" {
+			fmt.Fprintf(&md, "```suggestion\n%s\n```\n", c.Suggestion)
+		}
+		md.WriteString("\n")
+		x.Fixes = append(x.Fixes, fix{
+			ID: c.ID, Severity: string(c.Severity), File: c.File, Lines: c.Lines, Body: c.Body,
+			Suggestion: c.Suggestion,
+		})
+	}
+	fmt.Fprintf(&md, "--- summary\n%s\n", summaryMarkdown(r, p.Verdict, p.Decisions))
+	if dryRun {
+		e.printf("%s", md.String())
+		return nil
+	}
+	dir := filepath.Join(e.exportDir, r.ID)
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(dir, "fixes.json"), x); err != nil {
+		return err
+	}
+	mdPath := filepath.Join(dir, "review.md")
+	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
+		return err
+	}
+	e.println(dir)
 	return nil
 }
 

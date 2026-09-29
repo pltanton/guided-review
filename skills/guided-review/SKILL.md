@@ -165,7 +165,23 @@ steps:
    summary: resolved, still open, new questions.
 3. Then plan and walk only the round diff as usual.
 
-## MR discussions
+## Self mode (`gr init` printed "mode: self")
+
+The author is reviewing their own branch before anyone else sees it, and you were started
+by their coding agent with a fresh context. That is the point: judge the code as a
+stranger would. Do not look for or ask about how it was written.
+
+- The prompt that started you gives the review id, the task (ticket, spec, a line or
+  two) and the pane of the author's agent. Open the viewer with `--return <that pane>`
+  instead of `$TMUX_PANE`, so finishing lands the human back in their coding session.
+- `gr init --self` was already run for you; `gr init --self` again just resumes.
+- Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
+- Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes
+  `fixes.json` for the author's agent and closes the viewer. On `[finished]` run
+  `gr done`, say in one line that the fixes went to the author's session, and end your
+  turn. No publishing, no Slack.
+
+
 
 `gr init` and `gr status` list unresolved discussions of other reviewers by their first
 line; `gr discussions` refreshes them from the MR and prints them in full. The viewer

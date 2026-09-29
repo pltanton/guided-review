@@ -59,6 +59,7 @@ type Review struct {
 	HeadSHA      string       `yaml:"head_sha"`
 	MR           *MR          `yaml:"mr,omitempty"`
 	Worktree     string       `yaml:"worktree,omitempty"`
+	Mode         string       `yaml:"mode,omitempty"`
 	Round        int          `yaml:"round,omitempty"`
 	RoundStart   time.Time    `yaml:"round_start,omitempty"`
 	PrevHeadSHA  string       `yaml:"prev_head_sha,omitempty"`

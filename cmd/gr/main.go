@@ -15,7 +15,7 @@ import (
 const usage = `usage: gr <command> [args]
 
 review
-  init [--base REV] [--id ID] [--force] [MR-URL | BRANCH | BASE..HEAD]
+  init [--base REV] [--id ID] [--force] [--self] [MR-URL | BRANCH | BASE..HEAD]
   status [--gate]
   hunks
   plan set [-f FILE]

@@ -32,6 +32,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	base := fs.String("base", "", "base revision (default: merge-base with the default branch)")
 	id := fs.String("id", "", "review id (default: derived from the MR or branch)")
 	force := fs.Bool("force", false, "start over if the review already exists (comments are kept)")
+	self := fs.Bool("self", false, "review your own branch; the result goes back to your agent")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -42,6 +43,12 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	t, err := resolveTarget(ctx, s.repo, e.glab, fs.Arg(0), *base)
 	if err != nil {
 		return err
+	}
+	switch {
+	case *self && t.mr != nil:
+		return errors.New("--self reviews a local branch, not an MR URL")
+	case *self:
+		t.id = "self-" + t.id
 	}
 	if *id != "" {
 		t.id = *id
@@ -73,6 +80,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		}
 	}
 	r.Worktree = worktree
+	if *self {
+		r.Mode = modeSelf
+	}
 	if err := syncDiscussions(ctx, e.glab, r); err != nil {
 		return err
 	}
@@ -332,6 +342,9 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 	}
 	if r.Domain != "" {
 		e.printf("domain: %s\n", r.Domain)
+	}
+	if r.Mode == modeSelf {
+		e.println("mode: self — the author's own change; the result goes back to their agent")
 	}
 	next := "pipe a plan (YAML) to `gr plan set`"
 	if r.Round > 1 {

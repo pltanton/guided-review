@@ -620,3 +620,41 @@ func TestConfigCommands(t *testing.T) {
 	out = h.mustRun("", "config")
 	assertContains(t, out, "key conflicts")
 }
+
+func TestSelfReview(t *testing.T) {
+	h := newHarness(t)
+	out := h.mustRun("", "init", "--self")
+	assertContains(t, out, "review self-feature", "mode: self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+		"--severity", "minor", "--suggestion", "\tif a <= 0 {", "zero is negative too")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes", "--decisions", "fix the guard")
+
+	assertContains(t, h.mustRun("", "export", "--dry-run"),
+		"--- api/transfer.go:4", "**minor** zero is negative too", "```suggestion", "--- summary")
+	dir := filepath.Join(h.cache, "export", "self-feature")
+	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
+		t.Fatalf("export printed %q, want %q", out, dir)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "fixes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var x struct {
+		Verdict string `json:"verdict"`
+		Fixes   []fix  `json:"fixes"`
+	}
+	if err := json.Unmarshal(data, &x); err != nil {
+		t.Fatal(err)
+	}
+	want := fix{ID: 1, Severity: "minor", File: "api/transfer.go", Lines: "4",
+		Body: "zero is negative too", Suggestion: "\tif a <= 0 {"}
+	if x.Verdict != "changes" || len(x.Fixes) != 1 || x.Fixes[0] != want {
+		t.Fatalf("fixes.json: %s", data)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "review.json")); err == nil {
+		t.Fatal("a self review must not produce GitLab drafts")
+	}
+}
