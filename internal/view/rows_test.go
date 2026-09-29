@@ -298,12 +298,20 @@ func TestOneHeaderPerFile(t *testing.T) {
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
 	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "3"}, {File: "a.go", Lines: "30"}}}
-	rows, err := buildRows(src, st, 1, []Note{{File: "a.go", Line: 30, Kind: "note", Text: "n"}}, nil)
+	note := Note{File: "a.go", Line: 30, Kind: "note", Text: "n", Focus: true}
+	rows, err := buildRows(src, st, 1, []Note{note}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var headers, notes, gaps int
+	seen := map[int]bool{}
 	for _, r := range rows {
+		if r.Kind == RowCode || r.Kind == RowAdded {
+			if seen[r.Line] {
+				t.Fatalf("line %d shown twice", r.Line)
+			}
+			seen[r.Line] = true
+		}
 		switch r.Kind {
 		case RowFile:
 			headers++
