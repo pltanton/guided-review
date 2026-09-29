@@ -292,42 +292,48 @@ func commentDraft(
 func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	var b strings.Builder
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	w("## Guided review: %s\n\n", verdicts[verdict])
+	w("**Guided review: %s**", verdicts[verdict])
 	if r.Round > 1 {
-		w("Round %d.\n\n", r.Round)
+		w(" (round %d)", r.Round)
 	}
-	if r.Summary != "" {
-		w("%s\n\n", r.Summary)
-	}
+	w("\n\n")
 	if d := strings.TrimSpace(decisions); d != "" {
-		w("**Decisions**\n\n%s\n\n", d)
+		w("%s\n\n", d)
 	}
-	w("| | Step | Notes |\n|---|---|---|\n")
-	for _, st := range r.Steps {
-		note := ""
-		switch st.Status {
-		case state.StatusSkipped:
-			note = "skipped: " + st.SkipReason
-		case state.StatusStale:
-			note = "not reviewed: depends on a blocked step"
-		}
-		w("| %s | %s %s | %s |\n", st.Status.Glyph(), st.ID, st.Title, note)
-	}
+	open := map[state.Severity]int{}
 	var resolved []string
 	for _, c := range r.Comments {
 		if c.Resolved {
 			resolved = append(resolved, fmt.Sprintf("#%d", c.ID))
+		} else {
+			open[c.Severity]++
 		}
 	}
-	w("\n**Comments:** %s (inline)\n", severityCounts(r, " · "))
-	if len(resolved) > 0 {
-		w("**Resolved since the last round:** %s\n", strings.Join(resolved, ", "))
+	var counts []string
+	for _, sev := range state.Severities {
+		if n := open[sev]; n > 0 {
+			counts = append(counts, fmt.Sprintf("%d %s", n, sev))
+		}
 	}
-	cov := plan.CoverageOf(r)
-	w("**Coverage:** %d/%d steps, hotspots %d/%d; "+
-		"boilerplate %d files and generated %d files not reviewed line by line\n",
-		cov.Done+cov.Skipped, cov.Total, cov.HotspotsReviewed, cov.Hotspots,
-		cov.Boilerplate, cov.Generated)
-	w("\n<sub>guided-review</sub>\n")
+	if len(counts) > 0 {
+		w("Comments: %s, inline.\n", strings.Join(counts, ", "))
+	} else {
+		w("No comments.\n")
+	}
+	if len(resolved) > 0 {
+		w("Resolved since the last round: %s.\n", strings.Join(resolved, ", "))
+	}
+	var skipped []string
+	for _, st := range r.Steps {
+		switch st.Status {
+		case state.StatusSkipped:
+			skipped = append(skipped, fmt.Sprintf("%s (%s)", st.Title, st.SkipReason))
+		case state.StatusStale:
+			skipped = append(skipped, st.Title+" (waits for the blocker fix)")
+		}
+	}
+	if len(skipped) > 0 {
+		w("Not reviewed: %s.\n", strings.Join(skipped, "; "))
+	}
 	return b.String()
 }

@@ -548,8 +548,8 @@ func TestExport(t *testing.T) {
 
 	out := h.mustRun("", "export", "--dry-run")
 	assertContains(t, out, "api/transfer.go:6", "**major** return an error instead",
-		"```suggestion:-0+0", "## Guided review: changes requested", "zero is a silent reject",
-		"| ✓ | s1 Transfer guard |")
+		"```suggestion:-0+0", "**Guided review: changes requested**", "zero is a silent reject",
+		"Comments: 1 major, 1 nit, inline.")
 	dir := filepath.Join(h.cache, "export", "mr-7")
 	if _, err := os.Stat(dir); err == nil {
 		t.Fatal("dry run must not write the export")
