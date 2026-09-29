@@ -644,7 +644,11 @@ func noteBadge(kind, label string) string {
 	return " " + cmp.Or(label, noteKinds[kind].label) + " "
 }
 
-func expandNotes(rows []Row, width int) []Row {
+func noteKey(r Row) string {
+	return fmt.Sprintf("%s:%d:%s:%d:%s", r.File, r.Line, r.NoteKind, r.Ref, r.NoteLabel)
+}
+
+func expandNotes(rows []Row, width int, folded map[string]bool) []Row {
 	width = max(width, 20)
 	out := make([]Row, 0, len(rows))
 	for _, r := range rows {
@@ -658,7 +662,11 @@ func expandNotes(rows []Row, width int) []Row {
 		if r.Dim {
 			text += " ✓"
 		}
-		for i, line := range strings.Split(ansi.Wrap(text, max(width-pad, 10), ""), "\n") {
+		lines := strings.Split(ansi.Wrap(text, max(width-pad, 10), ""), "\n")
+		if folded[noteKey(r)] && len(lines) > 1 {
+			lines = []string{ansi.Truncate(lines[0], max(width-pad-4, 10), "…") + " ▸"}
+		}
+		for i, line := range lines {
 			row := r
 			row.Text, row.NoteHead = line, i == 0
 			out = append(out, row)

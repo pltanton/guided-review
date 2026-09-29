@@ -1196,3 +1196,29 @@ func TestBackspaceDetachesLine(t *testing.T) {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
 }
+
+func TestFoldNote(t *testing.T) {
+	m, _ := newTestModel(t)
+	i := slices.IndexFunc(m.rows, func(r Row) bool { return r.Kind == RowNote })
+	m.rows[i].Text = strings.Repeat("a long remark ", 30)
+	m.relist()
+	notes := func() int {
+		n := 0
+		for _, l := range m.lines {
+			if l.Kind == RowNote {
+				n++
+			}
+		}
+		return n
+	}
+	open := notes()
+	m.seek(func(l line) bool { return l.Kind == RowNote && !l.NoteHead })
+	m.Update(key("o"))
+	if got := notes(); got != 1 || !strings.HasSuffix(m.current().Text, "▸") || !m.current().NoteHead {
+		t.Fatalf("folded note: %d lines, cursor on %+v", got, m.current().Row)
+	}
+	m.Update(key("o"))
+	if got := notes(); got != open || open < 2 {
+		t.Fatalf("unfolded note: %d lines, want %d", got, open)
+	}
+}

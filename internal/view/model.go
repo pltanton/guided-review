@@ -73,6 +73,7 @@ type model struct {
 
 	showRemoved bool
 	unfolded    map[string]bool
+	folded      map[string]bool
 	algo        string
 	loading     string
 	returnPane  string
@@ -284,13 +285,13 @@ func (m *model) relist() {
 	keep := m.current()
 	width := m.mainWidth() - noteIndent
 	if m.useSplit() {
-		m.lines = pairRows(expandNotes(m.rows, width))
+		m.lines = pairRows(expandNotes(m.rows, width, m.folded))
 	} else {
 		rows := m.rows
 		if !m.showRemoved {
 			rows = foldRemoved(rows, m.unfolded)
 		}
-		m.lines = unifiedLines(expandNotes(rows, width))
+		m.lines = unifiedLines(expandNotes(rows, width, m.folded))
 	}
 	if keep.File != "" {
 		m.focus(keep)
@@ -460,9 +461,20 @@ func (m *model) toggleFold() {
 		m.clamp()
 		return
 	}
+	if cur.Kind == RowNote {
+		key := noteKey(cur.Row)
+		if m.folded == nil {
+			m.folded = map[string]bool{}
+		}
+		m.folded[key] = !m.folded[key]
+		m.relist()
+		m.seek(func(l line) bool { return l.NoteHead && noteKey(l.Row) == key })
+		m.clamp()
+		return
+	}
 	key := cur.FoldKey
 	if key == "" {
-		m.status = "nothing to open here: o opens ⋯ hidden lines and ▸ folded removed blocks"
+		m.status = "nothing to open here: o opens ⋯ hidden lines, ▸ folded blocks and notes"
 		return
 	}
 	if m.unfolded == nil {

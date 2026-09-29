@@ -99,7 +99,7 @@ both sides in full.
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
 | `L` past the last step | `boilerplate`, `generated` and `all changes` views: every diff of the MR, nothing left out |
-| `o`, click | open what is under the cursor: `⋯ N hidden lines` of unchanged code or a `▸ removed lines hidden` block |
+| `o`, click | open what is under the cursor: `⋯ N hidden lines` of unchanged code or a `▸ removed lines hidden` block; on a note or comment, fold it to one line and back |
 | `O` | show every removed line / fold large removed blocks again |
 | `d` | next diff algorithm (histogram → patience → myers → minimal) |
 | `s` | split / unified diff |
