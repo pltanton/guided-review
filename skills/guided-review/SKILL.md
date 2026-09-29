@@ -205,7 +205,7 @@ stranger would. Do not look for or ask about how it was written.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
 - Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes
   `fixes.json` for the author's agent and closes the viewer. That is the end of your job:
-  the author's agent closes your window and the review. No publishing, no Slack.
+  the author's agent closes your window and the review. No publishing, no notifying.
 
 
 
@@ -249,12 +249,9 @@ line, say whether the code answers it.
    ```
    If a POST fails, stop: `gr say` the GitLab error and that the drafts created so far sit
    unpublished on the MR; do not retry blindly. After success give the MR link.
-5. Tell the author right after publishing, without asking: one or two lines — MR link,
-   verdict, counts of what was actually published
-   (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`). Take the
-   author from `glab mr view <iid>` (username, name), find them with the Slack MCP user
-   search (load the tool via ToolSearch if it is deferred) and send the DM with
-   `slack_send_message`, not a draft. Then show the human the text you sent. No Slack MCP
-   or no such user → print the text to copy.
+5. Tell the author. If a `guided-review-notify` skill is available, follow it with the
+   MR link, the verdict and the counts of what was actually published — that is where a
+   team keeps its own way of pinging people. Without one, print a one-line message the
+   human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
 6. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

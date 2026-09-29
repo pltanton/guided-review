@@ -14,7 +14,7 @@ human's language, a few words each.
 In this order:
 
 1. **Intent** — the MR's own spec, design doc, ADR or acceptance criteria
-   (`docs/**/specs/*`, design notes, `AGENTS-ACC.md` and the like). Always first: the
+   (`docs/**/specs/*`, design notes, an acceptance-criteria file and the like). Always first: the
    reviewer judges the code against it. In a re-review it comes first when it changed.
 2. **Preparatory refactoring**, when the MR first moves or reshapes code and then
    changes behaviour. Its own chapter, titled so it is clear that behaviour must not

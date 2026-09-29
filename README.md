@@ -49,7 +49,8 @@ result to `/tmp/guided-review/<id>/`: `review.md` to read, `review.json` and one
 GitLab draft-note body per inline comment (nits with an obvious fix as suggestions) plus a
 summary with the verdict, decisions, the step table and coverage. The agent shows what
 goes out, asks, posts the drafts with `glab` in one batch and runs `gr mark-published`.
-After publishing it messages the author in Slack.
+After publishing it tells the author: through your `guided-review-notify` skill if you
+have one (see Extending), otherwise it prints a line to forward.
 
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.
@@ -144,4 +145,10 @@ both sides in full.
 | `a` | back to the agent's tmux window |
 | `q` | quit |
 
-Design: [docs/specs/2026-09-25-guided-review-design.md](docs/specs/2026-09-25-guided-review-design.md)
+## Extending
+
+Team-specific steps stay out of this repository. The one hook today: after publishing,
+the agent looks for a skill named `guided-review-notify` and follows it with the MR
+link, the verdict and the comment counts — for example to message the author in your
+chat. Put it in `~/.claude/skills/guided-review-notify/SKILL.md` (or the Codex
+equivalent); without it the agent prints a line to forward.

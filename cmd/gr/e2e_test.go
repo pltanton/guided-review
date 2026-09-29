@@ -444,7 +444,7 @@ func TestDiscussionsFull(t *testing.T) {
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(
-				`[{"id":"d1","notes":[{"body":"## acc-guard\nline two\nline three","author":{"username":"ci"},"system":false,"resolvable":true},
+				`[{"id":"d1","notes":[{"body":"## ci-report\nline two\nline three","author":{"username":"ci"},"system":false,"resolvable":true},
 				{"body":"reply","author":{"username":"bob"},"system":false}]}]`,
 			), nil
 		}
@@ -459,7 +459,7 @@ func TestDiscussionsFull(t *testing.T) {
 	}
 	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
 	out := h.mustRun("", "discussions")
-	assertContains(t, out, "@ci (1 replies)", "## acc-guard\n  line two\n  line three")
+	assertContains(t, out, "@ci (1 replies)", "## ci-report\n  line two\n  line three")
 }
 
 func TestProgress(t *testing.T) {
