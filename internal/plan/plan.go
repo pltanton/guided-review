@@ -93,6 +93,10 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 			}
 		}
 		for _, h := range s.Hotspots {
+			if _, sure := s.HotspotFile(h); h.Line > 0 && !sure {
+				fail("step %s: hotspot at line %d needs file: several files in the step",
+					s.ID, h.Line)
+			}
 			if !slices.Contains(state.HotspotCategories, h.Cat) {
 				fail(
 					"step %s: hotspot category %q, want one of %v",
@@ -272,9 +276,10 @@ func Apply(r *state.Review, p Plan) {
 				s.Details = append(s.Details, d)
 			}
 		}
-		for _, h := range s.Hotspots {
+		for j, h := range s.Hotspots {
+			s.Hotspots[j].File, _ = s.HotspotFile(h)
 			if h.Detail != "" && h.Line > 0 {
-				d := state.Detail{File: h.File, Line: h.Line, Text: h.Detail}
+				d := state.Detail{File: s.Hotspots[j].File, Line: h.Line, Text: h.Detail}
 				s.Details = append(s.Details, d)
 			}
 		}

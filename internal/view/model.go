@@ -236,7 +236,8 @@ func (m *model) notes() []Note {
 	for _, h := range m.step.Hotspots {
 		if h.Line > 0 {
 			out = append(out, Note{
-				File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true,
+				File: hotspotFile(m.step, h), Line: h.Line, Kind: "hotspot", Text: h.Q,
+				Focus: true,
 			})
 		}
 	}

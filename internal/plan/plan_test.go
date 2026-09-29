@@ -260,3 +260,21 @@ func TestDetailsFromPlan(t *testing.T) {
 		t.Fatalf("hotspot detail on its line, got %q %v", d, ok)
 	}
 }
+
+func TestHotspotNeedsFileInMultiFileStep(t *testing.T) {
+	r, files := fixture()
+	p, err := plan.Parse([]byte(`steps:
+  - id: s1
+    title: a
+    kind: logic
+    hunks: [{file: api/a.go}, {file: wire.go}]
+    hotspots: [{cat: money, q: "rounding?", line: 3}]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := plan.Validate(p, r, files)
+	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "needs file") }) {
+		t.Fatalf("an ambiguous hotspot must be rejected: %v", errs)
+	}
+}

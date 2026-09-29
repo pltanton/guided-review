@@ -95,3 +95,27 @@ func TestStoreKeysAndList(t *testing.T) {
 		t.Fatal("IsCurrentFile")
 	}
 }
+
+func TestHotspotFile(t *testing.T) {
+	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "1-20"}, {File: "b.go", Lines: "30-60"}}}
+	tests := []struct {
+		name string
+		h    state.Hotspot
+		want string
+	}{
+		{"explicit", state.Hotspot{File: "a.go", Line: 40}, "a.go"},
+		{"inside b's range", state.Hotspot{Line: 40}, "b.go"},
+		{"outside every range falls back to the first file", state.Hotspot{Line: 25}, "a.go"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got, _ := st.HotspotFile(tt.h); got != tt.want {
+				t.Fatalf("HotspotFile(%+v) = %q, want %q", tt.h, got, tt.want)
+			}
+		})
+	}
+	one := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
+	if got, sure := one.HotspotFile(state.Hotspot{Line: 99}); got != "a.go" || !sure {
+		t.Fatalf("a single-file step owns its hotspots, got %q", got)
+	}
+}

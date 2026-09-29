@@ -77,7 +77,8 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
    boilerplate.
 2. Group into chapters and steps per references/ordering.md: intent first, one chapter
    per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
-   references/hotspots.md, with `line` so the viewer marks them.
+   references/hotspots.md, with `line` so the viewer marks them (and `file` when the step
+   has several files).
 3. Read every step's code now, with enough surrounding code to be sure of what it does,
    and look for problems per references/checklist.md: the viewer moves between steps
    without you, so all per-step work happens here.

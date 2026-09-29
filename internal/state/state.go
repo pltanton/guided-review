@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -254,4 +255,20 @@ func (s *Step) Detail(file string, line int) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+func (s *Step) HotspotFile(h Hotspot) (file string, sure bool) {
+	if h.File != "" || len(s.Hunks) == 0 {
+		return h.File, true
+	}
+	var files []string
+	for _, sh := range s.Hunks {
+		if from, to, err := ParseLines(sh.Lines); err == nil && from <= h.Line && h.Line <= to {
+			return sh.File, true
+		}
+		if !slices.Contains(files, sh.File) {
+			files = append(files, sh.File)
+		}
+	}
+	return files[0], len(files) == 1
 }
