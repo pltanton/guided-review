@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1096,5 +1097,40 @@ func TestUnderlineKeepsStyles(t *testing.T) {
 	want := "\x1b[31mfo\x1b[4mo\x1b[0m\x1b[4m \x1b[32m\x1b[4mbar\x1b[0m\x1b[24m"
 	if got != want {
 		t.Fatalf("underline(%q, 2, 7) = %q, want %q", styled, got, want)
+	}
+}
+
+func TestRawComment(t *testing.T) {
+	m, sent := newTestModel(t)
+	var ran []string
+	m.runGr = func(args ...string) (string, error) {
+		ran = args
+		return "comment #4 nit a.go:2\n", nil
+	}
+	m.cursor = 2
+	for _, k := range []tea.KeyMsg{key("c"), {Type: tea.KeyCtrlR}, {Type: tea.KeyTab}} {
+		m.Update(k)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "RAW nit a.go:2 › -x stays, exactly") {
+		t.Fatalf("raw prompt missing:\n%s", v)
+	}
+	m.Update(key("enter"))
+	want := []string{
+		"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "nit", "--step", "s1",
+		"--", "-x stays, exactly",
+	}
+	if !slices.Equal(ran, want) {
+		t.Fatalf("gr args = %q, want %q", ran, want)
+	}
+	if n := len(*sent); n == 0 || (*sent)[n-1].Kind != inbox.KindComment ||
+		(*sent)[n-1].Text != "comment #4 nit a.go:2" {
+		t.Fatalf("agent must be told about the raw comment: %+v", *sent)
+	}
+
+	m.composing, m.composeKind, m.composeRef, m.input = true, inbox.KindEdit, 4, []rune("reworded")
+	m.Update(key("enter"))
+	if want := []string{"comment", "edit", "4", "--", "reworded"}; !slices.Equal(ran, want) {
+		t.Fatalf("raw edit args = %q, want %q", ran, want)
 	}
 }

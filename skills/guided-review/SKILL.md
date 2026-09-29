@@ -115,6 +115,10 @@ steps:
      the feature, not its syntax.
    - `[next] sN` — if a hotspot question on this step is unanswered, `gr say` it once
      more and wait; otherwise `gr step next` and go to 1.
+   - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,
+     word for word (raw mode). Do not add, edit or rephrase it and do not reply; if the
+     text lists stale steps, handle it as a blocker (step 4). `[comment] sN: comment #N
+     updated` is a raw edit of an existing comment: nothing to do.
    - `[skip] sN: reason` — `gr step skip --reason "<reason>"`, go to 1.
    - `[goto] sN` — `gr step goto sN`, go to 1.
 

@@ -109,6 +109,8 @@ type model struct {
 	input       []rune
 	inputPos    int
 	composeRef  int
+	raw         bool
+	rawSeverity state.Severity
 	anchorFile  string
 	anchorLines string
 

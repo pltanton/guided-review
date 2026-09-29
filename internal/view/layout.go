@@ -283,12 +283,26 @@ func (m *model) bottomLines() []string {
 		case m.anchorFile != "":
 			prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
 		}
-		pos := min(m.inputPos, len(m.input))
-		hint := ""
-		if m.anchorFile != "" {
-			hint = dimStyle.Render("   ctrl+x: no line")
+		hints := []string{"ctrl+r raw"}
+		lead := cursorStyle.Render(prompt)
+		if m.rawMode() {
+			hints = []string{"tab severity", "ctrl+r via the agent"}
+			tag := "RAW " + string(m.severity())
+			if m.composeKind == inbox.KindEdit {
+				tag = "RAW"
+			} else if m.composeRef > 0 {
+				prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
+			}
+			lead = delStyle.Bold(true).Render(tag) + " " + cursorStyle.Render(prompt)
 		}
-		last = cursorStyle.Render(prompt) + m.inputWithCursor(pos) + hint
+		if m.composeKind != inbox.KindMessage && m.composeKind != inbox.KindEdit {
+			hints = nil
+		}
+		if m.anchorFile != "" {
+			hints = append(hints, "ctrl+x no line")
+		}
+		pos := min(m.inputPos, len(m.input))
+		last = lead + m.inputWithCursor(pos) + dimStyle.Render("   "+strings.Join(hints, " · "))
 		return append(lines, wrapInput(last, m.width)...)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
@@ -746,7 +760,8 @@ func (m *model) keyHints(prefix string) []string {
 	for _, r := range rows {
 		lines = append(lines, cursorStyle.Render(r[0])+"  "+r[1])
 	}
-	frame := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8"))
+	frame := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("8"))
 	box := frame.Padding(0, 1).Render(strings.Join(lines, "\n"))
 	return strings.Split(box, "\n")
 }

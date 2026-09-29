@@ -1,12 +1,16 @@
 package view
 
 import (
+	"cmp"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/aplotnikov/guided-review/internal/inbox"
+	"github.com/aplotnikov/guided-review/internal/state"
 )
 
 func (m *model) startCompose(kind string) {
@@ -76,18 +80,23 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEnter:
 		text := strings.TrimSpace(string(m.input))
 		m.composing, m.input = false, nil
-		if text == "" {
-			return nil
-		}
-		m.emit(
-			inbox.Event{
-				Kind:    m.composeKind,
-				Text:    text,
-				File:    m.anchorFile,
-				Lines:   m.anchorLines,
+		switch {
+		case text == "":
+		case m.rawMode():
+			m.saveRaw(text)
+		default:
+			m.emit(inbox.Event{
+				Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines,
 				Comment: m.composeRef,
-			},
-		)
+			})
+		}
+	case tea.KeyCtrlR:
+		m.raw = !m.raw
+	case tea.KeyTab:
+		if m.rawMode() {
+			i := slices.Index(state.Severities, m.severity())
+			m.rawSeverity = state.Severities[(i+1)%len(state.Severities)]
+		}
 	case tea.KeyCtrlX:
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 	case tea.KeyLeft:
@@ -186,4 +195,40 @@ func (m *model) selection() (file, lines string, ok bool) {
 
 func (m *model) selected(i int) bool {
 	return m.visual && i >= min(m.anchor, m.cursor) && i <= max(m.anchor, m.cursor)
+}
+
+func (m *model) rawMode() bool {
+	return m.raw && (m.composeKind == inbox.KindMessage || m.composeKind == inbox.KindEdit)
+}
+
+func (m *model) severity() state.Severity {
+	return cmp.Or(m.rawSeverity, state.SeverityMinor)
+}
+
+func (m *model) saveRaw(text string) {
+	args := []string{"comment", "edit", fmt.Sprint(m.composeRef), "--", text}
+	if m.composeKind == inbox.KindMessage {
+		if m.anchorFile == "" {
+			m.err = errors.New("a raw comment needs a line: put the cursor on code")
+			return
+		}
+		args = []string{
+			"comment", "add", "--file", m.anchorFile, "--lines", m.anchorLines,
+			"--severity", string(m.severity()),
+		}
+		if m.step != nil && !isExtra(m.step.ID) {
+			args = append(args, "--step", m.step.ID)
+		}
+		args = append(args, "--", text)
+	}
+	out, err := m.runGr(args...)
+	out = strings.Join(strings.Split(strings.TrimSpace(out), "\n"), " · ")
+	if err != nil {
+		m.err = fmt.Errorf("%v: %s", err, out)
+		return
+	}
+	m.emit(inbox.Event{
+		Kind: inbox.KindComment, File: m.anchorFile, Lines: m.anchorLines, Text: out,
+	})
+	m.status = "saved as written: " + out
 }
