@@ -266,6 +266,17 @@ func Apply(r *state.Review, p Plan) {
 		s.Status = state.StatusPending
 		s.MayChange = false
 		s.SkipReason, s.Announced = "", false
+		for _, a := range s.Annotations {
+			if a.Detail != "" {
+				d := state.Detail{File: a.File, Line: max(a.To, a.Line), Text: a.Detail}
+				s.Details = append(s.Details, d)
+			}
+		}
+		for _, h := range s.Hotspots {
+			if h.Detail != "" && h.Line > 0 {
+				s.Details = append(s.Details, state.Detail{File: h.File, Line: h.Line, Text: h.Detail})
+			}
+		}
 		r.Steps[i] = s
 	}
 	boilerplate := map[string]bool{}

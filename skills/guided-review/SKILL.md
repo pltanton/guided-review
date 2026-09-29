@@ -78,13 +78,18 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 2. Group into chapters and steps per references/ordering.md: intent first, one chapter
    per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them.
-3. Read every step's code now, with enough surrounding code to be sure of what it does:
-   the viewer moves between steps without you, so all per-step work happens here.
+3. Read every step's code now, with enough surrounding code to be sure of what it does,
+   and look for problems per references/checklist.md: the viewer moves between steps
+   without you, so all per-step work happens here.
 4. For each step write its `message` (references/style.md: at most three lines, what
    the code does, a spec mismatch, the one question) and its `annotations` where an
    explanation saves the reader real effort: what a non-obvious call does and why,
    where the spec disagrees (`kind: spec`). Full sentences, not fragments. One to three
-   annotations per step; none is fine.
+   annotations per step; none is fine. Give every annotation and every hotspot a
+   `detail`: three to eight sentences on what exactly the point or problem is, the
+   scenario where it bites and what to do, with a short code excerpt in a fenced block
+   when it helps. You have all of it in context now; `i` in the viewer shows it at once
+   instead of asking you again.
 5. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists. It posts
    s1's message itself.
 6. `gr say` the plan: one line per chapter with its steps (`Переводы: s1 s2 ⚑`) plus a line for
@@ -110,7 +115,13 @@ steps:
       ❓ ⚑57: retry with the same key after a timeout — second debit?
     hunks: [{ file: api/transfer.go, lines: 40-92 }]
     hotspots:
-      - { cat: consistency, line: 57, q: "Retry after a timeout — second debit?" }
+      - cat: consistency
+        line: 57
+        q: "Retry after a timeout — second debit?"
+        detail: >-
+          The key is checked in Redis before the transaction and written after it, so a
+          retry that lands between the debit and the write passes the check and debits
+          again. Checking and writing the key inside the reserve transaction closes it.
     annotations:
       - file: api/transfer.go
         line: 61
@@ -119,6 +130,9 @@ steps:
         text: >-
           reserve() opens the transaction and Put writes the ledger row inside it, so a
           failed debit rolls the reservation back too.
+        detail: >-
+          Put takes tx rather than the pool on purpose: called outside reserve() it would
+          commit on its own and a failed debit would leave the reservation behind.
     depends_on: [s1]
 ```
 
@@ -129,7 +143,8 @@ show the step's `message` from the plan, and it reminds the human of an open hot
 before leaving a step. You only hear about what needs you.
 
 1. If something worth explaining turns up only now, add it with
-   `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line).
+   `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line) and
+   its detail right away with `gr note detail --file F --line <last line> - <<'EOF' … EOF`.
 2. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
    nothing happened: run it again. Each printed line is one event from the viewer:
 
@@ -146,7 +161,8 @@ before leaving a step. You only hear about what needs you.
      in the feature, not its syntax (references/style.md).
    - `[ask] sN file:lines: text` — a question about that code, never a remark: read it,
      answer with `gr say` in a few lines. Do not create comments or notes for it.
-   - `[detail] sN file:line: <note text>` — the human wants more on your note there. Read
+   - `[detail] sN file:line: <note text>` — a note without a `detail` (add one with every
+     note from now on). Read
      the code again and write three to eight sentences: what exactly the problem or the
      point is, the scenario where it bites, and what to do about it; add a short code
      excerpt in a fenced block when it helps. Save it with

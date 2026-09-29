@@ -236,3 +236,27 @@ func TestChaptersStayTogether(t *testing.T) {
 		t.Fatalf("a split chapter must be rejected: %v", errs)
 	}
 }
+
+func TestDetailsFromPlan(t *testing.T) {
+	r, _ := fixture()
+	p, err := plan.Parse([]byte(`steps:
+  - id: s1
+    title: a
+    kind: logic
+    hunks: [{file: api/a.go}]
+    hotspots: [{cat: money, q: "rounding?", line: 7, detail: "float64 before the DB write"}]
+    annotations:
+      - {file: api/a.go, line: 3, to: 5, kind: note, text: t, detail: "reserve opens the tx"}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan.Apply(r, p)
+	st := r.Step("s1")
+	if d, ok := st.Detail("api/a.go", 5); !ok || d != "reserve opens the tx" {
+		t.Fatalf("annotation detail sits on the note's last line, got %q %v", d, ok)
+	}
+	if d, ok := st.Detail("api/a.go", 7); !ok || d != "float64 before the DB write" {
+		t.Fatalf("hotspot detail on its line, got %q %v", d, ok)
+	}
+}

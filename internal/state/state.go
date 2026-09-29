@@ -151,10 +151,11 @@ type StepHunk struct {
 }
 
 type Hotspot struct {
-	Cat  string `yaml:"cat"`
-	Q    string `yaml:"q"`
-	File string `yaml:"file,omitempty"`
-	Line int    `yaml:"line,omitempty"`
+	Cat    string `yaml:"cat"`
+	Q      string `yaml:"q"`
+	File   string `yaml:"file,omitempty"`
+	Line   int    `yaml:"line,omitempty"`
+	Detail string `yaml:"detail,omitempty"`
 }
 
 type Detail struct {
@@ -164,11 +165,12 @@ type Detail struct {
 }
 
 type Annotation struct {
-	File string `yaml:"file"`
-	Line int    `yaml:"line"`
-	To   int    `yaml:"to,omitempty"`
-	Kind string `yaml:"kind"`
-	Text string `yaml:"text"`
+	File   string `yaml:"file"`
+	Line   int    `yaml:"line"`
+	To     int    `yaml:"to,omitempty"`
+	Kind   string `yaml:"kind"`
+	Text   string `yaml:"text"`
+	Detail string `yaml:"detail,omitempty"`
 }
 
 type Comment struct {
@@ -247,7 +249,7 @@ func ParseLines(s string) (start, end int, err error) {
 
 func (s *Step) Detail(file string, line int) (string, bool) {
 	for _, d := range s.Details {
-		if d.File == file && d.Line == line {
+		if (d.File == file || d.File == "") && d.Line == line {
 			return d.Text, true
 		}
 	}
