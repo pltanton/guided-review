@@ -271,15 +271,16 @@ func (m *model) chatLines(width int, all bool) []string {
 		} else if roomy && i > 0 {
 			lines = append(lines, "")
 		}
-		name := agentStyle.Render("claude")
+		style, name := agentStyle, "claude"
 		if c.you {
-			name = youStyle.Render("   you")
+			style, name = youStyle, "   you"
 		}
+		bar := style.Render("│")
 		textW := max(width-ansi.StringWidth(gutter), 10)
 		for j, l := range strings.Split(ansi.Wrap(c.text, textW, ""), "\n") {
-			lead := dimStyle.Render(gutter)
+			lead := "       " + bar + " "
 			if j == 0 && named {
-				lead = name + dimStyle.Render(" │ ")
+				lead = style.Render(name) + " " + bar + " "
 			}
 			lines = append(lines, lead+l)
 		}
