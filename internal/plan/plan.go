@@ -274,7 +274,8 @@ func Apply(r *state.Review, p Plan) {
 		}
 		for _, h := range s.Hotspots {
 			if h.Detail != "" && h.Line > 0 {
-				s.Details = append(s.Details, state.Detail{File: h.File, Line: h.Line, Text: h.Detail})
+				d := state.Detail{File: h.File, Line: h.Line, Text: h.Detail}
+				s.Details = append(s.Details, d)
 			}
 		}
 		r.Steps[i] = s
