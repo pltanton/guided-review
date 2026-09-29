@@ -85,6 +85,7 @@ both sides in full.
 | Key | Action |
 |---|---|
 | `j`/`k`, wheel | move |
+| `42G` / `42gg`, `5j`, `3]` | vim counts: go to line 42 of the file, repeat a move; typed keys show at the bottom right, `esc` drops them |
 | `]`/`[` | next/previous hunk |
 | `n`/`N` | next/previous annotation |
 | `v`, mouse drag | select lines |

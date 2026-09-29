@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -90,8 +91,8 @@ func DefaultActions() []Action {
 		{Name: "word-prev", Group: nav, Desc: "previous symbol in the line", Keys: k("b"),
 			run: do((*model).wordPrev)},
 
-		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block; fold a note", Keys: k("o"),
-			run: do((*model).toggleFold)},
+		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block; fold a note",
+			Keys: k("o"), run: do((*model).toggleFold)},
 		{
 			Name:  "all-removed",
 			Group: dif,
@@ -127,7 +128,7 @@ func DefaultActions() []Action {
 			run: do(func(m *model) { m.startCompose(inbox.KindSkip) })},
 		{Name: "edit-comment", Group: rev, Desc: "edit the comment under the cursor", Keys: k("E"),
 			run: do((*model).startEdit)},
-		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (press twice)",
+		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (twice)",
 			Keys: k("D"), run: do((*model).deleteComment)},
 		{Name: "publish", Group: rev, Desc: "preview, then publish to the MR", Keys: k("P"),
 			run: do((*model).publish)},
@@ -140,8 +141,8 @@ func DefaultActions() []Action {
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
-		{Name: "chat", Group: vw, Desc: "enlarge the chat: small → half → full screen", Keys: k("t"),
-			run: do(func(m *model) { m.resizeChat((m.chatSize + 1) % 3) })},
+		{Name: "chat", Group: vw, Desc: "enlarge the chat: small → half → full screen",
+			Keys: k("t"), run: do(func(m *model) { m.resizeChat((m.chatSize + 1) % 3) })},
 		{Name: "chat-smaller", Group: vw, Desc: "shrink the chat", Keys: k("T"),
 			run: do(func(m *model) { m.resizeChat(max(m.chatSize-1, 0)) })},
 		{
@@ -245,11 +246,15 @@ func (m *model) keys() *keymap {
 
 func (m *model) dispatch(k string) tea.Cmd {
 	km := m.keys()
+	if m.pendingKey == "" && len(k) == 1 && k >= "0" && k <= "9" && (k != "0" || m.count != "") {
+		m.count += k
+		return nil
+	}
 	if m.pendingKey != "" {
 		seq := m.pendingKey + " " + k
 		m.pendingKey = ""
 		if i, ok := km.byKey[seq]; ok {
-			return km.actions[i].run(m)
+			return m.runCounted(km.actions[i])
 		}
 	}
 	if km.prefixes[k] {
@@ -257,9 +262,25 @@ func (m *model) dispatch(k string) tea.Cmd {
 		return nil
 	}
 	if i, ok := km.byKey[k]; ok {
-		return km.actions[i].run(m)
+		return m.runCounted(km.actions[i])
 	}
+	m.count = ""
 	return nil
+}
+
+func (m *model) runCounted(a Action) tea.Cmd {
+	n, _ := strconv.Atoi(m.count)
+	m.count = ""
+	switch {
+	case n > 0 && (a.Name == "top" || a.Name == "bottom"):
+		m.gotoLine(n)
+		return nil
+	case n > 1 && a.Group == "navigate":
+		for range min(n, len(m.lines)) - 1 {
+			a.run(m)
+		}
+	}
+	return a.run(m)
 }
 
 func (m *model) focusFilesPanel() {

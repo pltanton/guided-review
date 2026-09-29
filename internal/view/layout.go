@@ -91,6 +91,9 @@ func (m *model) footer() (string, []span) {
 	if m.lspBusy != "" {
 		tail = m.spin() + " lsp " + m.lspBusy + "…"
 	}
+	if typed := m.count + m.pendingKey; typed != "" {
+		tail = typed
+	}
 	if m.step == nil {
 		if m.status == "" {
 			tail = hints

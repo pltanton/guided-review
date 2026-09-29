@@ -1238,3 +1238,34 @@ func TestCursorHint(t *testing.T) {
 		t.Fatalf("comment footer: %q", f)
 	}
 }
+
+func TestCountPrefix(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key("2"))
+	m.Update(key("j"))
+	if m.cursor != 2 {
+		t.Fatalf("2j: cursor %d, want 2", m.cursor)
+	}
+	for _, k := range []string{"3", "g"} {
+		m.Update(key(k))
+	}
+	if f, _ := m.footer(); !strings.HasSuffix(strings.TrimSpace(ansi.Strip(f)), "3g") {
+		t.Fatalf("typed keys not shown: %q", ansi.Strip(f))
+	}
+	m.Update(key("g"))
+	if l := m.current(); l.File != "a.go" || l.Line != 3 {
+		t.Fatalf("3gg: cursor on %s:%d", l.File, l.Line)
+	}
+	for _, k := range []string{"9", "G"} {
+		m.Update(key(k))
+	}
+	if l := m.current(); l.Line != 9 {
+		t.Fatalf("9G: cursor on line %d", l.Line)
+	}
+	m.Update(key("5"))
+	m.Update(key("esc"))
+	m.Update(key("k"))
+	if l := m.current(); l.Line != 3 || m.count != "" {
+		t.Fatalf("esc must drop the count: line %d count %q", l.Line, m.count)
+	}
+}

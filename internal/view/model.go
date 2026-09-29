@@ -88,6 +88,7 @@ type model struct {
 
 	col        int
 	pendingKey string
+	count      string
 	km         *keymap
 	help       bool
 	helpTop    int
