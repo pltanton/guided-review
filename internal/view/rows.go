@@ -74,45 +74,49 @@ func buildRows(
 	notes []Note,
 	reveal map[string][][2]int,
 ) ([]Row, error) {
-	var rows []Row
+	var files []string
+	ranges := map[string][][2]int{}
+	whole := map[string]bool{}
 	for _, sh := range st.Hunks {
-		fd, err := src.FileDiff(sh.File)
-		if err != nil {
-			return nil, err
-		}
-		lines, err := src.Lines(sh.File)
-		if err != nil {
-			return nil, err
-		}
 		start, end, err := state.ParseLines(sh.Lines)
+		if err != nil {
+			return nil, err
+		}
+		if _, seen := ranges[sh.File]; !seen && !whole[sh.File] {
+			files = append(files, sh.File)
+		}
+		if start == 0 {
+			whole[sh.File] = true
+			continue
+		}
+		ranges[sh.File] = append(ranges[sh.File], [2]int{start, end})
+	}
+	var rows []Row
+	for _, file := range files {
+		fd, err := src.FileDiff(file)
+		if err != nil {
+			return nil, err
+		}
+		lines, err := src.Lines(file)
 		if err != nil {
 			return nil, err
 		}
 		var fileNotes []Note
 		for _, n := range notes {
-			if n.File == "" || n.File == sh.File {
+			if n.File == "" || n.File == file {
 				fileNotes = append(fileNotes, n)
 			}
 		}
 		if len(rows) > 0 {
-			rows = append(rows, Row{Kind: RowSpacer, File: sh.File})
+			rows = append(rows, Row{Kind: RowSpacer, File: file})
 		}
-		rows = append(
-			rows,
-			Row{Kind: RowFile, File: sh.File, Text: sh.File, FileInfo: fileInfo(fd)},
-		)
-		rows = append(
-			rows,
-			fileRows(
-				fd,
-				lines,
-				start,
-				end,
-				context,
-				hotspotLines(st, sh.File),
-				fileNotes,
-				reveal[sh.File],
-			)...)
+		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: fileInfo(fd)})
+		wanted := ranges[file]
+		if whole[file] {
+			wanted = nil
+		}
+		rows = append(rows, fileRows(fd, lines, wanted, context, hotspotLines(st, file),
+			fileNotes, reveal[file])...)
 	}
 	markIntraline(rows)
 	markMoved(rows)
@@ -158,7 +162,8 @@ func hunkBefore(h diff.Hunk, n int) bool {
 func fileRows(
 	fd diff.File,
 	lines []string,
-	start, end, context int,
+	ranges [][2]int,
+	context int,
 	hot map[int]bool,
 	notes []Note,
 	reveal [][2]int,
@@ -210,9 +215,10 @@ func fileRows(
 	}
 
 	var windows [][2]int
-	if start > 0 {
-		windows = [][2]int{{start - context, end + context}}
-	} else {
+	for _, r := range ranges {
+		windows = append(windows, [2]int{r[0] - context, r[1] + context})
+	}
+	if ranges == nil {
 		for _, h := range fd.Hunks {
 			windows = append(windows, [2]int{h.NewStart - context, h.NewEnd() + context})
 		}

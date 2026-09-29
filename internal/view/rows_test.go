@@ -288,3 +288,32 @@ func TestFileHeaders(t *testing.T) {
 		t.Fatalf("header render: %q", got)
 	}
 }
+
+func TestOneHeaderPerFile(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 3, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L3"}}},
+			{NewStart: 30, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L30"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(40)},
+	}
+	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "3"}, {File: "a.go", Lines: "30"}}}
+	rows, err := buildRows(src, st, 1, []Note{{File: "a.go", Line: 30, Kind: "note", Text: "n"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var headers, notes, gaps int
+	for _, r := range rows {
+		switch r.Kind {
+		case RowFile:
+			headers++
+		case RowNote:
+			notes++
+		case RowGap:
+			gaps++
+		}
+	}
+	if headers != 1 || notes != 1 || gaps != 3 {
+		t.Fatalf("headers %d notes %d gaps %d, want 1 1 3", headers, notes, gaps)
+	}
+}
