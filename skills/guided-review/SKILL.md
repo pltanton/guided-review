@@ -131,6 +131,12 @@ steps:
      in the feature, not its syntax (references/style.md).
    - `[ask] sN file:lines: text` — a question about that code, never a remark: read it,
      answer with `gr say` in a few lines. Do not create comments or notes for it.
+   - `[detail] sN file:line: <note text>` — the human wants more on your note there. Read
+     the code again and write three to eight sentences: what exactly the problem or the
+     point is, the scenario where it bites, and what to do about it; add a short code
+     excerpt in a fenced block when it helps. Save it with
+     `gr note detail --file F --line N [--step sN] - <<'EOF' … EOF`; the viewer shows it
+     in the popup that is already open. No `gr say` needed.
    - `[next] sN` — if a hotspot question on this step is unanswered, `gr say` it once
      more and wait; otherwise `gr step next` and go to 1.
    - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,

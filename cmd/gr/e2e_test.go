@@ -658,3 +658,25 @@ func TestSelfReview(t *testing.T) {
 		t.Fatal("a self review must not produce GitLab drafts")
 	}
 }
+
+func TestNoteDetail(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	if _, err := h.run("", "note", "detail", "--line", "4", "x"); err == nil {
+		t.Fatal("a detail without --file must fail")
+	}
+	h.mustRun("first", "note", "detail", "--file", "api/transfer.go", "--line", "4", "-")
+	out := h.mustRun("the guard\n```go\nif a < 0 {\n```\n", "note", "detail",
+		"--file", "api/transfer.go", "--line", "4", "-")
+	assertContains(t, out, "detail s1 api/transfer.go:4")
+	_, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := r.Step("s1")
+	if text, ok := st.Detail("api/transfer.go", 4); !ok || !strings.HasPrefix(text, "the guard") ||
+		len(st.Details) != 1 {
+		t.Fatalf("detail must be replaced, got %q (%d)", text, len(r.Step("s1").Details))
+	}
+}

@@ -127,6 +127,8 @@ func DefaultActions() []Action {
 			})},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
 			Keys: k("?"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
+		{Name: "details", Group: rev, Desc: "details behind the agent's note under the cursor",
+			Keys: k("i"), run: do((*model).noteDetails)},
 		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
 			run: do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
 		{Name: "skip", Group: rev, Desc: "skip the step with a reason", Keys: k("S"),

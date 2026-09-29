@@ -308,12 +308,11 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 }
 
 func cmdNote(ctx context.Context, e env, args []string) error {
-	if len(args) == 0 || args[0] != "add" {
-		return errors.New(
-			"usage: gr note add --file F --line N [--kind note|spec] [--step ID] TEXT",
-		)
+	if len(args) == 0 || args[0] != "add" && args[0] != "detail" {
+		return errors.New("usage: gr note add --file F --line N [--kind note|spec] [--step ID] " +
+			"TEXT | gr note detail --file F --line N [--step ID] TEXT|-")
 	}
-	fs := e.flags("note add")
+	fs := e.flags("note " + args[0])
 	file := fs.String("file", "", "file path as in the diff")
 	line := fs.Int("line", 0, "new-file line")
 	kind := fs.String("kind", "note", "note|spec")
@@ -325,12 +324,26 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	a := state.Annotation{
-		File: *file,
-		Line: *line,
-		Kind: *kind,
-		Text: strings.Join(fs.Args(), " "),
+	text := strings.Join(fs.Args(), " ")
+	if args[0] == "detail" {
+		if text == "-" {
+			data, err := readInput(e, "-")
+			if err != nil {
+				return err
+			}
+			text = string(data)
+		}
+		d := state.Detail{File: *file, Line: *line, Text: strings.TrimSpace(text)}
+		if err := plan.SetDetail(r, *step, d); err != nil {
+			return err
+		}
+		if err := s.store.Save(r); err != nil {
+			return err
+		}
+		e.printf("detail %s %s:%d\n", cmp.Or(*step, r.Current), d.File, d.Line)
+		return nil
 	}
+	a := state.Annotation{File: *file, Line: *line, Kind: *kind, Text: text}
 	if err := plan.AddNote(r, *step, a); err != nil {
 		return err
 	}

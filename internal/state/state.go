@@ -134,6 +134,7 @@ type Step struct {
 	Hotspots    []Hotspot    `yaml:"hotspots,omitempty"`
 	DependsOn   []string     `yaml:"depends_on,omitempty"`
 	Annotations []Annotation `yaml:"annotations,omitempty"`
+	Details     []Detail     `yaml:"details,omitempty"`
 	Note        string       `yaml:"note,omitempty"`
 	Status      StepStatus   `yaml:"status,omitempty"`
 	MayChange   bool         `yaml:"may_change,omitempty"`
@@ -150,6 +151,12 @@ type Hotspot struct {
 	Q    string `yaml:"q"`
 	File string `yaml:"file,omitempty"`
 	Line int    `yaml:"line,omitempty"`
+}
+
+type Detail struct {
+	File string `yaml:"file"`
+	Line int    `yaml:"line"`
+	Text string `yaml:"text"`
 }
 
 type Annotation struct {
@@ -231,4 +238,13 @@ func ParseLines(s string) (start, end int, err error) {
 		return 0, 0, bad
 	}
 	return start, end, nil
+}
+
+func (s *Step) Detail(file string, line int) (string, bool) {
+	for _, d := range s.Details {
+		if d.File == file && d.Line == line {
+			return d.Text, true
+		}
+	}
+	return "", false
 }

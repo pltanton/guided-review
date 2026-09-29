@@ -1274,7 +1274,7 @@ func TestCursorHint(t *testing.T) {
 		t.Fatalf("plain line footer: %q", f)
 	}
 	m.seek(func(l line) bool { return l.Kind == RowNote })
-	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "o fold") {
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "o fold · i details") {
 		t.Fatalf("note footer: %q", f)
 	}
 	m.lines[m.cursor].Ref = 4
@@ -1431,5 +1431,33 @@ func TestMouseOffIsVisible(t *testing.T) {
 	m.mouse = false
 	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "mouse off · m") {
 		t.Fatalf("footer must say the mouse is off: %q", ansi.Strip(f))
+	}
+}
+
+func TestNoteDetails(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.seek(func(l line) bool { return l.Kind == RowNote })
+	note := m.current()
+	m.Update(key("i"))
+	if m.popup == nil || m.popup.kind != "detail" ||
+		!strings.Contains(ansi.Strip(strings.Join(m.popup.lines, "")), "writing the details") {
+		t.Fatalf("i must open a waiting popup: %+v", m.popup)
+	}
+	want := inbox.Event{Kind: inbox.KindDetail, Step: "s1", File: note.File,
+		Lines: fmt.Sprint(note.Line), Text: "why x"}
+	if n := len(*sent); n != 1 || (*sent)[0] != want {
+		t.Fatalf("sent %+v, want %+v", *sent, want)
+	}
+	m.step.Details = []state.Detail{{File: note.File, Line: note.Line,
+		Text: "x is the **fee**.\n```go\nx := fee(a)\n```"}}
+	m.refreshDetail()
+	body := ansi.Strip(strings.Join(m.popup.lines, "\n"))
+	if !strings.Contains(body, "x is the fee.") || !strings.Contains(body, "x := fee(a)") {
+		t.Fatalf("popup must show the detail:\n%s", body)
+	}
+	m.Update(key("esc"))
+	m.Update(key("i"))
+	if len(*sent) != 1 || !strings.Contains(ansi.Strip(strings.Join(m.popup.lines, "\n")), "fee") {
+		t.Fatal("a stored detail opens without asking the agent again")
 	}
 }

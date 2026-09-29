@@ -204,6 +204,7 @@ func (m *model) reload() {
 		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseCtx, 0, 0, false, nil
 	}
 	m.rebuild(changed)
+	m.refreshDetail()
 }
 
 func (m *model) rebuild(jumpToHunk bool) {

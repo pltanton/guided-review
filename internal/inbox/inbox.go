@@ -24,6 +24,7 @@ const (
 	KindFinished = "finished"
 	KindComment  = "comment"
 	KindAsk      = "ask"
+	KindDetail   = "detail"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"

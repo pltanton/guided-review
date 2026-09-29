@@ -1,6 +1,7 @@
 package plan
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -199,6 +200,27 @@ func AddNote(r *state.Review, stepID string, a state.Annotation) error {
 		return err
 	}
 	st.Annotations = append(st.Annotations, a)
+	return nil
+}
+
+func SetDetail(r *state.Review, stepID string, d state.Detail) error {
+	st := r.Step(cmp.Or(stepID, r.Current))
+	switch {
+	case st == nil:
+		return fmt.Errorf("no step %q", cmp.Or(stepID, r.Current))
+	case d.File == "" || d.Line < 1:
+		return errors.New("a detail needs --file and --line of the note it explains")
+	case strings.TrimSpace(d.Text) == "":
+		return errors.New("empty detail")
+	}
+	i := slices.IndexFunc(st.Details, func(x state.Detail) bool {
+		return x.File == d.File && x.Line == d.Line
+	})
+	if i < 0 {
+		st.Details = append(st.Details, d)
+	} else {
+		st.Details[i] = d
+	}
 	return nil
 }
 

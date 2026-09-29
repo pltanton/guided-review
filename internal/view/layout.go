@@ -128,6 +128,8 @@ func (m *model) cursorHint() string {
 		del := k.key("delete-comment")
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
+	case cur.Kind == RowNote && cur.NoteKind != "mr" && cur.NoteKind != "pending":
+		return k.key("open") + " fold · " + k.key("details") + " details"
 	case cur.Kind == RowNote:
 		return k.key("open") + " fold"
 	case cur.GapTo > 0 || cur.FoldKey != "":

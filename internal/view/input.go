@@ -254,3 +254,41 @@ func (m *model) saveRaw(text string) {
 	})
 	m.status = "saved as written: " + out
 }
+
+func (m *model) noteDetails() {
+	cur := m.current()
+	agentNote := cur.Kind == RowNote && cur.Ref == 0 && cur.NoteKind != "mr" &&
+		cur.NoteKind != "pending"
+	if !agentNote {
+		m.status = "put the cursor on one of the agent's notes"
+		return
+	}
+	loc := lspLoc{Path: cur.File, Line: cur.Line}
+	title := fmt.Sprintf("details · %s:%d", cur.File, cur.Line)
+	m.popup = &popup{kind: "detail", title: title, loc: loc}
+	if m.refreshDetail() {
+		return
+	}
+	m.popup.lines = []string{hotStyle.Render("the agent is writing the details…")}
+	text := cur.Text
+	for _, r := range m.rows {
+		same := r.File == cur.File && r.Line == cur.Line && r.NoteKind == cur.NoteKind
+		if r.Kind == RowNote && same {
+			text = r.Text
+			break
+		}
+	}
+	m.emit(inbox.Event{Kind: inbox.KindDetail, File: cur.File, Lines: fmt.Sprint(cur.Line), Text: text})
+}
+
+func (m *model) refreshDetail() bool {
+	p := m.popup
+	if p == nil || p.kind != "detail" || m.step == nil {
+		return false
+	}
+	text, ok := m.step.Detail(p.loc.Path, p.loc.Line)
+	if ok {
+		p.lines = markdownLines(expandTabs(text), max(m.mainWidth()-4, 20))
+	}
+	return ok
+}
