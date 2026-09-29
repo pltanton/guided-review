@@ -773,7 +773,8 @@ func TestFinishButton(t *testing.T) {
 	m.runGr = func(args ...string) (string, error) {
 		ran = append(ran, args)
 		if len(args) > 1 && args[1] == "--dry-run" {
-			return "--- a.go:3\n\tx := 1\n--- summary\n## Guided review: approve\n", nil
+			return "--- a.go:3\n**nit** rename\n```suggestion:-0+0\n\tx := 1\n```\n\n" +
+				"--- summary\n## Guided review: approve\n" + strings.Repeat("row\n", 60), nil
 		}
 		return "/tmp/guided-review/mr-1\n", nil
 	}
@@ -787,8 +788,18 @@ func TestFinishButton(t *testing.T) {
 	}
 	m.Update(key("P"))
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "## Guided review: approve") || strings.Contains(v, "\t") {
-		t.Fatalf("first P must show a tab-free preview:\n%s", v)
+	for _, want := range []string{
+		"approve · 1 comments to post · summary", "● nit     a.go:3", "│ rename", "│ ┄ suggestion", "│ +     x := 1",
+		"Guided review: approve", "1–",
+	} {
+		if !strings.Contains(v, want) || strings.Contains(v, "\t") || strings.Contains(v, "## ") {
+			t.Fatalf("finish screen lacks %q:\n%s", want, v)
+		}
+	}
+	m.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	m.Update(key("G"))
+	if v := ansi.Strip(m.View()); m.previewTop == 0 || !strings.Contains(v, "of 68 ") {
+		t.Fatalf("finish screen must scroll to the end:\n%s", v)
 	}
 	_, cmd := m.Update(key("P"))
 	if cmd == nil {

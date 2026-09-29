@@ -422,6 +422,9 @@ func (m *model) View() string {
 	if m.step == nil {
 		return m.intakeView()
 	}
+	if m.preview != "" {
+		return m.finishView()
+	}
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
@@ -437,17 +440,6 @@ func (m *model) View() string {
 	}
 	main := m.header()
 	switch {
-	case m.preview != "":
-		var lines []string
-		for _, l := range strings.Split(expandTabs(strings.TrimRight(m.preview, "\n")), "\n") {
-			lines = append(lines, strings.Split(ansi.Wrap(l, max(mw, 20), ""), "\n")...)
-		}
-		title := "review result"
-		if m.review.MR != nil {
-			title += fmt.Sprintf(" → !%d", m.review.MR.IID)
-		}
-		hint := "P hands this to the agent and closes the viewer · esc cancels · j/k scroll"
-		main = panel(title, hotStyle.Render(hint), lines[min(m.previewTop, len(lines)):])
 	case m.help:
 		lines := m.helpLines(mw)
 		main = panel("keys", dimStyle.Render("any key closes · j/k scroll · remap in "+configHint),
@@ -457,7 +449,7 @@ func (m *model) View() string {
 		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.lines) || m.preview != "" || m.help {
+		if i >= len(m.lines) || m.help {
 			main = append(main, "")
 			continue
 		}

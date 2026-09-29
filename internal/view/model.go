@@ -650,20 +650,6 @@ func (m *model) finish() tea.Cmd {
 	return tea.Quit
 }
 
-func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
-	switch msg.String() {
-	case "P":
-		return m.finish()
-	case "esc", "q":
-		m.preview = ""
-	case "j", "down":
-		m.previewTop++
-	case "k", "up":
-		m.previewTop = max(m.previewTop-1, 0)
-	}
-	return nil
-}
-
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status = ""
 	if msg.String() != m.keys().key("delete-comment") {

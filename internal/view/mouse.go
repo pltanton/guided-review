@@ -8,6 +8,11 @@ const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
+	case m.preview != "" && msg.Button == tea.MouseButtonWheelUp:
+		m.previewTop = max(m.previewTop-wheelStep, 0)
+	case m.preview != "" && msg.Button == tea.MouseButtonWheelDown:
+		m.previewTop += wheelStep
+	case m.preview != "":
 	case msg.Button == tea.MouseButtonWheelUp && m.overChat(msg.X, msg.Y):
 		m.chatTop += wheelStep
 	case msg.Button == tea.MouseButtonWheelDown && m.overChat(msg.X, msg.Y):
