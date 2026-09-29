@@ -66,6 +66,8 @@ func Start(ctx context.Context, argv []string, root string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	stderr := &tail{}
+	cmd.Stderr = stderr
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", argv[0], err)
 	}
@@ -73,9 +75,37 @@ func Start(ctx context.Context, argv []string, root string) (*Client, error) {
 	c.cmd = cmd
 	if err := c.Initialize(ctx, root); err != nil {
 		_ = cmd.Process.Kill()
-		return nil, err
+		_ = cmd.Wait()
+		return nil, fmt.Errorf("%s: %w: %s", argv[0], err, stderr.lastLines(3))
 	}
 	return c, nil
+}
+
+type tail struct {
+	mu  sync.Mutex
+	buf []byte
+}
+
+func (t *tail) Write(p []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.buf = append(t.buf, p...)
+	if n := len(t.buf); n > 4096 {
+		t.buf = t.buf[n-4096:]
+	}
+	return len(p), nil
+}
+
+func (t *tail) lastLines(n int) string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var lines []string
+	for _, l := range strings.Split(string(t.buf), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines = append(lines, l)
+		}
+	}
+	return strings.Join(lines[max(len(lines)-n, 0):], " · ")
 }
 
 func (c *Client) read(r *bufio.Reader) {

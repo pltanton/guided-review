@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -54,4 +55,12 @@ func TestGopls(t *testing.T) {
 		t.Fatalf("Hover = %q, %v", hover, err)
 	}
 	t.Logf("hover: %q", hover)
+}
+
+func TestStartReportsServerStderr(t *testing.T) {
+	argv := []string{"sh", "-c", "echo 'This build has expired.' >&2; exit 7"}
+	_, err := Start(context.Background(), argv, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "This build has expired.") {
+		t.Fatalf("Start error must carry the server's stderr, got %v", err)
+	}
 }
