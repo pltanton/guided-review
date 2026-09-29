@@ -84,6 +84,7 @@ func TestEventsFromKeys(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.cursor = 2
 	m.Update(key("?"))
+	m.Update(key("enter"))
 	m.Update(key("v"))
 	m.Update(key("j"))
 	m.Update(key("j"))
@@ -334,7 +335,7 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"✓ next", "✎ message", "? explain", "↷ skip"} {
+	for _, b := range []string{"✓ next", "✎ message", "? ask", "↷ skip"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
@@ -1132,5 +1133,48 @@ func TestRawComment(t *testing.T) {
 	m.Update(key("enter"))
 	if want := []string{"comment", "edit", "4", "--", "reworded"}; !slices.Equal(ran, want) {
 		t.Fatalf("raw edit args = %q, want %q", ran, want)
+	}
+}
+
+func TestAskDeleteAndChatSize(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.cursor = 2
+	m.Update(key("?"))
+	typeText(m, "why 1?")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "ask a.go:2 › why 1?") {
+		t.Fatalf("ask prompt missing:\n%s", v)
+	}
+	m.Update(key("enter"))
+	want := inbox.Event{Kind: inbox.KindAsk, Step: "s1", File: "a.go", Lines: "2", Text: "why 1?"}
+	if n := len(*sent); n == 0 || (*sent)[n-1] != want {
+		t.Fatalf("sent %+v, want %+v", *sent, want)
+	}
+
+	var ran []string
+	m.runGr = func(args ...string) (string, error) {
+		ran = args
+		return "comment #7 deleted\n", nil
+	}
+	m.lines[m.cursor].Ref = 7
+	m.Update(key("D"))
+	if ran != nil || !strings.Contains(m.status, "again") {
+		t.Fatalf("first D must only arm: ran %q status %q", ran, m.status)
+	}
+	m.Update(key("j"))
+	m.Update(key("k"))
+	m.Update(key("D"))
+	if ran != nil {
+		t.Fatal("another key between the presses must disarm the delete")
+	}
+	m.Update(key("D"))
+	if want := []string{"comment", "delete", "7"}; !slices.Equal(ran, want) {
+		t.Fatalf("gr args = %q, want %q", ran, want)
+	}
+
+	for _, k := range []string{"t", "t", "T", "T", "T"} {
+		m.Update(key(k))
+	}
+	if m.chatSize != 0 {
+		t.Fatalf("T must shrink the chat back: size %d", m.chatSize)
 	}
 }

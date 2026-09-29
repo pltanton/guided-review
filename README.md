@@ -91,8 +91,10 @@ both sides in full.
 | `c` / `enter` | message the agent; the cursor line (or selection) is attached, `ctrl+x` detaches it; on one of your comments it is a reply |
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
 | `E` | edit the comment under the cursor |
+| `D` `D` | delete the comment under the cursor (not yet published) |
+| `t` / `T` | enlarge / shrink the chat (small → half → full screen) |
 | `P` | publish: first press shows the full preview, second posts it to the MR (after the agent prepared it) |
-| `?` | ask the agent to explain the selection or the line |
+| `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step |
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |

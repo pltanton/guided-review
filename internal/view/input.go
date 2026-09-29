@@ -19,10 +19,15 @@ func (m *model) startCompose(kind string) {
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines = 0, "", ""
-	if kind != inbox.KindMessage {
-		return
+	switch kind {
+	case inbox.KindMessage:
+		m.anchorFile, m.anchorLines, m.composeRef = m.anchorAt()
+	case inbox.KindAsk:
+		if m.anchorFile, m.anchorLines, _ = m.anchorAt(); m.anchorFile == "" {
+			m.composing = false
+			m.status = "nothing to ask about here: put the cursor on code"
+		}
 	}
-	m.anchorFile, m.anchorLines, m.composeRef = m.anchorAt()
 }
 
 func (m *model) anchorAt() (file, lines string, ref int) {
@@ -81,6 +86,8 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		text := strings.TrimSpace(string(m.input))
 		m.composing, m.input = false, nil
 		switch {
+		case text == "" && m.composeKind == inbox.KindAsk:
+			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":
 		case m.rawMode():
 			m.saveRaw(text)
@@ -137,13 +144,25 @@ func (m *model) insert(rs []rune) {
 	m.inputPos += len(rs)
 }
 
-func (m *model) explain() {
-	file, lines, ok := m.selection()
-	if !ok {
-		m.status = "nothing to explain here: put the cursor on code"
-		return
+func (m *model) deleteComment() {
+	ref := m.current().Ref
+	switch {
+	case ref == 0:
+		m.status = "put the cursor on one of your comments to delete it"
+	case m.deleteArmed != ref:
+		m.deleteArmed = ref
+		m.status = fmt.Sprintf("press %s again to delete #%d", m.keys().key("delete-comment"), ref)
+	default:
+		m.deleteArmed = 0
+		out, err := m.runGr("comment", "delete", fmt.Sprint(ref))
+		out = strings.Join(strings.Split(strings.TrimSpace(out), "\n"), " · ")
+		if err != nil {
+			m.err = fmt.Errorf("%v: %s", err, out)
+			return
+		}
+		m.emit(inbox.Event{Kind: inbox.KindComment, Text: out})
+		m.status = out
 	}
-	m.emit(inbox.Event{Kind: inbox.KindExplain, File: file, Lines: lines})
 }
 
 func (m *model) emit(e inbox.Event) {

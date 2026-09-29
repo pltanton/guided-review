@@ -119,19 +119,16 @@ func DefaultActions() []Action {
 			run: do((*model).next)},
 		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
 			Keys: k("c", "enter"), run: do((*model).messageOrOpen)},
-		{
-			Name:  "explain",
-			Group: rev,
-			Desc:  "ask the agent to explain the line / selection",
-			Keys:  k("?"),
-			run:   do((*model).explain),
-		},
+		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
+			Keys: k("?"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
 		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
 			run: do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
 		{Name: "skip", Group: rev, Desc: "skip the step with a reason", Keys: k("S"),
 			run: do(func(m *model) { m.startCompose(inbox.KindSkip) })},
 		{Name: "edit-comment", Group: rev, Desc: "edit the comment under the cursor", Keys: k("E"),
 			run: do((*model).startEdit)},
+		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (press twice)",
+			Keys: k("D"), run: do((*model).deleteComment)},
 		{Name: "publish", Group: rev, Desc: "preview, then publish to the MR", Keys: k("P"),
 			run: do((*model).publish)},
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
@@ -143,8 +140,10 @@ func DefaultActions() []Action {
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
-		{Name: "chat", Group: vw, Desc: "chat size: small → half → full screen", Keys: k("t"),
-			run: do(func(m *model) { m.chatSize, m.chatTop = (m.chatSize+1)%3, 0; m.clamp() })},
+		{Name: "chat", Group: vw, Desc: "enlarge the chat: small → half → full screen", Keys: k("t"),
+			run: do(func(m *model) { m.resizeChat((m.chatSize + 1) % 3) })},
+		{Name: "chat-smaller", Group: vw, Desc: "shrink the chat", Keys: k("T"),
+			run: do(func(m *model) { m.resizeChat(max(m.chatSize-1, 0)) })},
 		{
 			Name:  "command",
 			Group: vw,
@@ -431,4 +430,9 @@ func (m *model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 func CheckKeys(overrides map[string][]string) error {
 	_, err := newKeymap(overrides)
 	return err
+}
+
+func (m *model) resizeChat(size int) {
+	m.chatSize, m.chatTop = size, 0
+	m.clamp()
 }

@@ -110,6 +110,7 @@ type model struct {
 	inputPos    int
 	composeRef  int
 	raw         bool
+	deleteArmed int
 	rawSeverity state.Severity
 	anchorFile  string
 	anchorLines string
@@ -269,7 +270,7 @@ func (m *model) pending(e inbox.Event) bool {
 		return false
 	}
 	switch e.Kind {
-	case inbox.KindMessage, inbox.KindExplain, inbox.KindSkip:
+	case inbox.KindMessage, inbox.KindExplain, inbox.KindSkip, inbox.KindAsk:
 		return e.Time.After(m.lastWait)
 	}
 	return false
@@ -649,6 +650,9 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status = ""
+	if msg.String() != m.keys().key("delete-comment") {
+		m.deleteArmed = 0
+	}
 	switch {
 	case m.help:
 		return m.handleHelpKey(msg)

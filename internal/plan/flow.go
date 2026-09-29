@@ -212,6 +212,36 @@ func ResolveComment(r *state.Review, id int) error {
 	return fmt.Errorf("no comment #%d", id)
 }
 
+func DeleteComment(r *state.Review, id int) (restored []string, err error) {
+	i := slices.IndexFunc(r.Comments, func(c state.Comment) bool { return c.ID == id })
+	switch {
+	case i < 0:
+		return nil, fmt.Errorf("no comment #%d", id)
+	case r.Comments[i].Published || r.Comments[i].DraftID != 0:
+		return nil, fmt.Errorf("comment #%d is already on the MR: delete it there", id)
+	}
+	r.Comments = slices.Delete(r.Comments, i, i+1)
+	blocked, affected := map[string]bool{}, map[string]bool{}
+	for _, c := range r.Comments {
+		if c.Resolved || c.Severity != state.SeverityBlocker && c.Severity != state.SeverityMajor {
+			continue
+		}
+		for _, d := range Dependents(r, c.Step) {
+			affected[d] = true
+			blocked[d] = blocked[d] || c.Severity == state.SeverityBlocker
+		}
+	}
+	for j := range r.Steps {
+		s := &r.Steps[j]
+		if s.Status == state.StatusStale && !blocked[s.ID] {
+			s.Status = state.StatusPending
+			restored = append(restored, s.ID)
+		}
+		s.MayChange = s.MayChange && affected[s.ID]
+	}
+	return restored, nil
+}
+
 func EditComment(r *state.Review, id int, body string, severity state.Severity) error {
 	if strings.TrimSpace(body) == "" {
 		return errors.New("empty comment")

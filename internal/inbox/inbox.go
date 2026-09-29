@@ -23,6 +23,7 @@ const (
 	KindEdit      = "edit"
 	KindPublished = "published"
 	KindComment   = "comment"
+	KindAsk       = "ask"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"

@@ -65,7 +65,7 @@ func (m *model) footerButtons() []button {
 	btns := []button{
 		b("✓ next", "next", (*model).next),
 		b("✎ message", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
-		b("? explain", "explain", (*model).explain),
+		b("? ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
 		b("↷ skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
 	if m.review != nil && m.review.Publish != nil {
@@ -276,6 +276,8 @@ func (m *model) bottomLines() []string {
 		switch {
 		case m.composeKind == inbox.KindSkip:
 			prompt = "skip reason › "
+		case m.composeKind == inbox.KindAsk:
+			prompt = fmt.Sprintf("ask %s:%s › ", m.anchorFile, m.anchorLines)
 		case m.composeKind == inbox.KindEdit:
 			prompt = fmt.Sprintf("edit #%d › ", m.composeRef)
 		case m.composeRef > 0:
@@ -295,7 +297,10 @@ func (m *model) bottomLines() []string {
 			}
 			lead = delStyle.Bold(true).Render(tag) + " " + cursorStyle.Render(prompt)
 		}
-		if m.composeKind != inbox.KindMessage && m.composeKind != inbox.KindEdit {
+		switch m.composeKind {
+		case inbox.KindAsk:
+			hints = []string{"enter alone explains"}
+		case inbox.KindSkip:
 			hints = nil
 		}
 		if m.anchorFile != "" {

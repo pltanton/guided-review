@@ -204,7 +204,7 @@ func cmdStep(ctx context.Context, e env, args []string) error {
 
 func cmdComment(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: gr comment add|list|edit|resolve")
+		return errors.New("usage: gr comment add|list|edit|resolve|delete")
 	}
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
@@ -233,13 +233,24 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			}
 		}
 		return nil
-	case "edit", "resolve":
+	case "edit", "resolve", "delete":
 		if len(args) < 2 {
 			return fmt.Errorf("usage: gr comment %s ID", args[0])
 		}
 		id, err := parseID(args[1])
 		if err != nil {
 			return err
+		}
+		if args[0] == "delete" {
+			restored, err := plan.DeleteComment(r, id)
+			if err != nil {
+				return err
+			}
+			msg = fmt.Sprintf("comment #%d deleted", id)
+			if len(restored) > 0 {
+				msg += "\nback to pending: " + strings.Join(restored, " ")
+			}
+			break
 		}
 		if args[0] == "resolve" {
 			if err := plan.ResolveComment(r, id); err != nil {

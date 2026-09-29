@@ -207,3 +207,27 @@ func TestEditComment(t *testing.T) {
 		t.Fatal("bad edits must fail")
 	}
 }
+
+func TestDeleteComment(t *testing.T) {
+	r := flowReview()
+	c, _, err := plan.AddComment(r, state.Comment{
+		File: "a.go", Lines: "3", Severity: state.SeverityBlocker, Body: "wrong",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := plan.DeleteComment(r, c.ID)
+	if err != nil || !reflect.DeepEqual(restored, []string{"s2", "s3"}) || len(r.Comments) != 0 {
+		t.Fatalf("DeleteComment = %v, %v; comments %+v", restored, err, r.Comments)
+	}
+	if r.Step("s5").MayChange {
+		t.Fatal("may-change must be cleared with its only cause")
+	}
+	if _, err := plan.DeleteComment(r, c.ID); err == nil {
+		t.Fatal("deleting a missing comment must fail")
+	}
+	r.Comments = append(r.Comments, state.Comment{ID: 9, Published: true})
+	if _, err := plan.DeleteComment(r, 9); err == nil {
+		t.Fatal("a published comment must not be deleted locally")
+	}
+}
