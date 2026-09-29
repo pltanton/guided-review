@@ -44,7 +44,10 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 		return nil
 	}
 	e.println()
-	for _, st := range r.Steps {
+	for i, st := range r.Steps {
+		if st.Chapter != "" && (i == 0 || r.Steps[i-1].Chapter != st.Chapter) {
+			e.printf("  %s\n", st.Chapter)
+		}
 		cursor, hotspot := " ", ""
 		if st.ID == r.Current {
 			cursor = ">"

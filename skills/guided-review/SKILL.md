@@ -73,8 +73,8 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
    Generated files are already excluded; decide which remaining files are
    boilerplate.
-2. Order and size steps per references/ordering.md — the MR's own spec or design doc,
-   if the diff has one, is always s1; mark hotspots per
+2. Group into chapters and steps per references/ordering.md: intent first, one chapter
+   per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them.
 3. Read every step's code now, with enough surrounding code to be sure of what it does:
    the viewer moves between steps without you, so all per-step work happens here.
@@ -85,7 +85,7 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
    annotations per step; none is fine.
 5. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists. It posts
    s1's message itself.
-6. `gr say` the plan in one line per step (`s2 Handler ⚑`) plus a line for
+6. `gr say` the plan: one line per chapter with its steps (`Переводы: s1 s2 ⚑`) plus a line for
    boilerplate and generated files.
 
 ```yaml
@@ -93,12 +93,14 @@ summary: "task → how it is solved"
 boilerplate: [internal/di/wire.go]
 steps:
   - id: s1
-    title: "POST /transfers — contract"
+    chapter: "Переводы между счетами"
+    title: "POST /transfers accepts an idempotency key"
     kind: contract # contract|model|entry|logic|persistence|migration|test|config
     hunks:
       - { file: api/openapi.yaml, lines: 120-168 } # omit lines for the whole file
   - id: s2
-    title: "Handler"
+    chapter: "Переводы между счетами"
+    title: "A repeated key returns the first result"
     kind: entry
     message: |-
       s2/5 · POST /transfers — handler

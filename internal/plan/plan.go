@@ -48,7 +48,14 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		boilerplate[b] = true
 	}
 	ids := map[string]bool{}
-	for _, s := range p.Steps {
+	closed := map[string]bool{}
+	for i, s := range p.Steps {
+		if i > 0 && p.Steps[i-1].Chapter != s.Chapter {
+			closed[p.Steps[i-1].Chapter] = true
+			if closed[s.Chapter] {
+				fail("step %s: chapter %q is split; keep its steps together", s.ID, s.Chapter)
+			}
+		}
 		if s.ID == "" {
 			fail("step %q: empty id", s.Title)
 			continue

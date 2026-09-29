@@ -34,6 +34,7 @@ var (
 	gapStyle      = blueTone.fg()
 	fieldStyle    = mutedTone.fg().Background(surfaceTone.color())
 	labelStyle    = mutedTone.fg().Bold(true)
+	chapterStyle  = accentTone.fg()
 	addEmphStyle  = textTone.fg().Background(addBgTone.color()).Bold(true)
 	delEmphStyle  = textTone.fg().Background(delBgTone.color()).Bold(true)
 )
@@ -221,7 +222,8 @@ func (m *model) header() []string {
 
 func (m *model) stepTitle(st *state.Step) string {
 	pill := inkTone.fg().Background(accentTone.color()).Bold(true).Render(" " + st.ID + " ")
-	left := pill + " " + boldStyle.Render(st.Title) + dimStyle.Render("  "+st.Kind)
+	left := pill + " " + boldStyle.Render(st.Title) +
+		dimStyle.Render("  "+cmp.Or(st.Chapter, st.Kind))
 	if st.Status != state.StatusPending {
 		left += dimStyle.Render(" · " + string(st.Status))
 	}
@@ -573,7 +575,13 @@ type sideEntry struct {
 }
 
 func (m *model) planRows(h int) int {
-	return min(len(m.review.Steps)+len(m.extraSteps())+1, max(h/2, 2))
+	chapters := 0
+	for i, st := range m.review.Steps {
+		if st.Chapter != "" && (i == 0 || m.review.Steps[i-1].Chapter != st.Chapter) {
+			chapters++
+		}
+	}
+	return min(len(m.review.Steps)+chapters+len(m.extraSteps())+1, max(h/2, 2))
 }
 
 func (m *model) sidebar(h, w int) []sideEntry {
@@ -604,7 +612,13 @@ func (m *model) sidebar(h, w int) []sideEntry {
 
 	rows := m.planRows(h)
 	offset := max(0, m.review.StepIndex(m.review.Current)-(rows-2))
+	chapter := ""
 	for _, st := range m.review.Steps[offset:] {
+		if st.Chapter != "" && st.Chapter != chapter && len(out) < rows-1 {
+			head := chapterStyle.Render(strings.ToUpper(st.Chapter))
+			out = append(out, sideEntry{text: plain(row(head, ""))})
+		}
+		chapter = st.Chapter
 		if len(out) >= rows {
 			break
 		}

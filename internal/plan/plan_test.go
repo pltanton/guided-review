@@ -220,3 +220,19 @@ func TestStepSizeLimit(t *testing.T) {
 		})
 	}
 }
+
+func TestChaptersStayTogether(t *testing.T) {
+	r, files := fixture()
+	p, err := plan.Parse([]byte(`steps:
+  - {id: s1, title: a, kind: logic, chapter: A, hunks: [{file: api/a.go}]}
+  - {id: s2, title: b, kind: logic, chapter: B, hunks: [{file: wire.go}]}
+  - {id: s3, title: c, kind: logic, chapter: A, hunks: [{file: gone.go}]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := plan.Validate(p, r, files)
+	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "is split") }) {
+		t.Fatalf("a split chapter must be rejected: %v", errs)
+	}
+}
