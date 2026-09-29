@@ -29,7 +29,9 @@ and the rest happens in the terminal chat.
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
    - "commit … not found locally": run `git fetch origin` and retry.
-   - "already exists, resuming": `gr step show`, then continue the step loop.
+   - "already exists, resuming": `gr step show`, then continue the step loop. If it also
+     printed "plan outdated", build the plan again from scratch (Plan below) — the old
+     one predates chapters and step messages and nothing has been reviewed yet.
    - "round N": this is a re-review, see below.
    - Never pass `--force`: it throws away the plan and progress. Only the user may
      ask to start over.

@@ -93,8 +93,13 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	if files == nil {
-		e.printf("review %s already exists, resuming (--force to start over)\ncode: %s\n\n",
+		e.printf("review %s already exists, resuming (--force to start over)\ncode: %s\n",
 			r.ID, r.CodeDir(s.repo.Dir))
+		if planOutdated(r) {
+			e.println("plan outdated: made without chapters and step messages, nothing reviewed " +
+				"yet — build a new plan and pipe it to `gr plan set`")
+		}
+		e.println()
 		return cmdStatus(ctx, e, nil)
 	}
 	printIntro(e, s, r, files)
@@ -390,4 +395,16 @@ func syncDiscussions(ctx context.Context, glab gitlab.Runner, r *state.Review) e
 		r.Discussions = append(r.Discussions, state.Discussion(d))
 	}
 	return nil
+}
+
+func planOutdated(r *state.Review) bool {
+	if len(r.Steps) == 0 {
+		return false
+	}
+	for _, st := range r.Steps {
+		if st.Status != state.StatusPending || st.Chapter != "" && st.Message != "" {
+			return false
+		}
+	}
+	return true
 }
