@@ -60,6 +60,7 @@ type Review struct {
 	MR           *MR          `yaml:"mr,omitempty"`
 	Worktree     string       `yaml:"worktree,omitempty"`
 	Round        int          `yaml:"round,omitempty"`
+	RoundStart   time.Time    `yaml:"round_start,omitempty"`
 	PrevHeadSHA  string       `yaml:"prev_head_sha,omitempty"`
 	RoundBaseSHA string       `yaml:"round_base_sha,omitempty"`
 	RoundRebased bool         `yaml:"round_rebased,omitempty"`

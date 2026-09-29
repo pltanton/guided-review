@@ -178,7 +178,7 @@ func TestViewRenders(t *testing.T) {
 	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"▶ s1 first", "· s2 second", "s1 1/2 logic · first", "why x", "claude: Adds x and y.",
+		"▶ s1 first", "· s2 second", "s1 1/2 logic · first", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -249,7 +249,7 @@ func TestIntakeBeforePlan(t *testing.T) {
 	for _, want := range []string{
 		"guided review · !1 Add guard", "● task & plan  ›  ○ steps  ›  ○ finish",
 		"2 files  +310 −2   core 1 · boilerplate 0 · generated 1", "1 open discussions",
-		"claude: Task: reject negatives. Верно понял?",
+		"claude │ Task: reject negatives. Верно понял?",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("intake view lacks %q:\n%s", want, out)
@@ -400,9 +400,8 @@ func TestPendingRequests(t *testing.T) {
 		t.Fatalf("pending notes: %+v", notes)
 	}
 	chat := m.conversation(false)
-	if last := ansi.Strip(chat[len(chat)-1].text); !strings.HasPrefix(last, "claude: ") ||
-		!strings.Contains(last, "thinking") {
-		t.Fatalf("last chat line: %q", last)
+	if last := chat[len(chat)-1]; last.you || !strings.Contains(last.text, "thinking") {
+		t.Fatalf("last chat line: %+v", last)
 	}
 	m.lastWait = t0.Add(time.Minute)
 	if len(pendingNotes()) != 0 {
@@ -1293,5 +1292,30 @@ func TestWaitingForInit(t *testing.T) {
 	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "guided review") || !strings.Contains(out, "waiting for the agent") {
 		t.Fatalf("waiting screen:\n%s", out)
+	}
+}
+
+func TestChatGutter(t *testing.T) {
+	m, _ := newTestModel(t)
+	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	m.review.Messages = []state.Message{
+		{Time: t0, Step: "s1", Text: strings.Repeat("long answer ", 12)},
+		{Time: t0.Add(2 * time.Second), Step: "s1", Text: "and more"},
+	}
+	m.events = []inbox.Event{{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"}}
+	m.lastWait = t0.Add(time.Minute)
+	got := make([]string, 0)
+	for _, l := range m.chatLines(60, false) {
+		got = append(got, strings.TrimRight(ansi.Strip(l), " "))
+	}
+	want := []string{
+		"claude │ long answer long answer long answer long answer",
+		"       │ long answer long answer long answer long answer",
+		"       │ long answer long answer long answer long answer",
+		"   you │ why?",
+		"claude │ and more",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("chat\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }

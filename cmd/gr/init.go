@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/aplotnikov/guided-review/internal/classify"
 	"github.com/aplotnikov/guided-review/internal/diff"
@@ -283,7 +284,8 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 		return nil, err
 	}
 	r.Files = stateFiles
-	r.Steps, r.Current, r.Summary = nil, "", ""
+	r.Steps, r.Current, r.Summary, r.Publish = nil, "", "", nil
+	r.RoundStart = time.Now()
 	if r.RoundRebased {
 		files = slices.DeleteFunc(files, func(f diff.File) bool {
 			return !slices.Contains(r.RoundFiles, f.Path)

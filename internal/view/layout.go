@@ -197,8 +197,11 @@ func (m *model) separator() string {
 type chatLine struct {
 	at   time.Time
 	step string
+	you  bool
 	text string
 }
+
+var youStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 
 func (m *model) conversation(all bool) []chatLine {
 	if m.review == nil {
@@ -208,16 +211,17 @@ func (m *model) conversation(all bool) []chatLine {
 	if m.step != nil {
 		stepID = m.step.ID
 	}
-	keep := func(step string) bool { return all || step == stepID }
+	keep := func(step string, at time.Time) bool {
+		return (all || step == stepID) && !at.Before(m.review.RoundStart)
+	}
 	var out []chatLine
 	for _, msg := range m.review.Messages {
-		if keep(msg.Step) {
-			text := agentStyle.Render("claude: ") + msg.Text
-			out = append(out, chatLine{msg.Time, msg.Step, text})
+		if keep(msg.Step, msg.Time) {
+			out = append(out, chatLine{at: msg.Time, step: msg.Step, text: msg.Text})
 		}
 	}
 	for _, e := range m.events {
-		if !keep(e.Step) || e.Kind == inbox.KindGoto {
+		if !keep(e.Step, e.Time) || e.Kind == inbox.KindGoto {
 			continue
 		}
 		text := e.Text
@@ -227,13 +231,13 @@ func (m *model) conversation(all bool) []chatLine {
 		if e.Kind != inbox.KindMessage {
 			text = "[" + e.Kind + "] " + text
 		}
-		out = append(out, chatLine{e.Time, e.Step, dimStyle.Render("you: ") + text})
+		out = append(out, chatLine{at: e.Time, step: e.Step, you: true, text: text})
 	}
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
 	for _, e := range m.events {
 		if m.pending(e) && !m.agentIdle {
 			thinking := hotStyle.Render(m.spin() + " thinking…")
-			out = append(out, chatLine{e.Time, e.Step, agentStyle.Render("claude: ") + thinking})
+			out = append(out, chatLine{at: e.Time, step: e.Step, text: thinking})
 			break
 		}
 	}
@@ -241,20 +245,41 @@ func (m *model) conversation(all bool) []chatLine {
 }
 
 func (m *model) chatLines(width int, all bool) []string {
+	const gutter = "       " + "│ "
+	roomy := all || m.step == nil
 	var lines []string
-	prev := "\x00"
-	for _, c := range m.conversation(all) {
-		if all && c.step != prev {
+	prevStep, prevYou := "\x00", false
+	for i, c := range m.conversation(all) {
+		named := i == 0 || c.you != prevYou
+		if all && c.step != prevStep {
+			named = true
 			label := "intake"
 			if st := m.stepByID(c.step); st != nil {
 				label = st.ID + " " + st.Title
 			} else if c.step != "" {
 				label = c.step
 			}
+			if len(lines) > 0 {
+				lines = append(lines, "")
+			}
 			lines = append(lines, dimStyle.Render("── "+label+" ──"))
-			prev = c.step
+			prevStep = c.step
+		} else if roomy && i > 0 && c.you != prevYou {
+			lines = append(lines, "")
 		}
-		lines = append(lines, strings.Split(ansi.Wrap(c.text, max(width, 10), ""), "\n")...)
+		name := agentStyle.Render("claude")
+		if c.you {
+			name = youStyle.Render("   you")
+		}
+		textW := max(width-ansi.StringWidth(gutter), 10)
+		for j, l := range strings.Split(ansi.Wrap(c.text, textW, ""), "\n") {
+			lead := dimStyle.Render(gutter)
+			if j == 0 && named {
+				lead = name + dimStyle.Render(" │ ")
+			}
+			lines = append(lines, lead+l)
+		}
+		prevYou = c.you
 	}
 	return lines
 }
@@ -777,9 +802,10 @@ func (m *model) intakeTop(w int) []string {
 	var stages []string
 	cur := 0
 	switch {
+	case len(r.Steps) == 0:
 	case r.Publish != nil:
 		cur = 2
-	case len(r.Steps) > 0:
+	default:
 		cur = 1
 	}
 	for i, name := range []string{"task & plan", "steps", "finish"} {
