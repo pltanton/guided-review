@@ -357,9 +357,8 @@ func (m *model) View() string {
 		row := m.renderRow(i, mw)
 		if i == m.cursor && !m.useSplit() {
 			if plain, ok := m.currentCode(); ok {
-				r := m.lines[i].Row
-				r.Text, r.Emph, r.Moved = underlineWord(plain, m.col), nil, false
-				row = renderUnified(r)
+				from, to := wordBounds(plain, m.col)
+				row = underline(row, codePrefix+from, codePrefix+to)
 			}
 		}
 		line := fit(row, mw)
@@ -554,6 +553,8 @@ func renderUnified(r Row) string {
 	}
 	return renderCode(c, r.Hotspot)
 }
+
+const codePrefix = len("+1234 | ")
 
 func renderCode(c Cell, hot bool) string {
 	marker, num, text := " ", fmt.Sprintf("%4d", c.Line), c.Text

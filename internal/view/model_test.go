@@ -1086,3 +1086,15 @@ func TestKeyHints(t *testing.T) {
 		t.Fatal("hints stay after esc")
 	}
 }
+
+func TestUnderlineKeepsStyles(t *testing.T) {
+	styled := "\x1b[31mfoo\x1b[0m \x1b[32mbar\x1b[0m"
+	got := underline(styled, 2, 7)
+	if ansi.Strip(got) != "foo bar" {
+		t.Fatalf("text changed: %q", ansi.Strip(got))
+	}
+	want := "\x1b[31mfo\x1b[4mo\x1b[0m\x1b[4m \x1b[32m\x1b[4mbar\x1b[0m\x1b[24m"
+	if got != want {
+		t.Fatalf("underline(%q, 2, 7) = %q, want %q", styled, got, want)
+	}
+}

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/aplotnikov/guided-review/internal/lsp"
@@ -518,12 +518,42 @@ func (m *model) popupLines(width, height int) []string {
 	return out
 }
 
-func underlineWord(plain string, col int) string {
-	from, to := wordBounds(plain, col)
-	rs := []rune(plain)
-	if from >= to || to > len(rs) {
-		return plain
+// Styled spans end with a full SGR reset, so the underline is re-armed after each escape.
+func underline(s string, from, to int) string {
+	const on, off = "\x1b[4m", "\x1b[24m"
+	if from >= to {
+		return s
 	}
-	u := lipgloss.NewStyle().Underline(true).Bold(true)
-	return string(rs[:from]) + u.Render(string(rs[from:to])) + string(rs[to:])
+	var b strings.Builder
+	n := 0
+	for i := 0; i < len(s); {
+		if s[i] == '\x1b' {
+			j := i + 1
+			if j < len(s) && s[j] == '[' {
+				for j++; j < len(s) && (s[j] < 0x40 || s[j] > 0x7e); j++ {
+				}
+				j++
+			}
+			j = min(j, len(s))
+			b.WriteString(s[i:j])
+			if n > from && n < to {
+				b.WriteString(on)
+			}
+			i = j
+			continue
+		}
+		switch n {
+		case from:
+			b.WriteString(on)
+		case to:
+			b.WriteString(off)
+		}
+		r, size := utf8.DecodeRuneInString(s[i:])
+		b.WriteRune(r)
+		n, i = n+1, i+size
+	}
+	if from < n && n <= to {
+		b.WriteString(off)
+	}
+	return b.String()
 }
