@@ -1222,3 +1222,19 @@ func TestFoldNote(t *testing.T) {
 		t.Fatalf("unfolded note: %d lines, want %d", got, open)
 	}
 }
+
+func TestCursorHint(t *testing.T) {
+	m, _ := newTestModel(t)
+	footer := func() string { f, _ := m.footer(); return ansi.Strip(f) }
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "h help · q quit") {
+		t.Fatalf("plain line footer: %q", f)
+	}
+	m.seek(func(l line) bool { return l.Kind == RowNote })
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "o fold") {
+		t.Fatalf("note footer: %q", f)
+	}
+	m.lines[m.cursor].Ref = 4
+	if f := footer(); !strings.Contains(f, "E edit · DD delete · c reply · o fold") {
+		t.Fatalf("comment footer: %q", f)
+	}
+}

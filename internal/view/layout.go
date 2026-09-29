@@ -82,6 +82,9 @@ type span struct {
 func (m *model) footer() (string, []span) {
 	line := m.agentStatus() + "  "
 	tail := m.keys().key("help") + " help · " + m.keys().key("quit") + " quit"
+	if h := m.cursorHint(); h != "" {
+		tail = h
+	}
 	if m.status != "" {
 		tail = m.status
 	}
@@ -104,6 +107,21 @@ func (m *model) footer() (string, []span) {
 		x += w + 1
 	}
 	return line + " " + dimStyle.Render(tail), spans
+}
+
+func (m *model) cursorHint() string {
+	k, cur := m.keys(), m.current()
+	switch {
+	case cur.Kind == RowNote && cur.Ref > 0:
+		del := k.key("delete-comment")
+		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
+			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
+	case cur.Kind == RowNote:
+		return k.key("open") + " fold"
+	case cur.GapTo > 0 || cur.FoldKey != "":
+		return k.key("open") + " open"
+	}
+	return ""
 }
 
 func (m *model) planWidth() int {

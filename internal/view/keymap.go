@@ -90,7 +90,7 @@ func DefaultActions() []Action {
 		{Name: "word-prev", Group: nav, Desc: "previous symbol in the line", Keys: k("b"),
 			run: do((*model).wordPrev)},
 
-		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block", Keys: k("o"),
+		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block; fold a note", Keys: k("o"),
 			run: do((*model).toggleFold)},
 		{
 			Name:  "all-removed",
