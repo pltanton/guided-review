@@ -1373,6 +1373,9 @@ func TestSideChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
 	m.Update(key("T"))
+	if !strings.Contains(ansi.Strip(m.View()), "› c to write · C without a line") {
+		t.Fatal("the side chat must always show where to write")
+	}
 	m.Update(key("C"))
 	typeText(m, "hello there")
 	v := ansi.Strip(m.View())

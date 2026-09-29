@@ -164,7 +164,9 @@ func (m *model) sideChatLines(h, w int) []string {
 		dimStyle.Render(k + " closes · " + m.chatScrollHint()),
 		rule,
 	}
-	var prompt []string
+	km := m.keys()
+	prompt := []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
+		km.key("message"), km.key("message-general")))}
 	if m.inputInSideChat() {
 		prompt = append([]string{rule}, m.promptLines(w)...)
 	}
