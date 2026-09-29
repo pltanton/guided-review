@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 func TestStoreRoundTrip(t *testing.T) {

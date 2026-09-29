@@ -10,10 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aplotnikov/guided-review/internal/config"
-	"github.com/aplotnikov/guided-review/internal/diff"
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/config"
+	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 type session struct {

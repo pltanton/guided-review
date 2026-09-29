@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aplotnikov/guided-review/internal/classify"
-	"github.com/aplotnikov/guided-review/internal/diff"
-	"github.com/aplotnikov/guided-review/internal/gitlab"
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/classify"
+	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/gitlab"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 type target struct {

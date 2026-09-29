@@ -10,8 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/inbox"
 )
 
 var commandNames = []string{"q", "all", "boilerplate", "generated", "f", "set", "msg", "skip"}

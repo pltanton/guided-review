@@ -1,6 +1,6 @@
 {
   "name": "guided-review",
-  "owner": { "name": "aplotnikov" },
+  "owner": { "name": "pltanton" },
   "plugins": [
     {
       "name": "guided-review",

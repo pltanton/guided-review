@@ -15,7 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aplotnikov/guided-review/internal/lsp"
+	"github.com/pltanton/guided-review/internal/lsp"
 )
 
 var languages = map[string]string{

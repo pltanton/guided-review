@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/testrepo"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
 func TestGitSource(t *testing.T) {

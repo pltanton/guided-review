@@ -9,7 +9,7 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/aplotnikov/guided-review/internal/gitlab"
+	"github.com/pltanton/guided-review/internal/gitlab"
 )
 
 const usage = `usage: gr <command> [args]

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/inbox"
-	"github.com/aplotnikov/guided-review/internal/testrepo"
+	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
 type harness struct {

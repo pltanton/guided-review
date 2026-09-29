@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aplotnikov/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/inbox"
 )
 
 func TestAppendReadWait(t *testing.T) {

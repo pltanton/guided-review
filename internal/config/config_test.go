@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/config"
+	"github.com/pltanton/guided-review/internal/config"
 )
 
 func write(t *testing.T, path, data string) {

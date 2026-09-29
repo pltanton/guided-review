@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/inbox"
 )
 
 type Action struct {

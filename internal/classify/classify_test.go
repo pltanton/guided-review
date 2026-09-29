@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/classify"
+	"github.com/pltanton/guided-review/internal/classify"
 )
 
 func TestGenerated(t *testing.T) {

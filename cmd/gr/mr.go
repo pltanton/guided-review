@@ -10,10 +10,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aplotnikov/guided-review/internal/diff"
-	"github.com/aplotnikov/guided-review/internal/gitlab"
-	"github.com/aplotnikov/guided-review/internal/plan"
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/gitlab"
+	"github.com/pltanton/guided-review/internal/plan"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 var verdicts = map[string]string{

@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/gitlab"
+	"github.com/pltanton/guided-review/internal/gitlab"
 )
 
 func TestParseMRURL(t *testing.T) {

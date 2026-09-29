@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aplotnikov/guided-review/internal/inbox"
-	"github.com/aplotnikov/guided-review/internal/state"
-	"github.com/aplotnikov/guided-review/internal/view"
+	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/view"
 )
 
 func cmdView(ctx context.Context, e env, args []string) error {

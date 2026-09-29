@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 var ErrDone = errors.New("no pending steps left")

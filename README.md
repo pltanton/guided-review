@@ -19,11 +19,11 @@ GitLab via `glab`, Claude Code or Codex as the agent, tmux for the viewer.
 
 ## Install
 
-    go install github.com/aplotnikov/guided-review/cmd/gr@latest
+    go install github.com/pltanton/guided-review/cmd/gr@latest
 
 Claude Code:
 
-    /plugin marketplace add aplotnikov/guided-review
+    /plugin marketplace add pltanton/guided-review
     /plugin install guided-review@guided-review
 
 Codex:

@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/diff"
 )
 
 const sample = `diff --git a/api/transfer.go b/api/transfer.go

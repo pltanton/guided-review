@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aplotnikov/guided-review/internal/diff"
-	"github.com/aplotnikov/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/gitx"
 )
 
 type gitSource struct {

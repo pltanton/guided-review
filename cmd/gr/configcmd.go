@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aplotnikov/guided-review/internal/config"
-	"github.com/aplotnikov/guided-review/internal/gitx"
-	"github.com/aplotnikov/guided-review/internal/view"
+	"github.com/pltanton/guided-review/internal/config"
+	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/view"
 )
 
 func cmdConfig(ctx context.Context, e env, args []string) error {

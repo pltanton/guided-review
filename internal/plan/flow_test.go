@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/aplotnikov/guided-review/internal/plan"
-	"github.com/aplotnikov/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/plan"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 func flowReview() *state.Review {

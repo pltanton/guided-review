@@ -1,4 +1,4 @@
-module github.com/aplotnikov/guided-review
+module github.com/pltanton/guided-review
 
 go 1.25.14
 
