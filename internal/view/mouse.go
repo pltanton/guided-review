@@ -2,6 +2,8 @@ package view
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/pltanton/guided-review/internal/inbox"
 )
 
 const wheelStep = 3
@@ -29,6 +31,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
 		if m.resizing = m.separatorAt(msg.X, msg.Y); m.resizing != "" {
+			return nil
+		}
+		if m.onChatInput(msg.X, msg.Y) {
+			if !m.composing {
+				m.startCompose(inbox.KindMessage)
+			}
 			return nil
 		}
 		if cw := m.chatWidth(); cw > 0 && msg.X > m.width-cw {
@@ -124,4 +132,15 @@ func (m *model) separatorAt(x, y int) string {
 		return "bottom"
 	}
 	return ""
+}
+
+func (m *model) onChatInput(x, y int) bool {
+	bodyH := m.height - len(m.bottomLines())
+	switch {
+	case m.step == nil:
+		return y == m.height-2
+	case m.chatWidth() > 0:
+		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
+	}
+	return false
 }

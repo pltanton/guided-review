@@ -1528,3 +1528,23 @@ func TestChatOnTheRightByDefault(t *testing.T) {
 		t.Fatal("chat_bottom keeps it under the code")
 	}
 }
+
+func TestClickChatInput(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 150
+	m.Update(key("T"))
+	bodyH := m.height - len(m.bottomLines())
+	m.handleMouse(tea.MouseMsg{X: m.width - 5, Y: bodyH - 1, Action: tea.MouseActionPress,
+		Button: tea.MouseButtonLeft})
+	if !m.composing || m.composeKind != inbox.KindMessage {
+		t.Fatal("a click on the side chat's input line must open the input")
+	}
+
+	r := &state.Review{ID: "mr-1"}
+	intake := &model{review: r, width: 100, height: 20, send: func(inbox.Event) error { return nil }}
+	intake.handleMouse(tea.MouseMsg{X: 30, Y: 18, Action: tea.MouseActionPress,
+		Button: tea.MouseButtonLeft})
+	if !intake.composing {
+		t.Fatal("a click on the intake answer field must open the input")
+	}
+}

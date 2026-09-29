@@ -72,8 +72,13 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 			}
 		}
 		if n := changedLines(s, files); n > MaxStepLines && s.WhyBig == "" {
-			fail("step %s: %d changed lines, over %d: split it by meaning (per function, layer "+
-				"or concern); if it truly cannot be split, say why in why_big", s.ID, n, MaxStepLines)
+			fail(
+				"step %s: %d changed lines, over %d: split it by meaning (per function, "+
+					"layer or concern); if it truly cannot be split, say why in why_big",
+				s.ID,
+				n,
+				MaxStepLines,
+			)
 		}
 		for _, a := range s.Annotations {
 			if err := checkAnnotation(a, inDiff); err != nil {
