@@ -33,9 +33,17 @@ and their replies sit unread.
    - "round N": this is a re-review, see below.
    - Never pass `--force`: it throws away the plan and progress. Only the user may
      ask to start over.
-2. If `$TMUX` is set and no window is named `review`
-   (`tmux list-windows -F '#{window_name}'`), open the viewer full screen in its own
-   window: `tmux new-window -n review "gr view --return $TMUX_PANE"`. It takes focus;
+2. If `$TMUX` is set, open the viewer full screen in a window named after the review id
+   gr printed (`review-<id>`, e.g. `review-mr-521`). If that window already exists it may
+   run an old binary or show another review, so restart it instead of skipping:
+   ```bash
+   w=review-<id>
+   if tmux list-windows -F '#{window_name}' | grep -qx "$w"; then
+     tmux respawn-window -k -t "$w" -c "$PWD" "gr view --return $TMUX_PANE"; tmux select-window -t "$w"
+   else
+     tmux new-window -n "$w" -c "$PWD" "gr view --return $TMUX_PANE"
+   fi
+   ```
    `a` in the viewer brings the user back to you, and closing it (or `gr done`) returns
    them to your pane automatically.
 

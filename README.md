@@ -28,7 +28,7 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
 
     > /guided-review https://gitlab.example.com/group/project/-/merge_requests/123
 
-The viewer opens full screen in a `review` tmux window. The bottom line shows what the
+The viewer opens full screen in a `review-<id>` tmux window (restarted if it already exists). The bottom line shows what the
 agent is doing (spinner, progress text, timer) or `● your turn` when it is your turn.
 
 `gr` never writes to GitLab. At the end `P` in the viewer (or `gr export`) writes the
