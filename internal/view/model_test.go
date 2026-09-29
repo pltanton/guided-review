@@ -1425,3 +1425,11 @@ func TestDragResize(t *testing.T) {
 		t.Fatal("resizing must not select lines and must stop on release")
 	}
 }
+
+func TestMouseOffIsVisible(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.mouse = false
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "mouse off · m") {
+		t.Fatalf("footer must say the mouse is off: %q", ansi.Strip(f))
+	}
+}

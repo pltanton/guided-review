@@ -94,6 +94,9 @@ func (m *model) footer() (string, []span) {
 	if m.status != "" {
 		tail = m.status
 	}
+	if !m.mouse && m.status == "" {
+		tail = hotStyle.Render("mouse off · "+m.keys().key("mouse")) + dimStyle.Render(" · "+tail)
+	}
 	if m.lspBusy != "" {
 		tail = m.spin() + " lsp " + m.lspBusy + "…"
 	}
