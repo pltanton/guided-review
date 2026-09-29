@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
@@ -54,13 +55,13 @@ func (m *model) spin() string {
 
 type button struct {
 	label, key string
-	press      func(*model)
+	press      func(*model) tea.Cmd
 }
 
 func (m *model) footerButtons() []button {
 	km := m.keys()
 	b := func(label, action string, press func(*model)) button {
-		return button{label, km.key(action), press}
+		return button{label, km.key(action), func(m *model) tea.Cmd { press(m); return nil }}
 	}
 	btns := []button{
 		b("✓ next", "next", (*model).next),
@@ -69,7 +70,7 @@ func (m *model) footerButtons() []button {
 		b("↷ skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
 	if m.review != nil && m.review.Publish != nil {
-		btns = append(btns, b("⬆ publish", "publish", (*model).publish))
+		btns = append(btns, button{"⬆ publish", km.key("publish"), (*model).publish})
 	}
 	return btns
 }
@@ -90,6 +91,9 @@ func (m *model) footer() (string, []span) {
 	}
 	if m.lspBusy != "" {
 		tail = m.spin() + " lsp " + m.lspBusy + "…"
+	}
+	if m.publishing {
+		tail = m.spin() + " publishing to the MR…"
 	}
 	if typed := m.count + m.pendingKey; typed != "" {
 		tail = typed
@@ -368,14 +372,19 @@ func (m *model) View() string {
 	main := m.header()
 	switch k := m.keys(); {
 	case m.preview != "":
-		lines := strings.Split(strings.TrimRight(m.preview, "\n"), "\n")
+		var lines []string
+		for _, l := range strings.Split(expandTabs(strings.TrimRight(m.preview, "\n")), "\n") {
+			lines = append(lines, strings.Split(ansi.Wrap(l, max(mw, 20), ""), "\n")...)
+		}
 		title := "publish preview"
 		if m.review.MR != nil {
 			title += fmt.Sprintf(" → !%d", m.review.MR.IID)
 		}
-		main = panel(title,
-			hotStyle.Render("P publishes all of this to the MR · esc cancels · j/k scroll"),
-			lines[min(m.previewTop, len(lines)):])
+		hint := "P publishes all of this to the MR · esc cancels · j/k scroll"
+		if m.publishing {
+			hint = m.spin() + " publishing…"
+		}
+		main = panel(title, hotStyle.Render(hint), lines[min(m.previewTop, len(lines)):])
 	case m.help:
 		lines := m.helpLines(mw)
 		main = panel("keys", dimStyle.Render("any key closes · j/k scroll · remap in "+configHint),

@@ -1,6 +1,7 @@
 package view
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -774,7 +775,12 @@ func TestPublishButton(t *testing.T) {
 	if m.preview == "" || !strings.Contains(ansi.Strip(m.View()), "## Guided review: approve") {
 		t.Fatalf("first P must show the preview:\n%s", ansi.Strip(m.View()))
 	}
+	_, cmd := m.Update(key("P"))
+	if !m.publishing || cmd == nil || !strings.Contains(ansi.Strip(m.View()), "publishing") {
+		t.Fatal("second P must publish in the background with a spinner")
+	}
 	m.Update(key("P"))
+	m.Update(cmd())
 	if len(ran) != 2 || ran[1][0] != "publish" || len(ran[1]) != 1 {
 		t.Fatalf("second P must run gr publish: %v", ran)
 	}
@@ -1267,5 +1273,29 @@ func TestCountPrefix(t *testing.T) {
 	m.Update(key("k"))
 	if l := m.current(); l.Line != 3 || m.count != "" {
 		t.Fatalf("esc must drop the count: line %d count %q", l.Line, m.count)
+	}
+}
+
+func TestPublishFailureKeepsPreview(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Publish = &state.PublishPlan{Verdict: "changes"}
+	m.runGr = func(args ...string) (string, error) {
+		if len(args) > 1 {
+			return "--- a.go:3\n\tx := 1\n", nil
+		}
+		return "glab: 500 Internal Server Error\n", errors.New("exit status 1")
+	}
+	m.Update(key("P"))
+	_, cmd := m.Update(key("P"))
+	m.Update(cmd())
+	v := ansi.Strip(m.View())
+	if m.preview == "" || !strings.Contains(v, "publish failed: exit status 1") ||
+		!strings.Contains(v, "glab: 500") || strings.Contains(v, "\t") {
+		t.Fatalf("failure must stay visible over the tab-free preview:\n%s", v)
+	}
+	_, cmd = m.Update(key("P"))
+	m.Update(cmd())
+	if n := strings.Count(m.preview, "publish failed"); n != 1 {
+		t.Fatalf("retry must replace the old failure, got %d", n)
 	}
 }

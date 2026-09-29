@@ -21,7 +21,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			_, spans := m.footer()
 			for _, sp := range spans {
 				if msg.X >= sp.from && msg.X < sp.to {
-					sp.b.press(m)
+					return sp.b.press(m)
 				}
 			}
 			return nil
