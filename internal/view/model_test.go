@@ -1345,3 +1345,15 @@ func TestChatGutter(t *testing.T) {
 		t.Fatalf("compact chat must name speaker changes without blank lines: %q", got[0])
 	}
 }
+
+func TestGeneralMessage(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.cursor = 2
+	m.Update(key("C"))
+	typeText(m, "overall looks fine")
+	m.Update(key("enter"))
+	want := inbox.Event{Kind: inbox.KindMessage, Step: "s1", Text: "overall looks fine"}
+	if len(*sent) != 1 || (*sent)[0] != want {
+		t.Fatalf("sent %+v, want %+v", *sent, want)
+	}
+}

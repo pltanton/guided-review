@@ -93,6 +93,7 @@ both sides in full.
 | `v`, mouse drag | select lines |
 | `c` / `enter` | message the agent; the cursor line (or selection) is attached, `backspace` on empty input (or `ctrl+x`) detaches it; on one of your comments it is a reply |
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
+| `C` | message the agent without attaching a line |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `t` | bigger / smaller chat at the bottom |

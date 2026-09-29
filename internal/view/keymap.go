@@ -120,6 +120,11 @@ func DefaultActions() []Action {
 			run: do((*model).next)},
 		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
 			Keys: k("c", "enter"), run: do((*model).messageOrOpen)},
+		{Name: "message-general", Group: rev, Desc: "message the agent without a line", Keys: k("C"),
+			run: do(func(m *model) {
+				m.startCompose(inbox.KindMessage)
+				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
+			})},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
 			Keys: k("?"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
 		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
