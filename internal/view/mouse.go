@@ -22,6 +22,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
+		if m.resizing = m.separatorAt(msg.X, msg.Y); m.resizing != "" {
+			return nil
+		}
+		if cw := m.chatWidth(); cw > 0 && msg.X > m.width-cw {
+			return nil
+		}
 		if msg.Y == m.height-1 && !m.composing {
 			_, spans := m.footer()
 			for _, sp := range spans {
@@ -53,6 +59,16 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 				m.toggleFold()
 			}
 		}
+	case msg.Action == tea.MouseActionMotion && m.resizing != "":
+		switch m.resizing {
+		case "plan":
+			m.planW = msg.X + 1
+		case "chat":
+			m.sideW = m.width - msg.X
+		case "bottom":
+			m.chatH = m.height - msg.Y - 2
+		}
+		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
 		if i, ok := m.rowAt(msg.Y); ok {
 			m.cursor = i
@@ -60,7 +76,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.clamp()
 		}
 	case msg.Action == tea.MouseActionRelease:
-		m.dragging = false
+		m.dragging, m.resizing = false, ""
 	}
 	return nil
 }
@@ -86,4 +102,20 @@ func (m *model) overChat(x, y int) bool {
 		return x >= m.width-cw
 	}
 	return m.bigChat && y >= m.height-len(m.bottomLines())
+}
+
+func (m *model) separatorAt(x, y int) string {
+	bottom := m.bottomLines()
+	top := m.height - len(bottom)
+	switch {
+	case m.step == nil || m.preview != "":
+		return ""
+	case y < top && x == m.planWidth()-1:
+		return "plan"
+	case y < top && m.chatWidth() > 0 && x == m.width-m.chatWidth():
+		return "chat"
+	case y == top && m.chatWidth() == 0 && len(bottom) > 1:
+		return "bottom"
+	}
+	return ""
 }

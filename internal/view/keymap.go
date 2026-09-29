@@ -120,8 +120,8 @@ func DefaultActions() []Action {
 			run: do((*model).next)},
 		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
 			Keys: k("c", "enter"), run: do((*model).messageOrOpen)},
-		{Name: "message-general", Group: rev, Desc: "message the agent without a line", Keys: k("C"),
-			run: do(func(m *model) {
+		{Name: "message-general", Group: rev, Desc: "message the agent without a line",
+			Keys: k("C"), run: do(func(m *model) {
 				m.startCompose(inbox.KindMessage)
 				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 			})},
@@ -147,7 +147,10 @@ func DefaultActions() []Action {
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
 		{Name: "chat", Group: vw, Desc: "bigger / smaller chat",
-			Keys: k("t"), run: do(func(m *model) { m.bigChat, m.chatTop = !m.bigChat, 0; m.clamp() })},
+			Keys: k("t"), run: do(func(m *model) {
+				m.bigChat, m.chatTop, m.chatH = !m.bigChat, 0, 0
+				m.clamp()
+			})},
 		{Name: "chat-up", Group: vw, Desc: "scroll the chat up", Keys: k("ctrl+y"),
 			run: do(func(m *model) { m.chatTop += wheelStep })},
 		{Name: "chat-down", Group: vw, Desc: "scroll the chat down", Keys: k("ctrl+e"),

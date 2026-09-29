@@ -1395,3 +1395,33 @@ func TestSideChatInput(t *testing.T) {
 		t.Fatalf("command line stays at the bottom:\n%s", v)
 	}
 }
+
+func TestDragResize(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 150
+	m.review.Messages = []state.Message{{Step: "s1", Text: "hi"}}
+	drag := func(fromX, fromY, toX, toY int) {
+		m.handleMouse(tea.MouseMsg{X: fromX, Y: fromY, Action: tea.MouseActionPress,
+			Button: tea.MouseButtonLeft})
+		m.handleMouse(tea.MouseMsg{X: toX, Y: toY, Action: tea.MouseActionMotion,
+			Button: tea.MouseButtonLeft})
+		m.handleMouse(tea.MouseMsg{X: toX, Y: toY, Action: tea.MouseActionRelease})
+	}
+	drag(m.planWidth()-1, 3, 45, 3)
+	if got := m.planWidth(); got != 46 {
+		t.Fatalf("plan width after drag = %d, want 46", got)
+	}
+	top := m.height - len(m.bottomLines())
+	drag(60, top, 60, top-8)
+	if got := m.height - len(m.bottomLines()); got != top-8 {
+		t.Fatalf("bottom chat top after drag = %d, want %d", got, top-8)
+	}
+	m.Update(key("T"))
+	drag(m.width-m.chatWidth(), 3, m.width-60, 3)
+	if got := m.chatWidth(); got != 60 {
+		t.Fatalf("side chat width after drag = %d, want 60", got)
+	}
+	if m.visual || m.resizing != "" {
+		t.Fatal("resizing must not select lines and must stop on release")
+	}
+}

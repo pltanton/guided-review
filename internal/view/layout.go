@@ -138,6 +138,9 @@ func (m *model) planWidth() int {
 		len(m.review.Steps) == 0 {
 		return 0
 	}
+	if m.planW > 0 {
+		return max(12, min(m.planW, m.width/2))
+	}
 	return min(maxPlanWidth, m.width/4)
 }
 
@@ -148,6 +151,9 @@ func (m *model) mainWidth() int {
 func (m *model) chatWidth() int {
 	if !m.sideChat || m.width < minSideChatWidth {
 		return 0
+	}
+	if m.sideW > 0 {
+		return max(24, min(m.sideW, m.width*2/3))
 	}
 	return max(36, m.width/3)
 }
@@ -336,6 +342,8 @@ func (m *model) bottomLines() []string {
 	switch {
 	case m.step == nil:
 		limit = max(m.height-4, 1)
+	case m.chatH > 0:
+		limit = max(1, min(m.chatH, m.height-6))
 	case m.bigChat:
 		limit = max(m.height/2, messageLines)
 	}
@@ -350,7 +358,11 @@ func (m *model) bottomLines() []string {
 		}
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
 		lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
-		lines = append(lines, window(chat, limit, m.chatTop)...)
+		shown := window(chat, limit, m.chatTop)
+		for m.chatH > 0 && len(shown) < limit {
+			shown = append([]string{""}, shown...)
+		}
+		lines = append(lines, shown...)
 	}
 	if m.inputInSideChat() {
 		footer, _ := m.footer()

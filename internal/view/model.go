@@ -85,6 +85,10 @@ type model struct {
 
 	bigChat  bool
 	sideChat bool
+	planW    int
+	sideW    int
+	chatH    int
+	resizing string
 	chatTop  int
 
 	col        int

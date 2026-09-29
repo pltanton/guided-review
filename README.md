@@ -121,6 +121,7 @@ both sides in full.
 | `t` | bigger / smaller chat at the bottom |
 | `T` | chat in a column on the right, full height |
 | `ctrl+y` / `ctrl+e`, wheel | scroll the chat |
+| drag a `│` or the chat's top line | resize the plan, the right-hand chat or the bottom chat |
 | `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step |
