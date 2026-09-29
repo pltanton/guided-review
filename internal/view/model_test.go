@@ -1068,7 +1068,7 @@ func TestChatPanel(t *testing.T) {
 	}
 	m.Update(key("t"))
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "message 29") || !strings.Contains(out, "── s1") {
+	if !strings.Contains(out, "message 29") {
 		t.Fatalf("full chat:\n%s", out)
 	}
 	m.Update(key("g"))
@@ -1302,20 +1302,30 @@ func TestChatGutter(t *testing.T) {
 		{Time: t0, Step: "s1", Text: strings.Repeat("long answer ", 12)},
 		{Time: t0.Add(2 * time.Second), Step: "s1", Text: "and more"},
 	}
-	m.events = []inbox.Event{{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"}}
+	m.events = []inbox.Event{
+		{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"},
+	}
 	m.lastWait = t0.Add(time.Minute)
 	got := make([]string, 0)
-	for _, l := range m.chatLines(60, false) {
+	for _, l := range m.chatLines(60, true) {
 		got = append(got, strings.TrimRight(ansi.Strip(l), " "))
 	}
 	want := []string{
+		"── s1 first ──",
 		"claude │ long answer long answer long answer long answer",
 		"       │ long answer long answer long answer long answer",
 		"       │ long answer long answer long answer long answer",
+		"",
 		"   you │ why?",
+		"",
 		"claude │ and more",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("chat\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	compact := m.chatLines(60, false)
+	got = []string{ansi.Strip(compact[len(compact)-1])}
+	if got[0] != "claude │ and more" || slices.Contains(compact, "") {
+		t.Fatalf("compact chat must name speaker changes without blank lines: %q", got[0])
 	}
 }

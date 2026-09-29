@@ -250,7 +250,7 @@ func (m *model) chatLines(width int, all bool) []string {
 	var lines []string
 	prevStep, prevYou := "\x00", false
 	for i, c := range m.conversation(all) {
-		named := i == 0 || c.you != prevYou
+		named := roomy || i == 0 || c.you != prevYou
 		if all && c.step != prevStep {
 			named = true
 			label := "intake"
@@ -264,7 +264,7 @@ func (m *model) chatLines(width int, all bool) []string {
 			}
 			lines = append(lines, dimStyle.Render("── "+label+" ──"))
 			prevStep = c.step
-		} else if roomy && i > 0 && c.you != prevYou {
+		} else if roomy && i > 0 {
 			lines = append(lines, "")
 		}
 		name := agentStyle.Render("claude")
