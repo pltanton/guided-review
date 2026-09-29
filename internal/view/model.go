@@ -28,25 +28,25 @@ const (
 	messageLines   = 5
 )
 
-type reloadMsg struct{}
+type (
+	reloadMsg     struct{}
+	tickMsg       struct{}
+	editorDoneMsg struct{ err error }
+	rowsMsg       struct {
+		step string
+		rows []Row
+		err  error
+	}
+)
 
-type tickMsg struct{}
-
-type rowsMsg struct {
-	step string
-	rows []Row
-	err  error
-}
-
-const asyncFiles = 8
-
-const tickEvery = 150 * time.Millisecond
+const (
+	asyncFiles = 8
+	tickEvery  = 150 * time.Millisecond
+)
 
 func tick() tea.Cmd {
 	return tea.Tick(tickEvery, func(time.Time) tea.Msg { return tickMsg{} })
 }
-
-type editorDoneMsg struct{ err error }
 
 type model struct {
 	ctx    context.Context
@@ -217,17 +217,15 @@ func (m *model) rebuild(jumpToHunk bool) {
 func (m *model) notes() []Note {
 	var out []Note
 	for _, a := range m.step.Annotations {
-		out = append(
-			out,
-			Note{File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true},
-		)
+		out = append(out, Note{
+			File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true,
+		})
 	}
 	for _, h := range m.step.Hotspots {
 		if h.Line > 0 {
-			out = append(
-				out,
-				Note{File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true},
-			)
+			out = append(out, Note{
+				File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true,
+			})
 		}
 	}
 	round := max(m.review.Round, 1)
@@ -236,29 +234,30 @@ func (m *model) notes() []Note {
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
 		}
-		out = append(
-			out,
-			Note{
-				Ref:   c.ID,
-				File:  c.File,
-				Line:  start,
-				Kind:  "comment",
-				Label: fmt.Sprintf("#%d %s", c.ID, c.Severity),
-				Text:  c.Body,
-				Dim:   c.Resolved,
-			},
-		)
+		out = append(out, Note{
+			Ref: c.ID, File: c.File, Line: start, Kind: "comment",
+			Label: fmt.Sprintf("#%d %s", c.ID, c.Severity), Text: c.Body, Dim: c.Resolved,
+		})
 	}
-	out = append(out, m.pendingNotes()...)
+	for _, e := range m.events {
+		if e.Kind != inbox.KindExplain || !m.pending(e) {
+			continue
+		}
+		if start, _, err := state.ParseLines(e.Lines); err == nil && start > 0 {
+			out = append(out, Note{
+				File: e.File, Line: start, Kind: "pending", Focus: true,
+				Text: "agent is explaining…",
+			})
+		}
+	}
 	for _, d := range m.review.Discussions {
 		if d.File == "" || d.OldLine || d.Resolved {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
-		out = append(
-			out,
-			Note{File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body},
-		)
+		out = append(out, Note{
+			File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body,
+		})
 	}
 	return out
 }
@@ -272,28 +271,6 @@ func (m *model) pending(e inbox.Event) bool {
 		return e.Time.After(m.lastWait)
 	}
 	return false
-}
-
-func (m *model) pendingNotes() []Note {
-	var out []Note
-	for _, e := range m.events {
-		if e.Kind != inbox.KindExplain || !m.pending(e) {
-			continue
-		}
-		if start, _, err := state.ParseLines(e.Lines); err == nil && start > 0 {
-			out = append(
-				out,
-				Note{
-					File:  e.File,
-					Line:  start,
-					Kind:  "pending",
-					Text:  "agent is explaining…",
-					Focus: true,
-				},
-			)
-		}
-	}
-	return out
 }
 
 func (m *model) useSplit() bool {
@@ -326,26 +303,24 @@ func (m *model) current() line {
 }
 
 func (m *model) focus(it line) {
-	for i, x := range m.lines {
-		if x.File == it.File && x.Line == it.Line && x.NoteHead == it.NoteHead {
-			m.cursor = i
-			return
-		}
+	m.seek(func(x line) bool {
+		return x.File == it.File && x.Line == it.Line && x.NoteHead == it.NoteHead
+	})
+}
+
+func (m *model) seek(match func(line) bool) bool {
+	i := slices.IndexFunc(m.lines, match)
+	if i >= 0 {
+		m.cursor = i
 	}
+	return i >= 0
 }
 
 func firstFocus(list []line) int {
-	for i, it := range list {
-		if it.HunkStart {
-			return i
-		}
+	if i := slices.IndexFunc(list, func(l line) bool { return l.HunkStart }); i >= 0 {
+		return i
 	}
-	for i, it := range list {
-		if it.Line > 0 {
-			return i
-		}
-	}
-	return 0
+	return max(slices.IndexFunc(list, func(l line) bool { return l.Line > 0 }), 0)
 }
 
 func (m *model) Init() tea.Cmd { return tick() }
@@ -457,22 +432,14 @@ func (m *model) stepFiles() []string {
 }
 
 func (m *model) jumpToFile(file string) {
-	for i, it := range m.lines {
-		if it.Kind == RowFile && it.File == file {
-			m.cursor, m.offset = i, i
-			m.clamp()
-			return
-		}
+	if m.seek(func(l line) bool { return l.Kind == RowFile && l.File == file }) {
+		m.offset = m.cursor
+		m.clamp()
 	}
 }
 
 func (m *model) hasFolds() bool {
-	for _, r := range m.lines {
-		if r.Kind == RowFold {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(m.lines, func(l line) bool { return l.Kind == RowFold })
 }
 
 func (m *model) toggleFold() {
@@ -486,12 +453,7 @@ func (m *model) toggleFold() {
 		if m.src != nil {
 			m.rebuild(false)
 		}
-		for i, it := range m.lines {
-			if it.File == cur.File && it.Line == cur.GapFrom {
-				m.cursor = i
-				break
-			}
-		}
+		m.seek(func(l line) bool { return l.File == cur.File && l.Line == cur.GapFrom })
 		m.clamp()
 		return
 	}
@@ -505,12 +467,7 @@ func (m *model) toggleFold() {
 	}
 	m.unfolded[key] = !m.unfolded[key]
 	m.relist()
-	for i, it := range m.lines {
-		if it.FoldKey == key {
-			m.cursor = i
-			break
-		}
-	}
+	m.seek(func(l line) bool { return l.FoldKey == key })
 	m.clamp()
 }
 
@@ -540,27 +497,16 @@ func (m *model) extraSteps() []state.Step {
 		}
 	}
 	var out []state.Step
-	for _, e := range []struct {
-		id, title string
-		hunks     []state.StepHunk
-	}{
-		{extraBoilerplate, "boilerplate", boilerplate},
-		{extraGenerated, "generated", generated},
-		{extraAll, "all changes", all},
-	} {
-		if len(e.hunks) > 0 {
-			out = append(
-				out,
-				state.Step{
-					ID:     e.id,
-					Title:  e.title,
-					Kind:   "extra",
-					Hunks:  e.hunks,
-					Status: state.StatusPending,
-				},
-			)
+	add := func(id, title string, hunks []state.StepHunk) {
+		if len(hunks) > 0 {
+			out = append(out, state.Step{
+				ID: id, Title: title, Kind: "extra", Hunks: hunks, Status: state.StatusPending,
+			})
 		}
 	}
+	add(extraBoilerplate, "boilerplate", boilerplate)
+	add(extraGenerated, "generated", generated)
+	add(extraAll, "all changes", all)
 	return out
 }
 
@@ -663,7 +609,7 @@ func (m *model) publish() {
 	}
 	if m.preview == "" {
 		if m.review.Publish == nil {
-			m.status = "nothing prepared: the agent prepares the publication when the review is done"
+			m.status = "nothing prepared: the agent prepares it when the review is done"
 			return
 		}
 		out, err := m.runGr("publish", "--dry-run")
@@ -711,8 +657,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
 	case m.chatSize == 2:
-		if cmd, handled := m.handleChatKey(msg); handled {
-			return cmd
+		if m.handleChatKey(msg) {
+			return nil
 		}
 	}
 	return m.dispatch(msg.String())
@@ -751,8 +697,8 @@ func (m *model) openEditor() tea.Cmd {
 		return nil
 	}
 	dir := m.repo.Dir
-	if m.review != nil && m.review.Worktree != "" {
-		dir = m.review.Worktree
+	if m.review != nil {
+		dir = m.review.CodeDir(dir)
 	}
 	cmd := editorCmd(dir, it.File, max(it.Line, 1))
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorDoneMsg{err} })
@@ -767,18 +713,8 @@ func editorCmd(dir, file string, line int) *exec.Cmd {
 	script := editor + " " + target
 	var cmd *exec.Cmd
 	if os.Getenv("TMUX") != "" {
-		cmd = exec.Command(
-			"tmux",
-			"display-popup",
-			"-E",
-			"-w",
-			"90%",
-			"-h",
-			"90%",
-			"-d",
-			dir,
-			script,
-		)
+		popup := []string{"display-popup", "-E", "-w", "90%", "-h", "90%", "-d", dir, script}
+		cmd = exec.Command("tmux", popup...)
 	} else {
 		cmd = exec.Command("sh", "-c", script)
 	}
@@ -803,7 +739,7 @@ func focusAgent(pane string) error {
 	return exec.Command("tmux", "select-pane", "-t", pane).Run()
 }
 
-func (m *model) handleChatKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+func (m *model) handleChatKey(msg tea.KeyMsg) bool {
 	k := msg.String()
 	if k != "g" {
 		m.chatG = false
@@ -828,7 +764,7 @@ func (m *model) handleChatKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "esc":
 		m.chatSize, m.chatTop = 0, 0
 	default:
-		return nil, false
+		return false
 	}
-	return nil, true
+	return true
 }

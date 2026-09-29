@@ -370,17 +370,20 @@ func TestPendingRequests(t *testing.T) {
 	m.src = nil
 	m.lastWait = t0
 	m.events = []inbox.Event{
-		{
-			Time:  t0.Add(-time.Minute),
-			Kind:  inbox.KindExplain,
-			Step:  "s1",
-			File:  "a.go",
-			Lines: "1",
-		},
+		{Time: t0.Add(-time.Minute), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "1"},
 		{Time: t0.Add(time.Second), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "3"},
 		{Time: t0.Add(2 * time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"},
 	}
-	notes := m.pendingNotes()
+	pendingNotes := func() []Note {
+		var out []Note
+		for _, n := range m.notes() {
+			if n.Kind == "pending" {
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	notes := pendingNotes()
 	if len(notes) != 1 || notes[0].Line != 3 || notes[0].Kind != "pending" {
 		t.Fatalf("pending notes: %+v", notes)
 	}
@@ -390,13 +393,11 @@ func TestPendingRequests(t *testing.T) {
 		t.Fatalf("last chat line: %q", last)
 	}
 	m.lastWait = t0.Add(time.Minute)
-	if len(m.pendingNotes()) != 0 {
+	if len(pendingNotes()) != 0 {
 		t.Fatal("requests answered after the agent waited again")
 	}
-	if last := ansi.Strip(m.conversation(false)[len(m.conversation(false))-1].text); strings.Contains(
-		last,
-		"thinking",
-	) {
+	chat = m.conversation(false)
+	if last := ansi.Strip(chat[len(chat)-1].text); strings.Contains(last, "thinking") {
 		t.Fatalf("stale thinking line: %q", last)
 	}
 }
