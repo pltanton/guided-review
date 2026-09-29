@@ -76,9 +76,10 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 2. Order and size steps per references/ordering.md — the MR's own spec or design doc,
    if the diff has one, is always s1; mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them.
-3. Add `annotations` where one line saves the reader real effort: what a non-obvious
-   call does, where the spec disagrees (`kind: spec`). One to three per step; none
-   is fine.
+3. Add `annotations` where an explanation saves the reader real effort: what a
+   non-obvious call does and why, where the spec disagrees (`kind: spec`). Written per
+   references/style.md: full sentences, not fragments. One to three per step; none is
+   fine.
 4. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists.
 5. `gr say` the plan in one line per step (`s2 Handler ⚑`) plus a line for
    boilerplate and generated files, then start with s1.
@@ -99,7 +100,12 @@ steps:
     hotspots:
       - { cat: consistency, line: 57, q: "Retry after a timeout — second debit?" }
     annotations:
-      - { file: api/transfer.go, line: 61, kind: note, text: "Put runs in the reserve tx" }
+      - file: api/transfer.go
+        line: 61
+        kind: note
+        text: >-
+          reserve() opens the transaction and Put writes the ledger row inside it, so a
+          failed debit rolls the reservation back too.
     depends_on: [s1]
 ```
 
@@ -114,14 +120,15 @@ steps:
 
    - `[message] sN file:lines: text` — a remark: pick severity (blocker changes the
      approach, major is local rework, minor, nit),
-     `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY`, then
+     `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY` (BODY per
+     references/style.md: readable for an author who was not here), then
      `gr say` one line: `записал: nit, transfer.go:57–58`. A question: `gr say` a short
      answer. Unsure which: ask one short question.
    - `[message] sN: text` — the same without a line anchor; ask for the lines if a
      remark needs them.
    - `[explain] sN file:lines` — read that code,
-     `gr note add --file F --line <first line> TEXT`: one to three lines on its role in
-     the feature, not its syntax.
+     `gr note add --file F --line <first line> TEXT`: two to four sentences on its role
+     in the feature, not its syntax (references/style.md).
    - `[ask] sN file:lines: text` — a question about that code, never a remark: read it,
      answer with `gr say` in a few lines. Do not create comments or notes for it.
    - `[next] sN` — if a hotspot question on this step is unanswered, `gr say` it once
