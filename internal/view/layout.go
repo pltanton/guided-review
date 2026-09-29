@@ -585,7 +585,7 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	idx := m.review.StepIndex(m.review.Current)
 	offset := max(0, idx-(rows-2))
 	entry := func(style lipgloss.Style, text string) sideEntry {
-		return sideEntry{text: style.Render(ansi.Truncate(text, w-1, "…"))}
+		return sideEntry{text: style.Render(ansi.Truncate(text, w-2, "…"))}
 	}
 	out := []sideEntry{{text: title}}
 	for _, st := range m.review.Steps[offset:] {
@@ -612,9 +612,9 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if len(st.Hotspots) > 0 {
 			line += hotStyle.Render(" ⚑")
 		}
-		line = ansi.Truncate(line, w-1, "…")
+		line = ansi.Truncate(line, w-2, "…")
 		if current {
-			line = paint(fit(line, w-1), cursorTone)
+			line = paint(fit(line, w-2), cursorTone)
 		}
 		out = append(out, sideEntry{text: line, step: st.ID})
 	}
