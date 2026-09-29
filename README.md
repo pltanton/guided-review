@@ -152,3 +152,7 @@ the agent looks for a skill named `guided-review-notify` and follows it with the
 link, the verdict and the comment counts — for example to message the author in your
 chat. Put it in `~/.claude/skills/guided-review-notify/SKILL.md` (or the Codex
 equivalent); without it the agent prints a line to forward.
+
+## License
+
+Apache-2.0, see [LICENSE](LICENSE).
