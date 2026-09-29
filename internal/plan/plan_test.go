@@ -1,6 +1,7 @@
 package plan_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -183,5 +184,39 @@ func TestApply(t *testing.T) {
 	}
 	if len(r.Comments) != 1 {
 		t.Fatal("Apply must keep comments")
+	}
+}
+
+func TestStepSizeLimit(t *testing.T) {
+	big := diff.Hunk{NewStart: 1, NewLines: 400}
+	for range 400 {
+		big.Lines = append(big.Lines, diff.Line{Kind: '+', Text: "x"})
+	}
+	r := &state.Review{Files: []state.File{{Path: "big.go", Tier: state.TierCore}}}
+	files := []diff.File{{Path: "big.go", Hunks: []diff.Hunk{big}}}
+	step := func(lines, why string) state.Step {
+		return state.Step{ID: "s1", Title: "t", Hunks: []state.StepHunk{{File: "big.go", Lines: lines}},
+			WhyBig: why}
+	}
+	tests := []struct {
+		name    string
+		steps   []state.Step
+		wantErr bool
+	}{
+		{"whole file", []state.Step{step("", "")}, true},
+		{"why_big given", []state.Step{step("", "one generated-like table")}, false},
+		{"split by range", []state.Step{step("1-250", ""), {ID: "s2", Title: "t",
+			Hunks: []state.StepHunk{{File: "big.go", Lines: "251-400"}}}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := plan.Validate(plan.Plan{Steps: tt.steps}, r, files)
+			got := slices.ContainsFunc(errs, func(e error) bool {
+				return strings.Contains(e.Error(), "over 300")
+			})
+			if got != tt.wantErr {
+				t.Fatalf("size error = %v, want %v (%v)", got, tt.wantErr, errs)
+			}
+		})
 	}
 }

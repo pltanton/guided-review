@@ -71,6 +71,10 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 				fail("step %s: %v", s.ID, err)
 			}
 		}
+		if n := changedLines(s, files); n > MaxStepLines && s.WhyBig == "" {
+			fail("step %s: %d changed lines, over %d: split it by meaning (per function, layer "+
+				"or concern); if it truly cannot be split, say why in why_big", s.ID, n, MaxStepLines)
+		}
 		for _, a := range s.Annotations {
 			if err := checkAnnotation(a, inDiff); err != nil {
 				fail("step %s: %v", s.ID, err)
@@ -132,6 +136,36 @@ func checkAnnotation(a state.Annotation, inDiff map[string]bool) error {
 		return fmt.Errorf("%s: empty text", where)
 	}
 	return nil
+}
+
+// MaxStepLines is the reviewer's own limit on what they take in at once (2026-09-29).
+const MaxStepLines = 300
+
+func changedLines(s state.Step, files []diff.File) int {
+	n := 0
+	for _, sh := range s.Hunks {
+		i := slices.IndexFunc(files, func(f diff.File) bool { return f.Path == sh.File })
+		if i < 0 {
+			continue
+		}
+		from, to, err := state.ParseLines(sh.Lines)
+		if err != nil {
+			continue
+		}
+		for _, h := range files[i].Hunks {
+			line := h.NewStart
+			for _, l := range h.Lines {
+				inRange := from == 0 || from <= line && line <= to+1
+				if l.Kind != ' ' && inRange {
+					n++
+				}
+				if l.Kind != '-' {
+					line++
+				}
+			}
+		}
+	}
+	return n
 }
 
 func uncovered(f diff.File, steps []state.Step) []string {

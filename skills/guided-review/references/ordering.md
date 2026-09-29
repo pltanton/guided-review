@@ -21,8 +21,12 @@ Outside in, then depth first along the changed code.
 6. Boilerplate (DI wiring, DTO mappers, route registration, trivial config) goes into
    `boilerplate:`, not into steps.
 
-Step size: about one screen, 40–80 changed lines, one idea. Split a long function by
-hunks; merge small hunks that serve one idea.
+Step size: one idea, ideally 40–150 changed lines, never more than 300 — past that a
+reviewer stops taking it in, and `gr plan set` rejects the step. Split along meaning,
+not line counts: per function or method, per layer (contract / handler / storage), per
+concern (validation, persistence, events), tests apart from the code. Merge small hunks
+that serve one idea. Only when a piece truly cannot be split (one migration, one
+generated-like table) keep it whole and say why in the step's `why_big`.
 
 `depends_on`: step B depends on A when a blocker in A would likely rewrite B.
 Contracts are usually roots; handlers depend on the contract; logic depends on the
