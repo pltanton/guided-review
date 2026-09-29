@@ -645,7 +645,8 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			glyph, style = "◆", hotStyle
 		}
 		n := dimStyle.Render(fmt.Sprint(len(st.Hunks)))
-		out = append(out, sideEntry{text: plain(row(style.Render(glyph+" "+st.Title), n)), step: st.ID})
+		line := plain(row(style.Render(glyph+" "+st.Title), n))
+		out = append(out, sideEntry{text: line, step: st.ID})
 	}
 	for len(out) < rows {
 		out = append(out, sideEntry{})
