@@ -60,7 +60,7 @@ In the session where the code was written, ask for a self-review (`/guided-selfr
 The agent that wrote the code does not review it: it runs `gr init --self` and starts a
 fresh agent in a `selfreview` tmux window with only the task, no history. You walk the
 branch with that reviewer in the usual viewer. `P` at the end hands `fixes.json` back to
-your session and returns you there; the original agent applies the fixes, says which it
+your session and returns you there; the reviewer's window closes, the original agent applies the fixes, says which it
 skipped and why, and offers another round.
 
 Optional `.review.yaml` in the repository root:

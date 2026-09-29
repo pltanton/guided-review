@@ -22,9 +22,10 @@ through it there, and take back a list of fixes. Needs tmux and `gr`.
    ```
    Only the goal. Not how you implemented it and not what you think is fragile: the
    reviewer is useful exactly because it does not know.
-4. Start it with the agent CLI you run in (`claude` or `codex`):
+4. Start it with the agent CLI you run in (`claude` or `codex`) and keep the window id it
+   prints:
    ```bash
-   tmux new-window -n selfreview -c "$PWD" "claude \"\$(cat /tmp/guided-review/<id>.prompt)\""
+   tmux new-window -P -F '#{window_id}' -n selfreview -c "$PWD" "claude \"\$(cat /tmp/guided-review/<id>.prompt)\""
    ```
    Tell the human in one line that the reviewer is starting in the `selfreview` window
    and its viewer opens there; they talk to it, not to you, until they press `P`.
@@ -34,6 +35,8 @@ through it there, and take back a list of fixes. Needs tmux and `gr`.
    timeout 590 sh -c 'until [ -f /tmp/guided-review/<id>/fixes.json ]; do sleep 5; done'
    ```
    If the human writes to you meanwhile, answer, then go back to waiting.
+6. The reviewer is done once the file is there: close its window and the review —
+   `tmux kill-window -t <window id>; gr done`.
 
 ## Apply
 

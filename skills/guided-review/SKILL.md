@@ -177,9 +177,8 @@ stranger would. Do not look for or ask about how it was written.
 - `gr init --self` was already run for you; `gr init --self` again just resumes.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
 - Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes
-  `fixes.json` for the author's agent and closes the viewer. On `[finished]` run
-  `gr done`, say in one line that the fixes went to the author's session, and end your
-  turn. No publishing, no Slack.
+  `fixes.json` for the author's agent and closes the viewer. That is the end of your job:
+  the author's agent closes your window and the review. No publishing, no Slack.
 
 
 
