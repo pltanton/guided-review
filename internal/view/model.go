@@ -229,7 +229,7 @@ func (m *model) notes() []Note {
 	var out []Note
 	for _, a := range m.step.Annotations {
 		out = append(out, Note{
-			File: a.File, Line: a.Line, Kind: a.Kind, Text: a.Text, Focus: true,
+			File: a.File, Line: a.Line, To: a.To, Kind: a.Kind, Text: a.Text, Focus: true,
 		})
 	}
 	for _, h := range m.step.Hotspots {
@@ -241,12 +241,12 @@ func (m *model) notes() []Note {
 	}
 	round := max(m.review.Round, 1)
 	for _, c := range m.review.Comments {
-		start, _, err := state.ParseLines(c.Lines)
+		start, end, err := state.ParseLines(c.Lines)
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
 		}
 		out = append(out, Note{
-			Ref: c.ID, File: c.File, Line: start, Kind: "comment",
+			Ref: c.ID, File: c.File, Line: start, To: end, Kind: "comment",
 			Label: fmt.Sprintf("#%d %s", c.ID, c.Severity), Text: c.Body, Dim: c.Resolved,
 		})
 	}

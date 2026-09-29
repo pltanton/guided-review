@@ -325,3 +325,40 @@ func TestOneHeaderPerFile(t *testing.T) {
 		t.Fatalf("headers %d notes %d gaps %d, want 1 1 3", headers, notes, gaps)
 	}
 }
+
+func TestNoteMarksItsLines(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 3, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L3"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(10)},
+	}
+	note := Note{File: "a.go", Line: 2, To: 4, Kind: "comment", Text: "range"}
+	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1,
+		[]Note{note}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, r := range rows {
+		switch {
+		case r.Kind == RowNote:
+			got = append(got, "note")
+		case r.Line > 0 && r.Mark != "":
+			got = append(got, fmt.Sprintf("%d*", r.Line))
+		case r.Line > 0:
+			got = append(got, fmt.Sprint(r.Line))
+		}
+	}
+	if want := "2* 3* 4* note"; strings.Join(got, " ") != want {
+		t.Fatalf("rows %q, want %q", strings.Join(got, " "), want)
+	}
+	marked := ansi.Strip(renderUnified(Row{Kind: RowCode, Line: 3, Text: "x", Mark: "note"}))
+	if out := marked; !strings.Contains(out, "┃ x") {
+		t.Fatalf("a marked line must carry the note bar: %q", out)
+	}
+	reformat := ansi.Strip(renderUnified(Row{Kind: RowAdded, Line: 3, Text: "x", Reformat: true}))
+	if out := reformat; !strings.HasPrefix(out, "≈") {
+		t.Fatalf("a reformat-only line must be marked ≈: %q", out)
+	}
+}

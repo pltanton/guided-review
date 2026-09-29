@@ -8,16 +8,19 @@ type Cell struct {
 	Emph     [][2]int
 	Moved    bool
 	Reformat bool
+	Mark     string
 }
 
 func cellOf(r Row, line int) Cell {
 	return Cell{
-		Line:  line,
-		Text:  r.Text,
-		Kind:  r.Kind,
-		Plain: r.Plain,
-		Emph:  r.Emph,
-		Moved: r.Moved,
+		Line:     line,
+		Text:     r.Text,
+		Kind:     r.Kind,
+		Plain:    r.Plain,
+		Emph:     r.Emph,
+		Moved:    r.Moved,
+		Reformat: r.Reformat,
+		Mark:     r.Mark,
 	}
 }
 

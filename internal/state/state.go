@@ -162,6 +162,7 @@ type Detail struct {
 type Annotation struct {
 	File string `yaml:"file"`
 	Line int    `yaml:"line"`
+	To   int    `yaml:"to,omitempty"`
 	Kind string `yaml:"kind"`
 	Text string `yaml:"text"`
 }

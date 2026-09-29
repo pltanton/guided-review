@@ -102,6 +102,7 @@ steps:
     annotations:
       - file: api/transfer.go
         line: 61
+        to: 64 # the lines the note is about; they get its colour in the viewer
         kind: note
         text: >-
           reserve() opens the transaction and Put writes the ledger row inside it, so a
@@ -113,8 +114,8 @@ steps:
 
 1. Read the step's hunks with enough surrounding code to be sure of what they do.
 2. `gr say` the step message (references/style.md). Add annotations with
-   `gr note add --file F --line N [--kind spec] TEXT` if you find something worth a
-   line only now.
+   `gr note add --file F --lines N-M [--kind spec] TEXT` (the lines it is about; `--line N`
+   for one) if you find something worth explaining only now.
 3. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
    nothing happened: run it again. Each printed line is one event from the viewer:
 
@@ -127,7 +128,7 @@ steps:
    - `[message] sN: text` — the same without a line anchor; ask for the lines if a
      remark needs them.
    - `[explain] sN file:lines` — read that code,
-     `gr note add --file F --line <first line> TEXT`: two to four sentences on its role
+     `gr note add --file F --lines <those lines> TEXT`: two to four sentences on its role
      in the feature, not its syntax (references/style.md).
    - `[ask] sN file:lines: text` — a question about that code, never a remark: read it,
      answer with `gr say` in a few lines. Do not create comments or notes for it.

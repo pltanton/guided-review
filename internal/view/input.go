@@ -278,7 +278,9 @@ func (m *model) noteDetails() {
 			break
 		}
 	}
-	m.emit(inbox.Event{Kind: inbox.KindDetail, File: cur.File, Lines: fmt.Sprint(cur.Line), Text: text})
+	m.emit(inbox.Event{
+		Kind: inbox.KindDetail, File: cur.File, Lines: fmt.Sprint(cur.Line), Text: text,
+	})
 }
 
 func (m *model) refreshDetail() bool {

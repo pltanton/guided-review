@@ -128,6 +128,7 @@ both sides in full.
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
 | `L` past the last step | `boilerplate`, `generated` and `all changes` views: every diff of the MR, nothing left out |
+| coloured `┃` next to line numbers | the lines a note or comment below them is about |
 | `i` | details behind the agent's note under the cursor, in a popup (asked from the agent the first time) |
 | `o`, click | open what is under the cursor: `⋯ N hidden lines` of unchanged code or a `▸ removed lines hidden` block; on a note or comment, fold it to one line and back |
 | `O` | show every removed line / fold large removed blocks again |

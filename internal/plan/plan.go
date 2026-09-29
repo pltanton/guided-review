@@ -124,6 +124,8 @@ func checkAnnotation(a state.Annotation, inDiff map[string]bool) error {
 		return fmt.Errorf("%s: not in diff", where)
 	case a.Line < 1:
 		return fmt.Errorf("%s: line must be >= 1", where)
+	case a.To != 0 && a.To < a.Line:
+		return fmt.Errorf("%s: to %d is before the line", where, a.To)
 	case !slices.Contains(state.AnnotationKinds, a.Kind):
 		return fmt.Errorf("%s: kind %q, want one of %v", where, a.Kind, state.AnnotationKinds)
 	case strings.TrimSpace(a.Text) == "":

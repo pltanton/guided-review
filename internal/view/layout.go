@@ -716,7 +716,12 @@ func renderCode(c Cell, hot bool) string {
 	if hot {
 		marker = hotStyle.Render("⚑")
 	}
-	return marker + dimStyle.Render(num+" │ ") + text
+	sep := dimStyle.Render(" │ ")
+	if c.Mark != "" {
+		bar := lipgloss.NewStyle().Foreground(lipgloss.Color(noteKinds[c.Mark].color))
+		sep = " " + bar.Render("┃") + " "
+	}
+	return marker + dimStyle.Render(num) + sep + text
 }
 
 func renderEmph(plain string, emph [][2]int, kind RowKind) string {

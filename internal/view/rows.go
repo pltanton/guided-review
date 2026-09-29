@@ -49,12 +49,14 @@ type Row struct {
 	GapFrom   int
 	GapTo     int
 	FileInfo  string
+	Mark      string
 }
 
 type Note struct {
 	Ref   int
 	File  string
 	Line  int
+	To    int
 	Kind  string
 	Label string
 	Text  string
@@ -199,8 +201,13 @@ func fileRows(
 		}
 	}
 	notesAt := map[int][]Note{}
+	marks := map[int]string{}
 	for _, n := range notes {
-		notesAt[n.Line] = append(notesAt[n.Line], n)
+		end := max(n.To, n.Line)
+		notesAt[end] = append(notesAt[end], n)
+		for l := n.Line; l <= end; l++ {
+			marks[l] = n.Kind
+		}
 	}
 
 	var rows []Row
@@ -225,7 +232,7 @@ func fileRows(
 	}
 	for _, n := range notes {
 		if n.Focus && n.Line > 0 {
-			windows = append(windows, [2]int{n.Line - context, n.Line + context})
+			windows = append(windows, [2]int{n.Line - context, max(n.To, n.Line) + context})
 		}
 	}
 	windows = append(windows, reveal...)
@@ -265,6 +272,7 @@ func fileRows(
 				Plain:     ansi.Strip(lines[n-1]),
 				Hotspot:   hot[n],
 				HunkStart: first,
+				Mark:      marks[n],
 			}
 			if added[n] {
 				row.Kind, row.Reformat = RowAdded, reformat[n]

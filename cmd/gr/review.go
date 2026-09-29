@@ -315,6 +315,7 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 	fs := e.flags("note " + args[0])
 	file := fs.String("file", "", "file path as in the diff")
 	line := fs.Int("line", 0, "new-file line")
+	lines := fs.String("lines", "", "new-file lines N-M the note is about (instead of --line)")
 	kind := fs.String("kind", "note", "note|spec")
 	step := fs.String("step", "", "step id (default: current)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -344,6 +345,11 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 		return nil
 	}
 	a := state.Annotation{File: *file, Line: *line, Kind: *kind, Text: text}
+	if *lines != "" {
+		if a.Line, a.To, err = state.ParseLines(*lines); err != nil {
+			return err
+		}
+	}
 	if err := plan.AddNote(r, *step, a); err != nil {
 		return err
 	}
