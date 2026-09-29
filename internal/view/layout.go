@@ -18,38 +18,29 @@ import (
 )
 
 var (
-	addStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	delStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	hotStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Bold(true)
-	dimStyle      = lipgloss.NewStyle().Faint(true)
-	boldStyle     = lipgloss.NewStyle().Bold(true)
-	fileStyle     = lipgloss.NewStyle().Bold(true).Foreground(white)
-	fileInfoStyle = lipgloss.NewStyle().Foreground(fileInfoGray)
-	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	agentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
-	buttonStyle   = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(white)
-	foldStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
-	gapStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
-	fieldStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(fileInfoGray)
-	addEmphStyle  = emphStyle("22")
-	delEmphStyle  = emphStyle("52")
-)
-
-func emphStyle(bg string) lipgloss.Style {
-	return lipgloss.NewStyle().Foreground(white).Background(lipgloss.Color(bg)).Bold(true)
-}
-
-const (
-	white        = lipgloss.Color("15")
-	fileInfoGray = lipgloss.Color("250")
+	addStyle      = okTone.fg()
+	delStyle      = badTone.fg()
+	hotStyle      = warnTone.fg().Bold(true)
+	dimStyle      = mutedTone.fg()
+	boldStyle     = textTone.fg().Bold(true)
+	fileStyle     = textTone.fg().Bold(true)
+	fileInfoStyle = mutedTone.fg()
+	cursorStyle   = accentTone.fg().Bold(true)
+	agentStyle    = agentTone.fg().Bold(true)
+	youStyle      = youTone.fg().Bold(true)
+	buttonStyle   = textTone.fg().Background(surfaceTone.color())
+	keyStyle      = accentTone.fg().Background(surfaceTone.color()).Bold(true)
+	foldStyle     = badTone.fg().Faint(true)
+	gapStyle      = blueTone.fg()
+	fieldStyle    = mutedTone.fg().Background(surfaceTone.color())
+	labelStyle    = mutedTone.fg().Bold(true)
+	addEmphStyle  = textTone.fg().Background(addBgTone.color()).Bold(true)
+	delEmphStyle  = textTone.fg().Background(delBgTone.color()).Bold(true)
 )
 
 const (
 	hints      = "c message  h help  q quit"
 	configHint = "~/.config/guided-review/config.yaml (gr config init)"
-	cursorBg   = "236"
-	selectBg   = "238"
-	fileBg     = "24"
 )
 
 var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
@@ -115,7 +106,7 @@ func (m *model) footer() (string, []span) {
 		text := " " + b.label + " · " + b.key + " "
 		w := ansi.StringWidth(text)
 		spans = append(spans, span{x, x + w, b})
-		line += buttonStyle.Render(text) + " "
+		line += buttonStyle.Render(" "+b.label+" · ") + keyStyle.Render(b.key+" ") + " "
 		x += w + 1
 	}
 	return line + " " + dimStyle.Render(tail), spans
@@ -171,7 +162,7 @@ func (m *model) sideChatLines(h, w int) []string {
 	k := m.keys().key("chat-side")
 	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
 	lines := []string{
-		boldStyle.Render("chat"),
+		labelStyle.Render("CHAT"),
 		dimStyle.Render(k + " closes · " + m.chatScrollHint()),
 		rule,
 	}
@@ -209,15 +200,7 @@ func (m *model) header() []string {
 			m.separator(),
 		}
 	}
-	n := m.review.StepIndex(st.ID) + 1
-	title := fmt.Sprintf("%s %d/%d %s · %s", st.ID, n, len(m.review.Steps), st.Kind, st.Title)
-	if st.Status != state.StatusPending {
-		title += " [" + string(st.Status) + "]"
-	}
-	if m.review.Round > 1 {
-		title += fmt.Sprintf("  round %d", m.review.Round)
-	}
-	lines := []string{boldStyle.Render(title)}
+	lines := []string{m.stepTitle(st)}
 	if m.viewStep != "" {
 		back := fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)
 		lines = append(lines, hotStyle.Render(back))
@@ -236,6 +219,33 @@ func (m *model) header() []string {
 	return append(lines, m.separator())
 }
 
+func (m *model) stepTitle(st *state.Step) string {
+	pill := inkTone.fg().Background(accentTone.color()).Bold(true).Render(" " + st.ID + " ")
+	left := pill + " " + boldStyle.Render(st.Title) + dimStyle.Render("  "+st.Kind)
+	if st.Status != state.StatusPending {
+		left += dimStyle.Render(" · " + string(st.Status))
+	}
+	if m.review.Round > 1 {
+		left += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
+	}
+	total, reviewed := len(m.review.Steps), 0
+	for _, s := range m.review.Steps {
+		if s.Status != state.StatusPending {
+			reviewed++
+		}
+	}
+	const barW = 12
+	filled := barW * reviewed / max(total, 1)
+	right := accentTone.fg().Render(strings.Repeat("━", filled)) +
+		faintTone.fg().Render(strings.Repeat("━", barW-filled)) +
+		dimStyle.Render(fmt.Sprintf(" %d/%d", m.review.StepIndex(st.ID)+1, total))
+	gap := m.mainWidth() - ansi.StringWidth(left) - ansi.StringWidth(right) - 1
+	if gap < 2 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
 func (m *model) separator() string {
 	w := max(m.mainWidth(), 1)
 	if m.offset == 0 {
@@ -251,8 +261,6 @@ type chatLine struct {
 	you  bool
 	text string
 }
-
-var youStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("5")).Bold(true)
 
 func (m *model) conversation(all bool) []chatLine {
 	if m.review == nil {
@@ -500,11 +508,11 @@ func (m *model) View() string {
 		line := fit(row, mw)
 		switch {
 		case i == m.cursor:
-			line = paint(line, cursorBg)
+			line = paint(line, cursorTone)
 		case m.selected(i):
-			line = paint(line, selectBg)
+			line = paint(line, selectTone)
 		case m.lines[i].Kind == RowFile:
-			line = paint(line, fileBg)
+			line = paint(line, fileTone)
 		}
 		main = append(main, line)
 	}
@@ -532,10 +540,10 @@ func (m *model) View() string {
 	for i, line := range main {
 		line = fit(line, mw)
 		if pw > 0 {
-			line = fit(plan[i], pw-1) + dimStyle.Render("│") + line
+			line = fit(plan[i], pw-1) + faintTone.fg().Render("│") + line
 		}
 		if chat != nil {
-			line += dimStyle.Render("│") + " " + chat[i]
+			line += faintTone.fg().Render("│") + " " + chat[i]
 		}
 		out = append(out, line)
 	}
@@ -569,9 +577,9 @@ func (m *model) planRows(h int) int {
 }
 
 func (m *model) sidebar(h, w int) []sideEntry {
-	title := "plan"
+	title := labelStyle.Render("PLAN")
 	if m.review.Round > 1 {
-		title += fmt.Sprintf(" · round %d", m.review.Round)
+		title += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
 	}
 	rows := m.planRows(h)
 	idx := m.review.StepIndex(m.review.Current)
@@ -579,29 +587,36 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	entry := func(style lipgloss.Style, text string) sideEntry {
 		return sideEntry{text: style.Render(ansi.Truncate(text, w-1, "…"))}
 	}
-	out := []sideEntry{{text: boldStyle.Render(title)}}
+	out := []sideEntry{{text: title}}
 	for _, st := range m.review.Steps[offset:] {
 		if len(out) >= rows {
 			break
 		}
-		glyph := st.Status.Glyph()
-		style := dimStyle
-		if st.Status == state.StatusPending {
-			style = lipgloss.NewStyle()
+		glyph, glyphStyle, style := st.Status.Glyph(), dimStyle, dimStyle
+		switch st.Status {
+		case state.StatusPending:
+			style = textTone.fg()
+		case state.StatusDone:
+			glyphStyle = addStyle
+		case state.StatusStale:
+			glyphStyle = hotStyle
 		}
-		if st.ID == m.review.Current {
-			glyph, style = "▶", cursorStyle
+		current := st.ID == m.review.Current
+		if current {
+			glyph, glyphStyle, style = "▶", cursorStyle, boldStyle
 		}
 		if m.viewStep != "" && m.step != nil && st.ID == m.step.ID {
-			glyph, style = "◆", hotStyle
+			glyph, glyphStyle, style = "◆", hotStyle, hotStyle
 		}
-		line := fmt.Sprintf("%s %s %s", glyph, st.ID, st.Title)
+		line := glyphStyle.Render(glyph) + " " + style.Render(st.ID+" "+st.Title)
 		if len(st.Hotspots) > 0 {
-			line += " ⚑"
+			line += hotStyle.Render(" ⚑")
 		}
-		e := entry(style, line)
-		e.step = st.ID
-		out = append(out, e)
+		line = ansi.Truncate(line, w-1, "…")
+		if current {
+			line = paint(fit(line, w-1), cursorTone)
+		}
+		out = append(out, sideEntry{text: line, step: st.ID})
 	}
 	for _, st := range m.extraSteps() {
 		if len(out) >= rows {
@@ -621,7 +636,7 @@ func (m *model) sidebar(h, w int) []sideEntry {
 
 	files := m.stepFiles()
 	if len(files) > 0 {
-		out = append(out, sideEntry{}, sideEntry{text: boldStyle.Render("files")})
+		out = append(out, sideEntry{}, sideEntry{text: labelStyle.Render("FILES")})
 		current := m.current().File
 		prevDir := ""
 		for i, f := range files {
@@ -722,8 +737,7 @@ func renderCode(c Cell, hot bool) string {
 	}
 	sep := dimStyle.Render(" │ ")
 	if c.Mark != "" {
-		bar := lipgloss.NewStyle().Foreground(lipgloss.Color(noteKinds[c.Mark].color))
-		sep = " " + bar.Render("┃") + " "
+		sep = " " + noteKinds[c.Mark].tone.fg().Render("┃") + " "
 	}
 	return marker + dimStyle.Render(num) + sep + text
 }
@@ -752,20 +766,18 @@ func renderEmph(plain string, emph [][2]int, kind RowKind) string {
 	return b.String()
 }
 
-func paint(line, bg string) string {
-	seq := "\x1b[48;5;" + bg + "m"
-	return seq + strings.ReplaceAll(line, "\x1b[0m", "\x1b[0m"+seq) + "\x1b[0m"
-}
-
 const noteIndent = 1 + 7 + 2
 
-var noteKinds = map[string]struct{ color, label string }{
-	"note":    {"6", "NOTE"},
-	"spec":    {"1", "SPEC"},
-	"hotspot": {"3", "RISK"},
-	"comment": {"5", "YOU"},
-	"mr":      {"4", "MR"},
-	"pending": {"3", "…"},
+var noteKinds = map[string]struct {
+	tone  tone
+	label string
+}{
+	"note":    {agentTone, "NOTE"},
+	"spec":    {badTone, "SPEC"},
+	"hotspot": {warnTone, "RISK"},
+	"comment": {youTone, "YOU"},
+	"mr":      {blueTone, "MR"},
+	"pending": {warnTone, "…"},
 }
 
 func noteBadge(kind, label string) string {
@@ -804,17 +816,17 @@ func expandNotes(rows []Row, width int, folded map[string]bool) []Row {
 }
 
 func renderNote(r Row) string {
-	color := lipgloss.Color(noteKinds[r.NoteKind].color)
+	t, text := noteKinds[r.NoteKind].tone, textTone
 	if r.Dim {
-		color = lipgloss.Color("8")
+		t, text = faintTone, mutedTone
 	}
-	body := lipgloss.NewStyle().Foreground(color)
 	badge := noteBadge(r.NoteKind, r.NoteLabel)
 	lead := strings.Repeat(" ", ansi.StringWidth(badge)+1)
 	if r.NoteHead {
-		lead = body.Reverse(true).Bold(true).Render(badge) + " "
+		pill := inkTone.fg().Background(t.color()).Bold(true)
+		lead = pill.Render(badge) + " "
 	}
-	return "       " + body.Render("▌") + " " + lead + body.Render(r.Text)
+	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Render(r.Text)
 }
 
 func (m *model) renderSplit(i, w int) string {
@@ -972,7 +984,7 @@ func (m *model) keyHints(prefix string) []string {
 		lines = append(lines, cursorStyle.Render(r[0])+"  "+r[1])
 	}
 	frame := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("8"))
+		BorderForeground(faintTone.color())
 	box := frame.Padding(0, 1).Render(strings.Join(lines, "\n"))
 	return strings.Split(box, "\n")
 }

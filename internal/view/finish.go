@@ -7,16 +7,17 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
 const finishWidth = 110
 
 var (
-	boldMarkdown   = regexp.MustCompile(`\*\*([^*]+)\*\*`)
-	severityHead   = regexp.MustCompile("^(?:`[^`]+` )?\\*\\*(\\w+)\\*\\* ?")
-	severityColors = map[string]string{"blocker": "1", "major": "3", "minor": "6", "nit": "8"}
+	boldMarkdown  = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	severityHead  = regexp.MustCompile("^(?:`[^`]+` )?\\*\\*(\\w+)\\*\\* ?")
+	severityTones = map[string]tone{
+		"blocker": badTone, "major": warnTone, "minor": agentTone, "nit": mutedTone,
+	}
 )
 
 func (m *model) finishColumn() (pad string, w int) {
@@ -40,11 +41,10 @@ func (m *model) finishBody(w int) []string {
 		if mm := severityHead.FindStringSubmatch(body); mm != nil {
 			severity, body = mm[1], strings.TrimPrefix(body, mm[0])
 		}
-		color := lipgloss.Color(severityColors[severity])
-		badge := lipgloss.NewStyle().Foreground(color).Bold(true)
-		title := badge.Render(fmt.Sprintf("● %-7s", severity))
+		t := severityTones[severity]
+		title := t.fg().Bold(true).Render(fmt.Sprintf("● %-7s", severity))
 		out = append(out, "", title+" "+fileStyle.Render(head))
-		bar := lipgloss.NewStyle().Foreground(color).Render("  │ ")
+		bar := t.fg().Render("  │ ")
 		for _, l := range markdownLines(body, w-4) {
 			out = append(out, bar+l)
 		}

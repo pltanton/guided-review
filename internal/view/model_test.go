@@ -178,7 +178,7 @@ func TestViewRenders(t *testing.T) {
 	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"▶ s1 first", "· s2 second", "s1 1/2 logic · first", "why x", "claude │ Adds x and y.",
+		"▶ s1 first", "· s2 second", " s1  first  logic", "1/2", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -452,7 +452,7 @@ func TestFilesPanel(t *testing.T) {
 		t.Fatalf("enter in files panel: focus %v item %+v", m.focusFiles, m.current())
 	}
 	out := ansi.Strip(m.View())
-	for _, want := range []string{"files", "api/", "b.go", "c.go"} {
+	for _, want := range []string{"FILES", "api/", "b.go", "c.go"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
 		}
@@ -1086,7 +1086,7 @@ func TestChatPanel(t *testing.T) {
 	}
 	m.Update(key("T"))
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "│ chat") || !strings.Contains(out, "message 29") ||
+	if !strings.Contains(out, "│ CHAT") || !strings.Contains(out, "message 29") ||
 		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width-m.planWidth() {
 		t.Fatalf("side chat:\n%s", out)
 	}
