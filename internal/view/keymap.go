@@ -141,10 +141,14 @@ func DefaultActions() []Action {
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
-		{Name: "chat", Group: vw, Desc: "enlarge the chat: small → half → full screen",
-			Keys: k("t"), run: do(func(m *model) { m.resizeChat((m.chatSize + 1) % 3) })},
-		{Name: "chat-smaller", Group: vw, Desc: "shrink the chat", Keys: k("T"),
-			run: do(func(m *model) { m.resizeChat(max(m.chatSize-1, 0)) })},
+		{Name: "chat", Group: vw, Desc: "bigger / smaller chat",
+			Keys: k("t"), run: do(func(m *model) { m.bigChat, m.chatTop = !m.bigChat, 0; m.clamp() })},
+		{Name: "chat-up", Group: vw, Desc: "scroll the chat up", Keys: k("ctrl+y"),
+			run: do(func(m *model) { m.chatTop += wheelStep })},
+		{Name: "chat-down", Group: vw, Desc: "scroll the chat down", Keys: k("ctrl+e"),
+			run: do(func(m *model) { m.chatTop = max(m.chatTop-wheelStep, 0) })},
+		{Name: "chat-side", Group: vw, Desc: "chat in a column on the right", Keys: k("T"),
+			run: do(func(m *model) { m.sideChat, m.chatTop = !m.sideChat, 0; m.relist() })},
 		{
 			Name:  "command",
 			Group: vw,
@@ -299,8 +303,8 @@ func (m *model) back() tea.Cmd {
 		m.visual = false
 	case m.search != "":
 		m.search = ""
-	case m.chatSize > 0:
-		m.chatSize, m.chatTop = 0, 0
+	case m.bigChat:
+		m.bigChat, m.chatTop = false, 0
 	case m.viewStep != "":
 		return m.showStep(m.review.Current)
 	}
@@ -451,9 +455,4 @@ func (m *model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 func CheckKeys(overrides map[string][]string) error {
 	_, err := newKeymap(overrides)
 	return err
-}
-
-func (m *model) resizeChat(size int) {
-	m.chatSize, m.chatTop = size, 0
-	m.clamp()
 }

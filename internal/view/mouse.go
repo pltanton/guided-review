@@ -8,9 +8,9 @@ const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
-	case msg.Button == tea.MouseButtonWheelUp && m.overChat(msg.Y):
+	case msg.Button == tea.MouseButtonWheelUp && m.overChat(msg.X, msg.Y):
 		m.chatTop += wheelStep
-	case msg.Button == tea.MouseButtonWheelDown && m.overChat(msg.Y):
+	case msg.Button == tea.MouseButtonWheelDown && m.overChat(msg.X, msg.Y):
 		m.chatTop = max(m.chatTop-wheelStep, 0)
 	case msg.Button == tea.MouseButtonWheelUp:
 		m.scroll(-wheelStep)
@@ -76,6 +76,9 @@ func (m *model) rowAt(y int) (int, bool) {
 	return i, i < len(m.lines)
 }
 
-func (m *model) overChat(y int) bool {
-	return m.chatSize == 2 || m.chatSize == 1 && y >= m.height-len(m.bottomLines())
+func (m *model) overChat(x, y int) bool {
+	if cw := m.chatWidth(); cw > 0 {
+		return x >= m.width-cw
+	}
+	return m.bigChat && y >= m.height-len(m.bottomLines())
 }

@@ -142,7 +142,32 @@ func (m *model) planWidth() int {
 }
 
 func (m *model) mainWidth() int {
-	return m.width - m.planWidth()
+	return m.width - m.planWidth() - m.chatWidth()
+}
+
+func (m *model) chatWidth() int {
+	if !m.sideChat || m.width < minSideChatWidth {
+		return 0
+	}
+	return max(36, m.width/3)
+}
+
+func (m *model) chatScrollHint() string {
+	return m.keys().key("chat-up") + "/" + m.keys().key("chat-down") + " scroll"
+}
+
+func (m *model) sideChatLines(h, w int) []string {
+	k := m.keys().key("chat-side")
+	lines := []string{
+		boldStyle.Render("chat"),
+		dimStyle.Render(k + " closes · " + m.chatScrollHint()),
+		dimStyle.Render(strings.Repeat("─", max(w, 1))),
+	}
+	lines = append(lines, window(m.chatLines(w, true), h-len(lines), m.chatTop)...)
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	return lines[:h]
 }
 
 func (m *model) bodyHeight() int {
@@ -300,20 +325,21 @@ func (m *model) bottomLines() []string {
 	switch {
 	case m.step == nil:
 		limit = max(m.height-4, 1)
-	case m.chatSize == 1:
+	case m.bigChat:
 		limit = max(m.height/2, messageLines)
 	}
 	var lines []string
-	if m.chatSize < 2 {
-		if chat := m.chatLines(m.width, m.chatSize == 1 || m.step == nil); len(chat) > 0 {
-			label := strings.Repeat("─", max(m.width, 1))
-			if m.chatSize == 0 {
-				label = "── " + m.keys().key("chat") + " enlarges the chat " +
-					strings.Repeat("─", max(m.width-24, 1))
-			}
-			lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
-			lines = append(lines, window(chat, limit, m.chatTop)...)
+	chat := m.chatLines(m.width, m.bigChat || m.step == nil)
+	if len(chat) > 0 && m.chatWidth() == 0 {
+		k := m.keys()
+		label := fmt.Sprintf("── %s bigger · %s on the right · %s ",
+			k.key("chat"), k.key("chat-side"), m.chatScrollHint())
+		if m.bigChat {
+			label = fmt.Sprintf("── %s smaller · %s ", k.key("chat"), m.chatScrollHint())
 		}
+		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
+		lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
+		lines = append(lines, window(chat, limit, m.chatTop)...)
 	}
 	return append(lines, m.promptLines(m.width)...)
 }
@@ -410,7 +436,7 @@ func (m *model) View() string {
 		return append([]string{boldStyle.Render(title), hint, rule}, lines...)
 	}
 	main := m.header()
-	switch k := m.keys(); {
+	switch {
 	case m.preview != "":
 		var lines []string
 		for _, l := range strings.Split(expandTabs(strings.TrimRight(m.preview, "\n")), "\n") {
@@ -426,17 +452,12 @@ func (m *model) View() string {
 		lines := m.helpLines(mw)
 		main = panel("keys", dimStyle.Render("any key closes · j/k scroll · remap in "+configHint),
 			lines[min(m.helpTop, len(lines)):])
-	case m.chatSize == 2:
-		hint := fmt.Sprintf("j/k scroll · %s write · %s / esc back to the code",
-			k.key("message"), k.key("chat"))
-		chat := window(m.chatLines(mw, true), bodyH-4, m.chatTop)
-		main = panel("chat", dimStyle.Render(hint), chat)
 	case m.loading != "":
 		loading := fmt.Sprintf("%s loading %d files…", m.spin(), len(m.step.Hunks))
 		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.lines) || m.preview != "" || m.help || m.chatSize == 2 {
+		if i >= len(m.lines) || m.preview != "" || m.help {
 			main = append(main, "")
 			continue
 		}
@@ -475,11 +496,18 @@ func (m *model) View() string {
 			plan = append(plan, e.text)
 		}
 	}
+	var chat []string
+	if cw := m.chatWidth(); cw > 0 {
+		chat = m.sideChatLines(len(main), cw-2)
+	}
 	out := make([]string, 0, m.height)
 	for i, line := range main {
 		line = fit(line, mw)
 		if pw > 0 {
 			line = fit(plan[i], pw-1) + dimStyle.Render("│") + line
+		}
+		if chat != nil {
+			line += dimStyle.Render("│") + " " + chat[i]
 		}
 		out = append(out, line)
 	}

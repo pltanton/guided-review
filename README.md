@@ -95,7 +95,9 @@ both sides in full.
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
-| `t` / `T` | enlarge / shrink the chat (small → half → full screen) |
+| `t` | bigger / smaller chat at the bottom |
+| `T` | chat in a column on the right, full height |
+| `ctrl+y` / `ctrl+e`, wheel | scroll the chat |
 | `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step |

@@ -1070,16 +1070,30 @@ func TestChatPanel(t *testing.T) {
 		t.Fatalf("half chat: %d lines of %d", n, m.height)
 	}
 	m.Update(key("t"))
+	if n := len(m.bottomLines()); n > messageLines+2 {
+		t.Fatalf("second t must shrink the chat back: %d", n)
+	}
+	m.Update(key("T"))
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "message 29") {
-		t.Fatalf("full chat:\n%s", out)
+	if !strings.Contains(out, "│ chat") || !strings.Contains(out, "message 29") ||
+		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width-m.planWidth() {
+		t.Fatalf("side chat:\n%s", out)
 	}
-	m.Update(key("g"))
-	m.Update(key("g"))
-	out = ansi.Strip(m.View())
-	if !strings.Contains(out, "message 00") || !strings.Contains(out, "── s0") {
-		t.Fatalf("full chat scrolled to top:\n%s", out)
+	m.handleMouse(tea.MouseMsg{X: m.width - 2, Y: 5, Button: tea.MouseButtonWheelUp})
+	if m.chatTop == 0 {
+		t.Fatal("wheel over the side chat must scroll it")
 	}
+	m.chatTop = 0
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
+	if m.chatTop == 0 || !strings.Contains(ansi.Strip(m.View()), "message 25") {
+		t.Fatal("ctrl+y must scroll the chat up")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
+	if m.chatTop != 0 {
+		t.Fatal("ctrl+e must scroll the chat back down")
+	}
+	m.Update(key("T"))
+	m.Update(key("t"))
 	m.Update(key("c"))
 	typeText(m, strings.Repeat("long words here ", 20))
 	if lines := len(m.bottomLines()); lines < 2 {
@@ -1087,8 +1101,8 @@ func TestChatPanel(t *testing.T) {
 	}
 	m.Update(key("esc"))
 	m.Update(key("esc"))
-	if m.chatSize != 0 {
-		t.Fatalf("esc must shrink the chat back, size %d", m.chatSize)
+	if m.bigChat {
+		t.Fatal("esc must shrink the chat back")
 	}
 }
 
@@ -1191,11 +1205,10 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 		t.Fatalf("gr args = %q, want %q", ran, want)
 	}
 
-	for _, k := range []string{"t", "t", "T", "T", "T"} {
-		m.Update(key(k))
-	}
-	if m.chatSize != 0 {
-		t.Fatalf("T must shrink the chat back: size %d", m.chatSize)
+	m.Update(key("t"))
+	m.Update(key("t"))
+	if m.bigChat {
+		t.Fatal("t must toggle the chat size")
 	}
 }
 
