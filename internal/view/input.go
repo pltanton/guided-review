@@ -86,7 +86,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		text := strings.TrimSpace(string(m.input))
 		m.composing, m.input = false, nil
 		switch {
-		case text == "" && m.composeKind == inbox.KindAsk:
+		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":
 			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":
 		case m.rawMode():
@@ -115,6 +115,9 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyCtrlE, tea.KeyEnd:
 		m.inputPos = len(m.input)
 	case tea.KeyBackspace:
+		if len(m.input) == 0 {
+			m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
+		}
 		if m.inputPos > 0 {
 			m.input = append(m.input[:m.inputPos-1], m.input[m.inputPos:]...)
 			m.inputPos--

@@ -1178,3 +1178,21 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 		t.Fatalf("T must shrink the chat back: size %d", m.chatSize)
 	}
 }
+
+func TestBackspaceDetachesLine(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.cursor = 2
+	m.Update(key("c"))
+	typeText(m, "x")
+	m.Update(key("backspace"))
+	if m.anchorFile == "" {
+		t.Fatal("backspace that deletes text must keep the line")
+	}
+	m.Update(key("backspace"))
+	typeText(m, "general")
+	m.Update(key("enter"))
+	want := inbox.Event{Kind: inbox.KindMessage, Step: "s1", Text: "general"}
+	if n := len(*sent); n == 0 || (*sent)[n-1] != want {
+		t.Fatalf("sent %+v, want %+v", *sent, want)
+	}
+}

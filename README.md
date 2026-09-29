@@ -88,7 +88,7 @@ both sides in full.
 | `]`/`[` | next/previous hunk |
 | `n`/`N` | next/previous annotation |
 | `v`, mouse drag | select lines |
-| `c` / `enter` | message the agent; the cursor line (or selection) is attached, `ctrl+x` detaches it; on one of your comments it is a reply |
+| `c` / `enter` | message the agent; the cursor line (or selection) is attached, `backspace` on empty input (or `ctrl+x`) detaches it; on one of your comments it is a reply |
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |

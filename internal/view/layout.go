@@ -304,7 +304,7 @@ func (m *model) bottomLines() []string {
 			hints = nil
 		}
 		if m.anchorFile != "" {
-			hints = append(hints, "ctrl+x no line")
+			hints = append(hints, "⌫ no line")
 		}
 		pos := min(m.inputPos, len(m.input))
 		last = lead + m.inputWithCursor(pos) + dimStyle.Render("   "+strings.Join(hints, " · "))
