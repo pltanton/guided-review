@@ -96,7 +96,7 @@ both sides in full.
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `t` / `T` | enlarge / shrink the chat (small → half → full screen) |
-| `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/` and hands it to the agent, which asks you and then publishes it to the MR |
+| `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step |
 | `S` | skip the step with a reason |

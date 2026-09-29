@@ -14,10 +14,10 @@ with your annotations, your messages, and types replies there. You talk to them 
 `gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
 turn — they are not looking at it.
 
-Never end your turn while a review is open: every question — including «закрываем?» at
-the end — goes through `gr say` and then `gr wait`. The turn ends only after `gr done`
-or when the human says to stop. If you end it anyway, the viewer shows "agent stopped"
-and their replies sit unread.
+Never end your turn while the viewer is open: every question goes through `gr say` and
+then `gr wait`. If you end it anyway, the viewer shows "agent stopped" and their replies
+sit unread. Once the human finishes in the viewer (`[finished]`, see Wrap-up) it closes,
+and the rest happens in the terminal chat.
 
 `gr` holds all review state: when unsure where you are, run `gr step show` or
 `gr status` instead of relying on memory. Answer in the user's language.
@@ -183,14 +183,17 @@ line, say whether the code answers it.
    lines, then:
    `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
    (add `--approve` only if they asked to approve). The viewer now shows `✓ finish · P`:
-   `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/` and sends
-   you `[finished] sN: <dir>`. `gr say` «готово: P во вьювере» and `gr wait`. If they say
-   «заканчиваем» in chat instead, run `gr export` yourself: it prints the same dir.
+   `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/`, sends you
+   `[finished] sN: <dir>` and closes the viewer, returning the human to your pane.
+   `gr say` «готово: P во вьювере» and `gr wait`. If they say «заканчиваем» in chat
+   instead, run `gr export` yourself: it prints the same dir.
+   From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
+   `gr say` / `gr wait` — and ending your turn with a question is fine.
 4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted),
    `review.json` (`host`, `api`, `url`, `verdict`, `approve`, `drafts`) and
    `drafts/NN.json`, each the exact body of one GitLab draft note, the summary last.
-   `gr say` what goes out — N comments, the summary, the verdict, approve or not — and
-   ask «публикую?», then `gr wait`. Only on a clear yes:
+   Tell them what goes out — N comments, the summary, the verdict, approve or not — and
+   ask «публикую?». Only on a clear yes:
    ```bash
    dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
    glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
@@ -203,7 +206,7 @@ line, say whether the code answers it.
    gr mark-published
    ```
    If a POST fails, stop: `gr say` the GitLab error and that the drafts created so far sit
-   unpublished on the MR; do not retry blindly. After success `gr say` the MR link.
+   unpublished on the MR; do not retry blindly. After success give the MR link.
 5. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
    `glab mr view <iid>` (username, name), find them with the Slack MCP user search
    (load the tool via ToolSearch if it is deferred), and create a **draft** DM with
@@ -211,6 +214,5 @@ line, say whether the code answers it.
    (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`).
    Send it directly (`slack_send_message`) only if they explicitly say so after seeing
    the text. No Slack MCP → print the text to copy.
-6. `gr say` «закрываем ревью?» and `gr wait`. On yes, `gr done` (removes the worktree,
-   keeps the state for a re-review; the viewer closes and returns them to you) and end
-   the turn.
+6. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
+   re-review).

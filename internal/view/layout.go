@@ -390,7 +390,7 @@ func (m *model) View() string {
 		if m.review.MR != nil {
 			title += fmt.Sprintf(" → !%d", m.review.MR.IID)
 		}
-		hint := "P hands this to the agent, it asks before publishing · esc cancels · j/k scroll"
+		hint := "P hands this to the agent and closes the viewer · esc cancels · j/k scroll"
 		main = panel(title, hotStyle.Render(hint), lines[min(m.previewTop, len(lines)):])
 	case m.help:
 		lines := m.helpLines(mw)

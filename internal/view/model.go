@@ -643,9 +643,10 @@ func (m *model) finish() tea.Cmd {
 		return nil
 	}
 	m.preview = ""
-	m.emit(inbox.Event{Kind: inbox.KindFinished, Text: out})
-	m.status = "handed to the agent: " + out
-	return nil
+	if m.emit(inbox.Event{Kind: inbox.KindFinished, Text: out}); m.err != nil {
+		return nil
+	}
+	return tea.Quit
 }
 
 func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {

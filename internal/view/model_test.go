@@ -788,7 +788,13 @@ func TestFinishButton(t *testing.T) {
 	if !strings.Contains(v, "## Guided review: approve") || strings.Contains(v, "\t") {
 		t.Fatalf("first P must show a tab-free preview:\n%s", v)
 	}
-	m.Update(key("P"))
+	_, cmd := m.Update(key("P"))
+	if cmd == nil {
+		t.Fatal("finishing must close the viewer")
+	}
+	if _, quit := cmd().(tea.QuitMsg); !quit {
+		t.Fatal("finishing must close the viewer")
+	}
 	if len(ran) != 2 || ran[1][0] != "export" || len(ran[1]) != 1 {
 		t.Fatalf("second P must run gr export: %v", ran)
 	}
