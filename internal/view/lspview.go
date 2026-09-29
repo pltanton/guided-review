@@ -467,7 +467,7 @@ func (m *model) popupLines(width, height int) []string {
 	case "peek":
 		hint = "j/k scroll · e editor · esc back"
 	case "detail":
-		hint = "j/k scroll · e editor · esc close"
+		hint = "j/k or wheel scroll · esc close"
 	}
 	head := fmt.Sprintf("┌─ %s ", p.title)
 	fill := max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)

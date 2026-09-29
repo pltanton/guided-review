@@ -57,6 +57,7 @@ func configInit(e env, path string) error {
 	w("# A repository's .review.yaml overrides diff and lsp.\n\n")
 	w("# view:\n#   split: false       # start in split view\n#   hide_plan: false\n")
 	w("#   no_mouse: false    # true lets the terminal select text\n")
+	w("#   chat_bottom: false # true puts the chat under the code instead of on the right\n")
 	w("#   context: 3         # lines around each change\n")
 	w("#   style: monokai     # chroma style\n\n")
 	w("# diff: histogram      # histogram | patience | myers | minimal\n\n# lsp:\n")

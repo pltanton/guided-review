@@ -460,6 +460,11 @@ func (m *model) View() string {
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
+	ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
+	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 &&
+		m.cursor-m.offset >= room {
+		m.offset = m.cursor - room + 1
+	}
 
 	body := m.bodyHeight()
 	below := ""
@@ -505,7 +510,6 @@ func (m *model) View() string {
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
 	if m.popup != nil {
-		ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
 		box := m.popupLines(mw, ph)
 		copy(main[len(main)-len(box):], box)
 	}

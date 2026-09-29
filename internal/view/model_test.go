@@ -1490,3 +1490,41 @@ func TestLocalNext(t *testing.T) {
 		t.Fatalf("the agent must hear when all steps are reviewed: %+v", *sent)
 	}
 }
+
+func TestDetailPopupUX(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.height = 16
+	for i := range 40 {
+		m.rows = append(m.rows, Row{Kind: RowCode, File: "a.go", Line: 20 + i, Text: "x"})
+	}
+	m.rows = append(m.rows, Row{
+		Kind: RowNote, File: "a.go", Line: 59, NoteKind: "note", Text: "late note",
+	})
+	m.relist()
+	m.seek(func(l line) bool { return l.Kind == RowNote && l.Line == 59 })
+	m.clamp()
+	m.Update(key("i"))
+	detail := strings.Repeat("detail line\n", 30)
+	m.step.Details = []state.Detail{{File: "a.go", Line: 59, Text: detail}}
+	m.refreshDetail()
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "late note") || strings.Contains(v, "e editor") {
+		t.Fatalf("the noted line must stay above the popup, without an editor hint:\n%s", v)
+	}
+	m.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	if m.popup.top == 0 {
+		t.Fatal("the wheel must scroll the popup")
+	}
+}
+
+func TestChatOnTheRightByDefault(t *testing.T) {
+	m := &model{}
+	m.applyConfig(config.Config{})
+	if !m.sideChat {
+		t.Fatal("the chat starts in the right-hand column")
+	}
+	m.applyConfig(config.Config{View: config.View{ChatBottom: true}})
+	if m.sideChat {
+		t.Fatal("chat_bottom keeps it under the code")
+	}
+}

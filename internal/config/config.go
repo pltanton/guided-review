@@ -14,11 +14,12 @@ import (
 const RepoFile = ".review.yaml"
 
 type View struct {
-	Split    bool   `yaml:"split"`
-	HidePlan bool   `yaml:"hide_plan"`
-	NoMouse  bool   `yaml:"no_mouse"`
-	Context  int    `yaml:"context"`
-	Style    string `yaml:"style"`
+	Split      bool   `yaml:"split"`
+	HidePlan   bool   `yaml:"hide_plan"`
+	NoMouse    bool   `yaml:"no_mouse"`
+	Context    int    `yaml:"context"`
+	Style      string `yaml:"style"`
+	ChatBottom bool   `yaml:"chat_bottom"`
 }
 
 type Config struct {
