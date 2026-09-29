@@ -222,12 +222,12 @@ line, say whether the code answers it.
    ```
    If a POST fails, stop: `gr say` the GitLab error and that the drafts created so far sit
    unpublished on the MR; do not retry blindly. After success give the MR link.
-5. Tell the author. Ask «написать автору в Slack?». On yes: take the author from
-   `glab mr view <iid>` (username, name), find them with the Slack MCP user search
-   (load the tool via ToolSearch if it is deferred), and create a **draft** DM with
-   `slack_send_message_draft`: one or two lines — MR link, verdict, counts
-   (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`).
-   Send it directly (`slack_send_message`) only if they explicitly say so after seeing
-   the text. No Slack MCP → print the text to copy.
+5. Tell the author. Write the message — one or two lines: MR link, verdict, counts
+   (`посмотрел !69: changes requested — 1 blocker, 2 major, 3 nit, детали в MR`) — show it
+   and ask «отправить автору в Slack?». On yes: take the author from `glab mr view <iid>`
+   (username, name), find them with the Slack MCP user search (load the tool via
+   ToolSearch if it is deferred) and send the DM right away with `slack_send_message`,
+   not a draft. If the counts in the text do not match what was actually published, fix
+   the text first. No Slack MCP → print the text to copy.
 6. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

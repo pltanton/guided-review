@@ -49,7 +49,7 @@ result to `/tmp/guided-review/<id>/`: `review.md` to read, `review.json` and one
 GitLab draft-note body per inline comment (nits with an obvious fix as suggestions) plus a
 summary with the verdict, decisions, the step table and coverage. The agent shows what
 goes out, asks, posts the drafts with `glab` in one batch and runs `gr mark-published`.
-It can also draft a Slack message to the author.
+It can also message the author in Slack once you say yes.
 
 After the author pushes fixes, run the same command again: the agent reviews only what
 changed and checks the open comments first.
