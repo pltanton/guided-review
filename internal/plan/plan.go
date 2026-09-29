@@ -219,7 +219,7 @@ func Apply(r *state.Review, p Plan) {
 	for i, s := range p.Steps {
 		s.Status = state.StatusPending
 		s.MayChange = false
-		s.SkipReason = ""
+		s.SkipReason, s.Announced = "", false
 		r.Steps[i] = s
 	}
 	boilerplate := map[string]bool{}

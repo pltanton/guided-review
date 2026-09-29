@@ -1461,3 +1461,32 @@ func TestNoteDetails(t *testing.T) {
 		t.Fatal("a stored detail opens without asking the agent again")
 	}
 }
+
+func TestLocalNext(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Steps[0].Message = "s1: guard"
+	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?"}}
+	var ran [][]string
+	out := "step s2\n"
+	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return out, nil }
+	m.Update(key(">"))
+	if len(ran) != 0 || !strings.Contains(m.status, "risk question") {
+		t.Fatalf("first > on a hotspot step must only remind: ran %v status %q", ran, m.status)
+	}
+	m.Update(key(">"))
+	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "next"}) || len(*sent) != 0 {
+		t.Fatalf("second > must move without the agent: ran %v sent %+v", ran, *sent)
+	}
+	m.Update(key("S"))
+	typeText(m, "trivial")
+	m.Update(key("enter"))
+	if want := []string{"step", "skip", "--reason", "trivial"}; !slices.Equal(ran[1], want) {
+		t.Fatalf("skip ran %v, want %v", ran[1], want)
+	}
+	out = "all steps reviewed: run gr status\n"
+	m.review.Steps[0].Hotspots = nil
+	m.Update(key(">"))
+	if n := len(*sent); n != 1 || (*sent)[0].Kind != inbox.KindReviewed {
+		t.Fatalf("the agent must hear when all steps are reviewed: %+v", *sent)
+	}
+}

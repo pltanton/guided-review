@@ -680,3 +680,32 @@ func TestNoteDetail(t *testing.T) {
 		t.Fatalf("detail must be replaced, got %q (%d)", text, len(r.Step("s1").Details))
 	}
 }
+
+func TestStepMessagesFromPlan(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	withMessages := strings.Replace(goodPlan, "    kind: logic\n",
+		"    kind: logic\n    message: \"s1: the guard\"\n", 1)
+	h.mustRun(withMessages, "plan", "set")
+	count := func() int {
+		_, r, err := loadReview(context.Background(), h.repo.Dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := 0
+		for _, msg := range r.Messages {
+			if msg.Text == "s1: the guard" {
+				n++
+			}
+		}
+		return n
+	}
+	if count() != 1 {
+		t.Fatal("plan set must post the first step's message")
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "goto", "s1")
+	if count() != 1 {
+		t.Fatal("a step message is posted once")
+	}
+}

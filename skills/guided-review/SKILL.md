@@ -76,13 +76,17 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 2. Order and size steps per references/ordering.md — the MR's own spec or design doc,
    if the diff has one, is always s1; mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them.
-3. Add `annotations` where an explanation saves the reader real effort: what a
-   non-obvious call does and why, where the spec disagrees (`kind: spec`). Written per
-   references/style.md: full sentences, not fragments. One to three per step; none is
-   fine.
-4. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists.
-5. `gr say` the plan in one line per step (`s2 Handler ⚑`) plus a line for
-   boilerplate and generated files, then start with s1.
+3. Read every step's code now, with enough surrounding code to be sure of what it does:
+   the viewer moves between steps without you, so all per-step work happens here.
+4. For each step write its `message` (references/style.md: at most three lines, what
+   the code does, a spec mismatch, the one question) and its `annotations` where an
+   explanation saves the reader real effort: what a non-obvious call does and why,
+   where the spec disagrees (`kind: spec`). Full sentences, not fragments. One to three
+   annotations per step; none is fine.
+5. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists. It posts
+   s1's message itself.
+6. `gr say` the plan in one line per step (`s2 Handler ⚑`) plus a line for
+   boilerplate and generated files.
 
 ```yaml
 summary: "task → how it is solved"
@@ -96,6 +100,10 @@ steps:
   - id: s2
     title: "Handler"
     kind: entry
+    message: |-
+      s2/5 · POST /transfers — handler
+      Validates, reserves the amount, writes an event to the outbox. ⚠ spec: 409 on a duplicate, here 200.
+      ❓ ⚑57: retry with the same key after a timeout — second debit?
     hunks: [{ file: api/transfer.go, lines: 40-92 }]
     hotspots:
       - { cat: consistency, line: 57, q: "Retry after a timeout — second debit?" }
@@ -112,11 +120,13 @@ steps:
 
 ## Step loop
 
-1. Read the step's hunks with enough surrounding code to be sure of what they do.
-2. `gr say` the step message (references/style.md). Add annotations with
-   `gr note add --file F --lines N-M [--kind spec] TEXT` (the lines it is about; `--line N`
-   for one) if you find something worth explaining only now.
-3. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
+The viewer moves through the steps itself: `>`, skips and jumps run `gr step …` and
+show the step's `message` from the plan, and it reminds the human of an open hotspot
+before leaving a step. You only hear about what needs you.
+
+1. If something worth explaining turns up only now, add it with
+   `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line).
+2. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
    nothing happened: run it again. Each printed line is one event from the viewer:
 
    - `[message] sN file:lines: text` — a remark: pick severity (blocker changes the
@@ -138,15 +148,14 @@ steps:
      excerpt in a fenced block when it helps. Save it with
      `gr note detail --file F --line N [--step sN] - <<'EOF' … EOF`; the viewer shows it
      in the popup that is already open. No `gr say` needed.
-   - `[next] sN` — if a hotspot question on this step is unanswered, `gr say` it once
-     more and wait; otherwise `gr step next` and go to 1.
+   - `[reviewed] sN` — the human went past the last step: go to Wrap-up.
+   - `[next] sN` — only for a plan without messages: `gr step next`, read the new step,
+     `gr say` its message.
    - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,
      word for word (raw mode). Do not add, edit or rephrase it and do not reply; if the
      text lists stale steps, handle it as a blocker (step 4). `[comment] sN: comment #N
      updated` / `comment #N deleted` is the human editing or deleting their own comment:
      nothing to do.
-   - `[skip] sN: reason` — `gr step skip --reason "<reason>"`, go to 1.
-   - `[goto] sN` — `gr step goto sN`, go to 1.
 
    `--suggestion` is the full replacement text for the lines; use it only for a nit
    or minor with an obvious fix.
@@ -165,9 +174,9 @@ steps:
    viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
    and do not move the current step; they return to it themselves.
 
-4. After a blocker gr prints the stale steps. `gr say` once: «дальше смотрим
+3. After a blocker gr prints the stale steps. `gr say` once: «дальше смотрим
    независимые (N шагов) или завершаем?» and wait.
-5. If the human writes in the terminal chat instead, handle it the same way, then
+4. If the human writes in the terminal chat instead, handle it the same way, then
    return to `gr wait`.
 
 ## Re-review (`gr init` printed "round N")

@@ -136,6 +136,8 @@ type Step struct {
 	Annotations []Annotation `yaml:"annotations,omitempty"`
 	Details     []Detail     `yaml:"details,omitempty"`
 	Note        string       `yaml:"note,omitempty"`
+	Message     string       `yaml:"message,omitempty"`
+	Announced   bool         `yaml:"announced,omitempty"`
 	Status      StepStatus   `yaml:"status,omitempty"`
 	MayChange   bool         `yaml:"may_change,omitempty"`
 	SkipReason  string       `yaml:"skip_reason,omitempty"`

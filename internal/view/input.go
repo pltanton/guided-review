@@ -89,6 +89,8 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":
 			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":
+		case m.composeKind == inbox.KindSkip && m.localSteps():
+			m.moveStep("skip", "--reason", text)
 		case m.rawMode():
 			m.saveRaw(text)
 		default:

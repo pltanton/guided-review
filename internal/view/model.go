@@ -118,6 +118,7 @@ type model struct {
 	composeRef  int
 	raw         bool
 	deleteArmed int
+	confirmNext string
 	rawSeverity state.Severity
 	anchorFile  string
 	anchorLines string
@@ -598,11 +599,35 @@ func (m *model) shiftStep(d int) tea.Cmd {
 }
 
 func (m *model) next() {
-	if m.viewStep != "" {
+	switch {
+	case m.viewStep != "":
 		m.status = "viewing an earlier step: esc to return, then >"
-		return
+	case !m.localSteps():
+		m.emit(inbox.Event{Kind: inbox.KindNext})
+	case len(m.step.Hotspots) > 0 && m.confirmNext != m.step.ID:
+		m.confirmNext = m.step.ID
+		m.status = "⚑ this step has a risk question: answer it, or press > again to move on"
+	default:
+		m.confirmNext = ""
+		m.moveStep("next")
 	}
-	m.emit(inbox.Event{Kind: inbox.KindNext})
+}
+
+func (m *model) localSteps() bool {
+	return m.review != nil && m.runGr != nil && m.step != nil &&
+		slices.ContainsFunc(m.review.Steps, func(s state.Step) bool { return s.Message != "" })
+}
+
+func (m *model) moveStep(args ...string) {
+	out, err := m.runGr(append([]string{"step"}, args...)...)
+	out = strings.TrimSpace(out)
+	switch {
+	case err != nil:
+		m.err = fmt.Errorf("%v: %s", err, out)
+	case strings.HasPrefix(out, "all steps reviewed"):
+		m.emit(inbox.Event{Kind: inbox.KindReviewed})
+		m.status = "all steps reviewed: the agent wraps up"
+	}
 }
 
 func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {

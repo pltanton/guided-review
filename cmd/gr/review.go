@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
@@ -129,6 +130,7 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 	}
 	plan.Apply(r, p)
 	r.Progress = nil
+	announce(r, r.Step(r.Current))
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
@@ -191,6 +193,7 @@ func cmdStep(ctx context.Context, e env, args []string) error {
 	if err != nil && !errors.Is(err, plan.ErrDone) {
 		return err
 	}
+	announce(r, st)
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
@@ -407,4 +410,14 @@ func cmdList(ctx context.Context, e env, _ []string) error {
 		e.printf("%s %s  %d/%d steps  %s\n", marker, id, cov.Done+cov.Skipped, cov.Total, title)
 	}
 	return nil
+}
+
+func announce(r *state.Review, st *state.Step) {
+	if st == nil || st.Message == "" || st.Announced {
+		return
+	}
+	st.Announced = true
+	msg := state.Message{Time: time.Now(), Step: st.ID, Text: st.Message}
+	r.Messages = append(r.Messages, msg)
+	r.Messages = r.Messages[max(len(r.Messages)-state.MaxMessages, 0):]
 }
