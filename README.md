@@ -1,9 +1,20 @@
 # guided-review
 
-An agent walks you through a merge request in small, ordered steps. Everything
-happens in one viewer pane: the plan, the code with the agent's annotations, its
-messages, and your replies. The agent explains each step in a few lines, flags risky
-spots, records your remarks, and on the next round checks whether they were fixed.
+A big merge request usually gets one of two reviews: an hour of reading every line, or a
+skim and "LGTM". guided-review is for the part in between.
+
+An agent reads the MR first and cuts it into small steps in an order that makes sense:
+the spec, then contracts, then each entry point and the code it calls, tests right after
+the code they test. You go through the steps in a terminal viewer and decide what is
+wrong. The agent explains each piece in a couple of lines, points at the places where a
+bug would be expensive, writes down your remarks and, when you are done, posts them to
+the MR.
+
+It does not review for you. Every step needs your "next" or a skip with a reason, and
+nothing goes to GitLab before you have seen it. On the next round you only see what
+changed, starting with whether your comments were addressed.
+
+GitLab via `glab`, Claude Code or Codex as the agent, tmux for the viewer.
 
 ## Install
 
