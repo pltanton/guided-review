@@ -1368,3 +1368,27 @@ func TestGeneralMessage(t *testing.T) {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
 }
+
+func TestSideChatInput(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 150
+	m.Update(key("T"))
+	m.Update(key("C"))
+	typeText(m, "hello there")
+	v := ansi.Strip(m.View())
+	lines := strings.Split(v, "\n")
+	last := lines[len(lines)-1]
+	if strings.Contains(last, "hello there") {
+		t.Fatalf("input must move into the side chat, bottom line is %q", last)
+	}
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "› hello there") })
+	if i < 0 || strings.Index(lines[i], "› hello there") < m.width-m.chatWidth() {
+		t.Fatalf("input must sit in the right column:\n%s", v)
+	}
+	m.Update(key("esc"))
+	m.Update(key(":"))
+	v = ansi.Strip(m.View())
+	if lines := strings.Split(v, "\n"); !strings.HasPrefix(lines[len(lines)-1], ":") {
+		t.Fatalf("command line stays at the bottom:\n%s", v)
+	}
+}

@@ -158,16 +158,25 @@ func (m *model) chatScrollHint() string {
 
 func (m *model) sideChatLines(h, w int) []string {
 	k := m.keys().key("chat-side")
+	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
 	lines := []string{
 		boldStyle.Render("chat"),
 		dimStyle.Render(k + " closes · " + m.chatScrollHint()),
-		dimStyle.Render(strings.Repeat("─", max(w, 1))),
+		rule,
 	}
-	lines = append(lines, window(m.chatLines(w, true), h-len(lines), m.chatTop)...)
-	for len(lines) < h {
+	var prompt []string
+	if m.inputInSideChat() {
+		prompt = append([]string{rule}, m.promptLines(w)...)
+	}
+	lines = append(lines, window(m.chatLines(w, true), h-len(lines)-len(prompt), m.chatTop)...)
+	for len(lines)+len(prompt) < h {
 		lines = append(lines, "")
 	}
-	return lines[:h]
+	return append(lines, prompt...)[:h]
+}
+
+func (m *model) inputInSideChat() bool {
+	return m.chatWidth() > 0 && m.composing && m.cmdMode == 0
 }
 
 func (m *model) bodyHeight() int {
@@ -340,6 +349,10 @@ func (m *model) bottomLines() []string {
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
 		lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
 		lines = append(lines, window(chat, limit, m.chatTop)...)
+	}
+	if m.inputInSideChat() {
+		footer, _ := m.footer()
+		return append(lines, footer)
 	}
 	return append(lines, m.promptLines(m.width)...)
 }
