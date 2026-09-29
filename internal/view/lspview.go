@@ -34,6 +34,8 @@ var DefaultServers = map[string][]string{
 
 const lspTimeout = 90 * time.Second
 
+const minPreviewWidth = 80
+
 type lspLoc struct {
 	Path string
 	Line int
@@ -56,6 +58,7 @@ type popup struct {
 	lines  []string
 	target int
 	loc    lspLoc
+	files  map[string][]string
 }
 
 type lspManager struct {
@@ -361,20 +364,53 @@ func (m *model) handleLSP(msg lspMsg) {
 	m.popupStack = nil
 }
 
-func (m *model) openPeek(loc lspLoc) {
-	peek := m.peekFile
-	if peek == nil {
-		peek = m.defaultPeek
+func (m *model) peek(path string) []string {
+	if m.peekFile != nil {
+		return m.peekFile(path)
 	}
+	return m.defaultPeek(path)
+}
+
+func (m *model) openPeek(loc lspLoc) {
 	target := max(loc.Line-1, 0)
 	m.popup = &popup{
 		kind:   "peek",
 		title:  fmt.Sprintf("%s:%d", loc.Path, loc.Line),
-		lines:  peek(loc.Path),
+		lines:  m.peek(loc.Path),
 		target: target,
 		top:    max(target-3, 0),
 		loc:    loc,
 	}
+}
+
+func (m *model) refPreview(p *popup, loc lspLoc, width, rows int) []string {
+	if p.files == nil {
+		p.files = map[string][]string{}
+	}
+	lines, ok := p.files[loc.Path]
+	if !ok {
+		lines = m.peek(loc.Path)
+		p.files[loc.Path] = lines
+	}
+	target := loc.Line - 1
+	top := max(0, min(target-rows/2, len(lines)-rows))
+	out := codeLines(lines, top, target, rows)
+	for i := range out {
+		out[i] = ansi.Truncate(out[i], width, "")
+	}
+	return out
+}
+
+func codeLines(lines []string, top, target, rows int) []string {
+	var out []string
+	for i := top; i < len(lines) && len(out) < rows; i++ {
+		num := dimStyle.Render(fmt.Sprintf("%4d │ ", i+1))
+		if i == target {
+			num = hotStyle.Render(fmt.Sprintf("%4d ▶ ", i+1))
+		}
+		out = append(out, num+lines[i])
+	}
+	return out
 }
 
 func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
@@ -438,6 +474,12 @@ func (m *model) popupLines(width, height int) []string {
 	rows := height - 1
 	switch p.kind {
 	case "references", "definition":
+		listW := width - 2
+		var code []string
+		if width >= minPreviewWidth && len(p.items) > 0 {
+			listW = width * 2 / 5
+			code = m.refPreview(p, p.items[p.sel], width-listW-5, rows)
+		}
 		start := max(0, min(p.sel-rows/2, len(p.items)-rows))
 		for i := start; i < len(p.items) && len(out) <= rows; i++ {
 			it := p.items[i]
@@ -449,13 +491,21 @@ func (m *model) popupLines(width, height int) []string {
 			}
 			out = append(out, border+line)
 		}
-	case "peek":
-		for i := p.top; i < len(p.lines) && len(out) <= rows; i++ {
-			num := dimStyle.Render(fmt.Sprintf("%4d │ ", i+1))
-			if i == p.target {
-				num = hotStyle.Render(fmt.Sprintf("%4d ▶ ", i+1))
+		for len(out) <= rows {
+			out = append(out, border)
+		}
+		if code != nil {
+			for i := 1; i < len(out); i++ {
+				right := ""
+				if i-1 < len(code) {
+					right = code[i-1]
+				}
+				out[i] = fit(out[i], listW) + dimStyle.Render(" │ ") + right
 			}
-			out = append(out, border+num+p.lines[i])
+		}
+	case "peek":
+		for _, l := range codeLines(p.lines, p.top, p.target, rows) {
+			out = append(out, border+l)
 		}
 	default:
 		for i := p.top; i < len(p.lines) && len(out) <= rows; i++ {

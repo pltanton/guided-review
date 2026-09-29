@@ -829,12 +829,16 @@ func TestLSPFlow(t *testing.T) {
 	if m.popup == nil || m.popup.kind != "references" || len(m.popup.items) != 2 {
 		t.Fatalf("popup %+v", m.popup)
 	}
-	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "references · 2") || !strings.Contains(out, "b.go:9") {
-		t.Fatalf("popup not rendered:\n%s", out)
-	}
 	m.peekFile = func(path string) []string { return numbered(20) }
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "references · 2") || !strings.Contains(out, "b.go:9") ||
+		!strings.Contains(out, "3 ▶ L3") {
+		t.Fatalf("popup not rendered with a preview of the selected reference:\n%s", out)
+	}
 	m.Update(key("j"))
+	if out := ansi.Strip(m.View()); !strings.Contains(out, "9 ▶ L9") {
+		t.Fatalf("preview must follow the selection:\n%s", out)
+	}
 	m.Update(key("enter"))
 	if m.popup.kind != "peek" || m.popup.loc.Path != "b.go" || len(m.popupStack) != 1 {
 		t.Fatalf(
