@@ -255,6 +255,9 @@ func TestIntakeBeforePlan(t *testing.T) {
 			t.Fatalf("intake view lacks %q:\n%s", want, out)
 		}
 	}
+	if !strings.Contains(out, "› press c or enter to answer the agent") {
+		t.Fatalf("intake must show where to answer:\n%s", out)
+	}
 	if strings.Contains(out, "── intake ──") || len(strings.Split(out, "\n")) != 20 {
 		t.Fatalf("intake must fill the screen without a chat section label:\n%s", out)
 	}

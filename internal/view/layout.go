@@ -24,12 +24,13 @@ var (
 	dimStyle      = lipgloss.NewStyle().Faint(true)
 	boldStyle     = lipgloss.NewStyle().Bold(true)
 	fileStyle     = lipgloss.NewStyle().Bold(true).Foreground(white)
-	fileInfoStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	fileInfoStyle = lipgloss.NewStyle().Foreground(fileInfoGray)
 	cursorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 	agentStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true)
 	buttonStyle   = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(white)
 	foldStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
 	gapStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("4"))
+	fieldStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(fileInfoGray)
 	addEmphStyle  = emphStyle("22")
 	delEmphStyle  = emphStyle("52")
 )
@@ -38,7 +39,10 @@ func emphStyle(bg string) lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(white).Background(lipgloss.Color(bg)).Bold(true)
 }
 
-const white = lipgloss.Color("15")
+const (
+	white        = lipgloss.Color("15")
+	fileInfoGray = lipgloss.Color("250")
+)
 
 const (
 	hints      = "c message  h help  q quit"
@@ -774,6 +778,10 @@ func (m *model) intakeView() string {
 	pad := strings.Repeat(" ", max((m.width-w)/2, 0))
 	top := m.intakeTop(w)
 	prompt := m.promptLines(w)
+	if !m.composing && m.err == nil {
+		field := fmt.Sprintf("› press %s or enter to answer the agent", m.keys().key("message"))
+		prompt = append([]string{fieldStyle.Render(fit(field, w))}, prompt...)
+	}
 	chatH := max(m.height-len(top)-len(prompt)-1, 1)
 	chat := window(m.chatLines(w, false), chatH, m.chatTop)
 	if len(chat) == 0 {
