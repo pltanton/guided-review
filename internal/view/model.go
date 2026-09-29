@@ -25,7 +25,7 @@ const (
 	minSplitWidth    = 80
 	minPlanWidth     = 90
 	minSideChatWidth = 100
-	maxPlanWidth     = 32
+	maxPlanWidth     = 44
 	messageLines     = 5
 )
 

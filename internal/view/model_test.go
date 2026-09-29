@@ -178,7 +178,7 @@ func TestViewRenders(t *testing.T) {
 	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"▶ s1 first", "· s2 second", " s1  first  logic", "1/2", "why x", "claude │ Adds x and y.",
+		"▶ s1 first", "○ s2 second", " s1  first  logic", "1/2", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -694,7 +694,7 @@ func TestExtraViews(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"◇ boilerplate · 1 files", "◇ generated · 2 files", "◇ all changes · 4 files",
+		"◇ boilerplate", "◇ generated", "◇ all changes",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sidebar lacks %q:\n%s", want, out)

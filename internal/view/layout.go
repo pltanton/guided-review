@@ -577,17 +577,33 @@ func (m *model) planRows(h int) int {
 }
 
 func (m *model) sidebar(h, w int) []sideEntry {
+	iw := max(w-3, 8)
+	row := func(left, right string) string {
+		left = ansi.Truncate(left, max(iw-ansi.StringWidth(right)-1, 1), "…")
+		gap := iw - ansi.StringWidth(left) - ansi.StringWidth(right)
+		return left + strings.Repeat(" ", max(gap, 1)) + right
+	}
+	plain := func(line string) string { return " " + line }
+	selected := func(line string) string {
+		return paint(fit(accentTone.fg().Render("▌")+line, w-2), cursorTone)
+	}
+
+	reviewed, idW := 0, 0
+	for _, st := range m.review.Steps {
+		if st.Status != state.StatusPending {
+			reviewed++
+		}
+		idW = max(idW, len(st.ID))
+	}
 	title := labelStyle.Render("PLAN")
 	if m.review.Round > 1 {
 		title += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
 	}
+	count := fmt.Sprintf("%d/%d", reviewed, len(m.review.Steps))
+	out := []sideEntry{{text: plain(row(title, dimStyle.Render(count)))}}
+
 	rows := m.planRows(h)
-	idx := m.review.StepIndex(m.review.Current)
-	offset := max(0, idx-(rows-2))
-	entry := func(style lipgloss.Style, text string) sideEntry {
-		return sideEntry{text: style.Render(ansi.Truncate(text, w-2, "…"))}
-	}
-	out := []sideEntry{{text: title}}
+	offset := max(0, m.review.StepIndex(m.review.Current)-(rows-2))
 	for _, st := range m.review.Steps[offset:] {
 		if len(out) >= rows {
 			break
@@ -595,7 +611,7 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		glyph, glyphStyle, style := st.Status.Glyph(), dimStyle, dimStyle
 		switch st.Status {
 		case state.StatusPending:
-			style = textTone.fg()
+			glyph, style = "○", textTone.fg()
 		case state.StatusDone:
 			glyphStyle = addStyle
 		case state.StatusStale:
@@ -608,13 +624,15 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if m.viewStep != "" && m.step != nil && st.ID == m.step.ID {
 			glyph, glyphStyle, style = "◆", hotStyle, hotStyle
 		}
-		line := glyphStyle.Render(glyph) + " " + style.Render(st.ID+" "+st.Title)
+		left := glyphStyle.Render(glyph) + " " + dimStyle.Render(fmt.Sprintf("%-*s", idW, st.ID)) +
+			" " + style.Render(st.Title)
+		flag := ""
 		if len(st.Hotspots) > 0 {
-			line += hotStyle.Render(" ⚑")
+			flag = hotStyle.Render("⚑")
 		}
-		line = ansi.Truncate(line, w-2, "…")
+		line := plain(row(left, flag))
 		if current {
-			line = paint(fit(line, w-2), cursorTone)
+			line = selected(row(left, flag))
 		}
 		out = append(out, sideEntry{text: line, step: st.ID})
 	}
@@ -626,9 +644,8 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		if m.step != nil && st.ID == m.step.ID {
 			glyph, style = "◆", hotStyle
 		}
-		e := entry(style, fmt.Sprintf("%s %s · %d files", glyph, st.Title, len(st.Hunks)))
-		e.step = st.ID
-		out = append(out, e)
+		n := dimStyle.Render(fmt.Sprint(len(st.Hunks)))
+		out = append(out, sideEntry{text: plain(row(style.Render(glyph+" "+st.Title), n)), step: st.ID})
 	}
 	for len(out) < rows {
 		out = append(out, sideEntry{})
@@ -636,7 +653,8 @@ func (m *model) sidebar(h, w int) []sideEntry {
 
 	files := m.stepFiles()
 	if len(files) > 0 {
-		out = append(out, sideEntry{}, sideEntry{text: labelStyle.Render("FILES")})
+		n := dimStyle.Render(fmt.Sprint(len(files)))
+		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FILES"), n))})
 		current := m.current().File
 		prevDir := ""
 		for i, f := range files {
@@ -644,25 +662,23 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			indent := ""
 			if dir != "." {
 				if dir != prevDir {
-					out = append(out, entry(dimStyle, dir+"/"))
+					out = append(out, sideEntry{text: plain(row(dimStyle.Render(dir+"/"), ""))})
 				}
 				indent = "  "
 			}
 			prevDir = dir
-			line := indent + base
+			stat := ""
 			if rf := m.review.File(f); rf != nil {
-				line += dimStyle.Render(fmt.Sprintf(" +%d -%d", rf.Added, rf.Deleted))
+				stat = addStyle.Render(fmt.Sprintf("+%d", rf.Added)) + " " +
+					delStyle.Render(fmt.Sprintf("−%d", rf.Deleted))
 			}
-			style := lipgloss.NewStyle()
-			switch {
-			case m.focusFiles && i == m.fileCursor:
-				line, style = "▶ "+line, cursorStyle
-			case !m.focusFiles && f == current:
-				style = cursorStyle
+			here := m.focusFiles && i == m.fileCursor || !m.focusFiles && f == current
+			name := textTone.fg().Render(indent + base)
+			line := plain(row(name, stat))
+			if here {
+				line = selected(row(boldStyle.Render(indent+base), stat))
 			}
-			e := entry(style, line)
-			e.file = f
-			out = append(out, e)
+			out = append(out, sideEntry{text: line, file: f})
 		}
 	}
 	for len(out) < h {
