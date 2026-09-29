@@ -237,16 +237,26 @@ func TestGroupedRunes(t *testing.T) {
 func TestIntakeBeforePlan(t *testing.T) {
 	var sent []inbox.Event
 	r := &state.Review{ID: "mr-1", MR: &state.MR{IID: 1, Title: "Add guard"},
-		Messages: []state.Message{{Text: "Task: reject negatives. Верно понял?"}}}
+		Messages: []state.Message{{Text: "Task: reject negatives. Верно понял?"}},
+		Files: []state.File{
+			{Path: "a.go", Added: 10, Deleted: 2},
+			{Path: "a.pb.go", Tier: state.TierGenerated, Added: 300},
+		},
+		Discussions: []state.Discussion{{Author: "bob"}, {Author: "ci", Resolved: true}}}
 	m := &model{review: r, width: 100, height: 20, showPlan: true,
 		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"review mr-1", "Add guard", "claude: Task: reject negatives. Верно понял?",
+		"guided review · !1 Add guard", "● task & plan  ›  ○ steps  ›  ○ finish",
+		"2 files  +310 −2   core 1 · boilerplate 0 · generated 1", "1 open discussions",
+		"claude: Task: reject negatives. Верно понял?",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("intake view lacks %q:\n%s", want, out)
 		}
+	}
+	if strings.Contains(out, "── intake ──") || len(strings.Split(out, "\n")) != 20 {
+		t.Fatalf("intake must fill the screen without a chat section label:\n%s", out)
 	}
 	m.Update(key("c"))
 	typeText(m, "да")
@@ -1269,5 +1279,13 @@ func TestCountPrefix(t *testing.T) {
 	m.Update(key("k"))
 	if l := m.current(); l.Line != 3 || m.count != "" {
 		t.Fatalf("esc must drop the count: line %d count %q", l.Line, m.count)
+	}
+}
+
+func TestWaitingForInit(t *testing.T) {
+	m := &model{width: 80, height: 10, err: state.ErrNoReview}
+	out := ansi.Strip(m.View())
+	if !strings.Contains(out, "guided review") || !strings.Contains(out, "waiting for the agent") {
+		t.Fatalf("waiting screen:\n%s", out)
 	}
 }

@@ -2,6 +2,7 @@ package view
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"path"
 	"slices"
@@ -99,7 +100,7 @@ func (m *model) footer() (string, []span) {
 		if m.status == "" {
 			tail = hints
 		}
-		return line + dimStyle.Render(tail), nil
+		return dimStyle.Render(tail), nil
 	}
 	x := ansi.StringWidth(line)
 	var spans []span
@@ -284,6 +285,10 @@ func (m *model) bottomLines() []string {
 			lines = append(lines, window(chat, limit, m.chatTop)...)
 		}
 	}
+	return append(lines, m.promptLines(m.width)...)
+}
+
+func (m *model) promptLines(width int) []string {
 	var last string
 	switch {
 	case m.composing && m.cmdMode != 0:
@@ -292,7 +297,7 @@ func (m *model) bottomLines() []string {
 		if m.status != "" {
 			last += "   " + dimStyle.Render(m.status)
 		}
-		return append(lines, wrapInput(last, m.width)...)
+		return wrapInput(last, width)
 	case m.composing:
 		prompt := "› "
 		switch {
@@ -330,13 +335,13 @@ func (m *model) bottomLines() []string {
 		}
 		pos := min(m.inputPos, len(m.input))
 		last = lead + m.inputWithCursor(pos) + dimStyle.Render("   "+strings.Join(hints, " · "))
-		return append(lines, wrapInput(last, m.width)...)
+		return wrapInput(last, width)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
 		last, _ = m.footer()
 	}
-	return append(lines, last)
+	return []string{last}
 }
 
 func (m *model) View() string {
@@ -344,11 +349,19 @@ func (m *model) View() string {
 		return ""
 	}
 	if m.review == nil {
-		msg := "waiting for gr init…"
-		if m.err != nil {
-			msg = m.err.Error()
+		msg := dimStyle.Render("waiting for the agent to start a review (gr init)…")
+		if m.err != nil && !errors.Is(m.err, state.ErrNoReview) {
+			msg = delStyle.Render(m.err.Error())
 		}
-		return dimStyle.Render(msg)
+		spin := hotStyle.Render(m.spin())
+		lines := []string{boldStyle.Render("guided review"), "", spin + " " + msg}
+		out := make([]string, m.height)
+		for i, l := range lines {
+			if j := (m.height-len(lines))/2 + i; j >= 0 && j < m.height {
+				out[j] = strings.Repeat(" ", max((m.width-ansi.StringWidth(l))/2, 0)) + l
+			}
+		}
+		return strings.Join(out, "\n")
 	}
 	if m.step == nil {
 		return m.intakeView()
@@ -729,30 +742,95 @@ func (m *model) renderSplit(i, w int) string {
 	return fit(cell(l.Left, false), side) + dimStyle.Render("┃") + right
 }
 
+const intakeWidth = 100
+
 func (m *model) intakeView() string {
-	title := "review " + m.review.ID
-	if m.review.MR != nil {
-		title += fmt.Sprintf(" · !%d %s", m.review.MR.IID, m.review.MR.Title)
+	w := min(max(m.width-2, 20), intakeWidth)
+	pad := strings.Repeat(" ", max((m.width-w)/2, 0))
+	top := m.intakeTop(w)
+	prompt := m.promptLines(w)
+	chatH := max(m.height-len(top)-len(prompt)-1, 1)
+	chat := window(m.chatLines(w, false), chatH, m.chatTop)
+	if len(chat) == 0 {
+		chat = []string{dimStyle.Render("the agent is reading the MR; its questions show up here")}
 	}
-	top := []string{
-		boldStyle.Render(title),
-		dimStyle.Render("no plan yet — answer the agent below (c to write)"),
+	rule := "── conversation "
+	rule += strings.Repeat("─", max(w-ansi.StringWidth(rule), 0))
+	lines := append(top, dimStyle.Render(rule))
+	lines = append(lines, chat...)
+	for len(lines)+len(prompt) < m.height {
+		lines = append(lines, "")
 	}
-	if !m.agentWaiting {
-		top = append(top, "", "  "+m.agentStatus())
+	lines = append(lines[:min(len(lines), max(m.height-len(prompt), 0))], prompt...)
+	for i, l := range lines {
+		lines[i] = pad + fit(l, w)
 	}
-	bottom := m.bottomLines()
-	out := make([]string, 0, m.height)
-	for _, line := range top {
-		out = append(out, fit(line, m.width))
+	return strings.Join(lines, "\n")
+}
+
+func (m *model) intakeTop(w int) []string {
+	r := m.review
+	title := "guided review · " + r.ID
+	if r.MR != nil {
+		title = fmt.Sprintf("guided review · !%d %s", r.MR.IID, r.MR.Title)
 	}
-	for len(out)+len(bottom) < m.height {
-		out = append(out, "")
+	var stages []string
+	cur := 0
+	switch {
+	case r.Publish != nil:
+		cur = 2
+	case len(r.Steps) > 0:
+		cur = 1
 	}
-	for _, line := range bottom {
-		out = append(out, fit(line, m.width))
+	for i, name := range []string{"task & plan", "steps", "finish"} {
+		if i == cur {
+			stages = append(stages, cursorStyle.Render("● "+name))
+		} else {
+			stages = append(stages, dimStyle.Render("○ "+name))
+		}
 	}
-	return strings.Join(out[:min(len(out), max(m.height, len(top)))], "\n")
+	lines := []string{
+		"",
+		boldStyle.Render(ansi.Truncate(title, w, "…")),
+		dimStyle.Render(strings.Repeat("─", w)),
+		strings.Join(stages, dimStyle.Render("  ›  ")),
+		"",
+	}
+	row := func(label, value string) {
+		lines = append(lines, dimStyle.Render(fmt.Sprintf("%-9s", label))+value)
+	}
+	var added, deleted int
+	tiers := map[state.Tier]int{}
+	for _, f := range r.Files {
+		added, deleted = added+f.Added, deleted+f.Deleted
+		tiers[f.Tier]++
+	}
+	if len(r.Files) > 0 {
+		plus, minus := fmt.Sprintf("+%d", added), fmt.Sprintf("−%d", deleted)
+		row("changes", fmt.Sprintf("%d files  %s %s", len(r.Files),
+			addStyle.Render(plus), delStyle.Render(minus))+
+			dimStyle.Render(fmt.Sprintf("   core %d · boilerplate %d · generated %d",
+				len(r.Files)-tiers[state.TierBoilerplate]-tiers[state.TierGenerated],
+				tiers[state.TierBoilerplate], tiers[state.TierGenerated])))
+	}
+	if r.MR != nil {
+		open := 0
+		for _, d := range r.Discussions {
+			if !d.Resolved {
+				open++
+			}
+		}
+		row("MR", fmt.Sprintf("%d open discussions", open))
+	}
+	if r.Round > 1 {
+		row("round", fmt.Sprint(r.Round))
+	}
+	row("code", r.CodeDir(m.repo.Dir))
+	status := m.agentStatus()
+	if m.agentWaiting {
+		status += dimStyle.Render(" — answer below")
+	}
+	return append(lines, "", status, "")
 }
 
 func (m *model) agentStatus() string {
