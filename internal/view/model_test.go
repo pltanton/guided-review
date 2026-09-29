@@ -1065,3 +1065,20 @@ func TestChatPanel(t *testing.T) {
 		t.Fatalf("esc must shrink the chat back, size %d", m.chatSize)
 	}
 }
+
+func TestKeyHints(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key("g"))
+	view := ansi.Strip(m.View())
+	for _, want := range []string{
+		"g…", "d  go to definition (peek)", "g  first line", "r  list references",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("hint %q missing:\n%s", want, view)
+		}
+	}
+	m.Update(key("esc"))
+	if strings.Contains(ansi.Strip(m.View()), "g…") {
+		t.Fatal("hints stay after esc")
+	}
+}

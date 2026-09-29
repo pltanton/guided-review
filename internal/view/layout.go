@@ -379,6 +379,9 @@ func (m *model) View() string {
 		box := m.popupLines(mw, ph)
 		copy(main[len(main)-len(box):], box)
 	}
+	if m.pendingKey != "" {
+		overlayRight(main[:len(main)-1], m.keyHints(m.pendingKey), mw)
+	}
 
 	pw := m.planWidth()
 	var plan []string
@@ -726,4 +729,32 @@ func (m *model) animate(r Row) Row {
 
 func (m *model) inputWithCursor(pos int) string {
 	return string(m.input[:pos]) + "█" + string(m.input[pos:])
+}
+
+func (m *model) keyHints(prefix string) []string {
+	var rows [][2]string
+	for _, a := range m.keys().actions {
+		for _, k := range a.Keys {
+			if next, ok := strings.CutPrefix(k, prefix+" "); ok {
+				rows = append(rows, [2]string{next, a.Desc})
+			}
+		}
+	}
+	slices.SortFunc(rows, func(a, b [2]string) int { return strings.Compare(a[0], b[0]) })
+	lines := []string{boldStyle.Render(prefix + "…")}
+	for _, r := range rows {
+		lines = append(lines, cursorStyle.Render(r[0])+"  "+r[1])
+	}
+	frame := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("8"))
+	box := frame.Padding(0, 1).Render(strings.Join(lines, "\n"))
+	return strings.Split(box, "\n")
+}
+
+func overlayRight(lines, box []string, width int) {
+	left := max(width-ansi.StringWidth(box[0]), 0)
+	for i, b := range box {
+		if j := len(lines) - len(box) + i; j >= 0 {
+			lines[j] = fit(lines[j], left) + b
+		}
+	}
 }

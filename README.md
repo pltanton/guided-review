@@ -103,6 +103,7 @@ both sides in full.
 | `p` | show/hide the plan |
 | `m` | mouse capture on/off (off lets the terminal select text) |
 | `w` / `b`, click a word | move the symbol cursor within the line |
+| `g` | shows what can follow it (`gg`, `gd`, `gr`); `esc` cancels |
 | `gd` / `gr` / `K` | LSP: definition (peek), references (list → `enter` peeks), hover; `esc` / `ctrl+o` back, `e` opens the editor there |
 | `tab` / `shift+tab` | more / default context |
 | `e` | open `$EDITOR` at the line (tmux popup) |
