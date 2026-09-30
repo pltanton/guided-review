@@ -17,17 +17,25 @@ the viewer.
 
 ## Install
 
-Easiest: ask your agent.
+**Ask your agent.** Paste this into Claude Code or Codex:
 
 > Install guided-review from https://github.com/pltanton/guided-review, follow its INSTALL.md
 
-By hand:
+It checks the prerequisites, installs `gr` and the skills, and tells you what is left
+for you to do (logging in to `glab` or `gh`, adding Go's bin directory to `PATH`).
+
+**By hand**, in a shell:
 
     go install github.com/pltanton/guided-review/cmd/gr@latest
     claude plugin marketplace add pltanton/guided-review
     claude plugin install guided-review@guided-review
 
-Codex, other language servers and the prerequisites are in [INSTALL.md](INSTALL.md).
+or, for the plugin, inside a Claude Code session:
+
+    /plugin marketplace add pltanton/guided-review
+    /plugin install guided-review@guided-review
+
+Codex, language servers and the prerequisites are in [INSTALL.md](INSTALL.md).
 
 ## Use
 
