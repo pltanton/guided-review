@@ -836,6 +836,22 @@ func TestWordMotions(t *testing.T) {
 	}
 }
 
+func TestLSPListPopupsShowTheirItems(t *testing.T) {
+	for _, kind := range []string{"callers", "implementation", "typeDefinition", "symbols"} {
+		t.Run(kind, func(t *testing.T) {
+			m, _ := newTestModel(t)
+			m.peekFile = func(path string) []string { return numbered(20) }
+			m.Update(lspMsg{kind: kind, locs: []lspLoc{
+				{Path: "a.go", Line: 3, Text: "use(x)"},
+				{Path: "b.go", Line: 9, Text: "x = 2"},
+			}})
+			if out := ansi.Strip(m.View()); !strings.Contains(out, "b.go:9") {
+				t.Fatalf("%s popup does not list its items:\n%s", kind, out)
+			}
+		})
+	}
+}
+
 func TestLSPFlow(t *testing.T) {
 	m, _ := newTestModel(t)
 	var asked []string

@@ -505,8 +505,8 @@ func (m *model) popupLines(width, height int) []string {
 	head += strings.Repeat("─", fill) + " " + hint
 	out := []string{hotStyle.Render(ansi.Truncate(head, width, ""))}
 	rows := height - 1
-	switch p.kind {
-	case "references", "definition":
+	switch {
+	case p.items != nil:
 		listW := width - 2
 		var code []string
 		if width >= minPreviewWidth && len(p.items) > 0 {
@@ -536,7 +536,7 @@ func (m *model) popupLines(width, height int) []string {
 				out[i] = fit(out[i], listW) + dimStyle.Render(" │ ") + right
 			}
 		}
-	case "peek":
+	case p.kind == "peek":
 		p.top = max(0, min(p.top, p.cursor), p.cursor-rows+1)
 		for i, l := range codeLines(p.lines, p.top, p.target, rows) {
 			if p.top+i == p.cursor {
