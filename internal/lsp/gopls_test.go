@@ -67,21 +67,6 @@ func TestGopls(t *testing.T) {
 	}) {
 		t.Fatalf("WorkspaceSymbols = %+v, %v", found, err)
 	}
-	write("c.go", "package m\n\nfunc broken() {\n\tx := 1\n}\n")
-	cf := filepath.Join(dir, "c.go")
-	data, _ = os.ReadFile(cf)
-	_ = c.DidOpen(cf, "go", string(data))
-	var diags []Diagnostic
-	for range 100 {
-		if ds, ok := c.Diagnostics(cf); ok && len(ds) > 0 {
-			diags = ds
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if len(diags) == 0 || diags[0].Line != 3 || diags[0].Severity != 1 {
-		t.Fatalf("Diagnostics = %+v", diags)
-	}
 	in, out, err := c.Calls(ctx, a, 2, 5)
 	if err != nil || len(in) != 0 || len(out) != 1 || out[0].Name != "Transfer" {
 		t.Fatalf("Calls(Use) = %+v, %+v, %v", in, out, err)

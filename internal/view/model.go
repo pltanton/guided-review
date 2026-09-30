@@ -17,7 +17,6 @@ import (
 	"github.com/pltanton/guided-review/internal/config"
 	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/inbox"
-	"github.com/pltanton/guided-review/internal/lsp"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -120,10 +119,9 @@ type model struct {
 	raw         bool
 	deleteArmed int
 	confirmNext string
-	diagStep    string
+	lspStep     string
 	seen        map[string]bool
 	flow        []flowEntry
-	diags       map[string][]lsp.Diagnostic
 	rawSeverity state.Severity
 	anchorFile  string
 	anchorLines string
@@ -277,19 +275,6 @@ func (m *model) notes() []Note {
 			File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body,
 		})
 	}
-	for file, ds := range m.diags {
-		for _, d := range ds {
-			kind, ok := diagKinds[d.Severity]
-			if !ok {
-				continue
-			}
-			text := d.Message
-			if d.Source != "" {
-				text += " (" + d.Source + ")"
-			}
-			out = append(out, Note{File: file, Line: d.Line + 1, Kind: kind, Text: text})
-		}
-	}
 	return out
 }
 
@@ -403,25 +388,23 @@ func (m *model) refreshAgent() {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
-	if m.step != nil && m.lspDo != nil && m.diagStep != m.step.ID && !isExtra(m.step.ID) {
-		m.diagStep, m.flow = m.step.ID, nil
-		cmd = tea.Batch(cmd, m.fetchDiagnostics(), m.fetchFlow())
+	if m.step != nil && m.lspDo != nil && m.lspStep != m.step.ID && !isExtra(m.step.ID) {
+		m.lspStep, m.flow = m.step.ID, nil
+		cmd = tea.Batch(cmd, m.fetchFlow(), m.refreshLSPLater(1))
 	}
 	return m, cmd
 }
 
 func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case lspRefreshMsg:
+		if m.step == nil || msg.step != m.step.ID || m.lspDo == nil {
+			return m, nil
+		}
+		return m, tea.Batch(m.fetchFlow(), m.refreshLSPLater(msg.attempt+1))
 	case flowMsg:
 		if m.step != nil && msg.step == m.step.ID {
 			m.flow = msg.entries
-		}
-	case diagMsg:
-		if m.step != nil && msg.step == m.step.ID {
-			m.diags = msg.diags
-			if m.src != nil {
-				m.rebuild(false)
-			}
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height

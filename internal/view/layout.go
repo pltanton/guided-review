@@ -856,8 +856,6 @@ var noteKinds = map[string]struct {
 	"comment": {youTone, "YOU"},
 	"mr":      {blueTone, "MR"},
 	"pending": {warnTone, "…"},
-	"error":   {badTone, "ERROR"},
-	"warning": {warnTone, "WARN"},
 }
 
 func noteBadge(kind, label string) string {

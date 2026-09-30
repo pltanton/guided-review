@@ -649,63 +649,28 @@ func (m *model) peekLSP(p *popup, plain, kind string) tea.Cmd {
 	return m.lspDo(kind, p.loc.Path, p.cursor+1, p.col)
 }
 
-const diagWait = 30 * time.Second
-
-var (
-	diagKinds  = map[int]string{1: "error", 2: "warning"}
-	agentKinds = map[string]bool{"note": true, "spec": true, "hotspot": true}
+const (
+	lspWait      = 30 * time.Second
+	lspRefresh   = 15 * time.Second
+	lspRefreshes = 8
 )
 
-type diagMsg struct {
-	step  string
-	diags map[string][]lsp.Diagnostic
+type lspRefreshMsg struct {
+	step    string
+	attempt int
 }
 
-func (m *model) fetchDiagnostics() tea.Cmd {
-	mgr, root, parent, step := m.manager(), m.codeDir(), m.ctx, m.step.ID
-	var files []string
-	for _, h := range m.step.Hunks {
-		if !slices.Contains(files, h.File) {
-			files = append(files, h.File)
-		}
+func (m *model) refreshLSPLater(attempt int) tea.Cmd {
+	if attempt > lspRefreshes {
+		return nil
 	}
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, diagWait)
-		defer cancel()
-		type opened struct {
-			c         *lsp.Client
-			abs, file string
-		}
-		var open []opened
-		for _, f := range files {
-			abs := filepath.Join(root, f)
-			c, lang, err := mgr.client(ctx, abs)
-			if err != nil {
-				continue
-			}
-			content, err := os.ReadFile(abs)
-			if err != nil {
-				continue
-			}
-			mgr.open(c, abs, lang, string(content))
-			open = append(open, opened{c, abs, f})
-		}
-		out := map[string][]lsp.Diagnostic{}
-		for len(out) < len(open) {
-			for _, o := range open {
-				if ds, ok := o.c.Diagnostics(o.abs); ok {
-					out[o.file] = ds
-				}
-			}
-			select {
-			case <-ctx.Done():
-				return diagMsg{step: step, diags: out}
-			case <-time.After(200 * time.Millisecond):
-			}
-		}
-		return diagMsg{step: step, diags: out}
-	}
+	step := m.step.ID
+	return tea.Tick(lspRefresh, func(time.Time) tea.Msg {
+		return lspRefreshMsg{step: step, attempt: attempt}
+	})
 }
+
+var agentKinds = map[string]bool{"note": true, "spec": true, "hotspot": true}
 
 func symbolLocs(root, file string, syms []lsp.Symbol) []lspLoc {
 	out := make([]lspLoc, 0, len(syms))
@@ -767,7 +732,7 @@ func (m *model) fetchFlow() tea.Cmd {
 		}
 	}
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, diagWait)
+		ctx, cancel := context.WithTimeout(parent, lspWait)
 		defer cancel()
 		var entries []flowEntry
 		for file, ranges := range changed {

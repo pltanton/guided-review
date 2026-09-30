@@ -30,7 +30,6 @@ type Client struct {
 	nextID  atomic.Int64
 	mu      sync.Mutex
 	pending map[int64]chan response
-	diags   map[string][]Diagnostic
 	cmd     *exec.Cmd
 }
 
@@ -51,7 +50,7 @@ type incoming struct {
 }
 
 func NewClient(r io.Reader, w io.Writer) *Client {
-	c := &Client{w: w, pending: map[int64]chan response{}, diags: map[string][]Diagnostic{}}
+	c := &Client{w: w, pending: map[int64]chan response{}}
 	go c.read(bufio.NewReader(r))
 	return c
 }
@@ -123,8 +122,6 @@ func (c *Client) read(r *bufio.Reader) {
 		switch {
 		case msg.Method != "" && len(msg.ID) > 0:
 			go c.answerServer(msg)
-		case msg.Method == "textDocument/publishDiagnostics":
-			c.storeDiagnostics(msg.Params)
 		case msg.Method != "":
 		default:
 			id, err := strconv.ParseInt(string(msg.ID), 10, 64)
@@ -207,12 +204,11 @@ func (c *Client) Initialize(ctx context.Context, root string) error {
 				"hover": map[string]any{
 					"contentFormat": []string{"plaintext", "markdown"},
 				},
-				"definition":         map[string]any{"linkSupport": true},
-				"implementation":     map[string]any{"linkSupport": true},
-				"typeDefinition":     map[string]any{"linkSupport": true},
-				"callHierarchy":      map[string]any{},
-				"documentSymbol":     map[string]any{"hierarchicalDocumentSymbolSupport": true},
-				"publishDiagnostics": map[string]any{},
+				"definition":     map[string]any{"linkSupport": true},
+				"implementation": map[string]any{"linkSupport": true},
+				"typeDefinition": map[string]any{"linkSupport": true},
+				"callHierarchy":  map[string]any{},
+				"documentSymbol": map[string]any{"hierarchicalDocumentSymbolSupport": true},
 			},
 			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
 		},
@@ -490,44 +486,6 @@ func UTF16Column(line string, display, tabWidth int) int {
 		units += utf16.RuneLen(r)
 	}
 	return units
-}
-
-type Diagnostic struct {
-	Line     int
-	Severity int
-	Message  string
-	Source   string
-}
-
-func (c *Client) storeDiagnostics(params json.RawMessage) {
-	var p struct {
-		URI         string `json:"uri"`
-		Diagnostics []struct {
-			Range    lspRange `json:"range"`
-			Severity int      `json:"severity"`
-			Message  string   `json:"message"`
-			Source   string   `json:"source"`
-		} `json:"diagnostics"`
-	}
-	if json.Unmarshal(params, &p) != nil {
-		return
-	}
-	ds := make([]Diagnostic, 0, len(p.Diagnostics))
-	for _, d := range p.Diagnostics {
-		ds = append(ds, Diagnostic{
-			Line: d.Range.Start.Line, Severity: d.Severity, Message: d.Message, Source: d.Source,
-		})
-	}
-	c.mu.Lock()
-	c.diags[uriPath(p.URI)] = ds
-	c.mu.Unlock()
-}
-
-func (c *Client) Diagnostics(path string) (ds []Diagnostic, ok bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	ds, ok = c.diags[path]
-	return ds, ok
 }
 
 type Symbol struct {
