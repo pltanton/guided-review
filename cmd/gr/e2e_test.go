@@ -707,6 +707,10 @@ func TestStepMessagesFromPlan(t *testing.T) {
 	if count() != 1 {
 		t.Fatal("plan set must post the first step's message")
 	}
+	h.mustRun(withMessages, "plan", "set")
+	if count() != 1 {
+		t.Fatal("setting the same plan again must not repeat its messages")
+	}
 	h.mustRun("", "step", "next")
 	h.mustRun("", "step", "goto", "s1")
 	if count() != 1 {
