@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/state"
 	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
@@ -736,5 +737,35 @@ func TestSayOptions(t *testing.T) {
 	}
 	if second.Text != "- a list item" || second.Options != nil {
 		t.Fatalf("a message starting with - is text: %+v", second)
+	}
+}
+
+func TestPlanFromParts(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	dir := t.TempDir()
+	write := func(name, body string) string {
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	skeleton := write("skeleton.yaml", "summary: guard\nboilerplate: [wire.go]\n")
+	ch1 := write("ch1.yaml", "steps:\n  - {id: s1, title: guard, kind: logic, chapter: A,"+
+		" hunks: [{file: api/transfer.go, lines: 1-5}]}\n")
+	ch2 := write("ch2.yaml", "steps:\n  - {id: s2, title: rest, kind: logic, chapter: B,"+
+		" hunks: [{file: api/transfer.go, lines: 6-9}]}\n")
+	assertContains(t, h.mustRun("", "plan", "set", "-f", skeleton, "-f", ch1, "-f", ch2),
+		"plan accepted: 2 steps")
+	_, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.Summary != "guard" || r.Steps[0].ID != "s1" || r.Steps[1].Chapter != "B" {
+		t.Fatalf("parts must join in order: %+v", r.Steps)
+	}
+	if f := r.File("wire.go"); f == nil || f.Tier != state.TierBoilerplate {
+		t.Fatal("boilerplate from the skeleton must apply")
 	}
 }

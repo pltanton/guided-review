@@ -84,6 +84,9 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
    per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them (and `file` when the step
    has several files).
+   A large MR (three or more chapters, or over ~600 changed lines) goes faster in
+   parallel when you can start subagents (Claude Code's Agent tool); see "Parallel
+   planning" below. Otherwise continue here.
 3. Read every step's code now, with enough surrounding code to be sure of what it does,
    and look for problems per references/checklist.md: the viewer moves between steps
    without you, so all per-step work happens here.
@@ -141,6 +144,23 @@ steps:
           commit on its own and a failed debit would leave the reservation behind.
     depends_on: [s1]
 ```
+
+## Parallel planning
+
+1. Write the route yourself: `summary` and `boilerplate` to
+   `/tmp/guided-review/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
+   `kind`, `chapter`, `hunks`, `depends_on`, nothing else — to
+   `/tmp/guided-review/<id>/chapter-N.yaml` as a top-level `steps:` list.
+2. In one message start one general-purpose subagent per chapter, so they run at once.
+   Give each: the code path, base and head, the task in two lines, its chapter file, and
+   the path of this skill's `references/` directory. Its job: read `style.md`,
+   `hotspots.md` and `checklist.md` there, read its steps' code, and rewrite its chapter
+   file with the same steps (ids, titles, hunks and depends_on unchanged) plus `message`,
+   `hotspots` (`file`, `line`, `q`, `detail`) and `annotations` (`file`, `line`, `to`,
+   `kind`, `text`, `detail`); reply with one line when done.
+3. `gr plan set -f route.yaml -f chapter-1.yaml -f chapter-2.yaml …` in chapter order. If
+   gr rejects something, fix it in that chapter's file yourself, then go on with step 6
+   of Plan.
 
 ## Step loop
 
@@ -217,7 +237,7 @@ before leaving a step. You only hear about what needs you.
 ## Self mode (`gr init` printed "mode: self")
 
 The author is reviewing their own branch before anyone else sees it, and you were started
-by their coding agent with a fresh context. That is the point: judge the code as a
+by their coding agent — as a subagent or in its own window — with a fresh context. That is the point: judge the code as a
 stranger would. Do not look for or ask about how it was written.
 
 - The prompt that started you gives the review id, the task (ticket, spec, a line or
@@ -227,7 +247,8 @@ stranger would. Do not look for or ask about how it was written.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
 - Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes
   `fixes.json` for the author's agent and closes the viewer. That is the end of your job:
-  the author's agent closes your window and the review. No publishing, no notifying.
+  as a subagent, reply with the export dir as your final answer; in a window, just end
+  your turn (the author's agent closes it). No publishing, no notifying.
 
 
 

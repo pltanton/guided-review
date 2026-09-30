@@ -101,20 +101,33 @@ func cmdHunks(ctx context.Context, e env, _ []string) error {
 
 func cmdPlan(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 || args[0] != "set" {
-		return errors.New("usage: gr plan set [-f FILE]")
+		return errors.New("usage: gr plan set [-f FILE]...")
 	}
 	fs := e.flags("plan set")
-	file := fs.String("f", "", "plan file (default: stdin)")
+	var paths []string
+	fs.Func("f", "plan file, repeat to join parts in order (default: stdin)", func(v string) error {
+		paths = append(paths, v)
+		return nil
+	})
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	data, err := readInput(e, cmp.Or(*file, "-"))
-	if err != nil {
-		return err
+	if len(paths) == 0 {
+		paths = []string{"-"}
 	}
-	p, err := plan.Parse(data)
-	if err != nil {
-		return err
+	var p plan.Plan
+	for _, path := range paths {
+		data, err := readInput(e, path)
+		if err != nil {
+			return err
+		}
+		part, err := plan.Parse(data)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		p.Summary = cmp.Or(p.Summary, part.Summary)
+		p.Boilerplate = append(p.Boilerplate, part.Boilerplate...)
+		p.Steps = append(p.Steps, part.Steps...)
 	}
 	s, r, err := loadReview(ctx, e.dir)
 	if err != nil {
