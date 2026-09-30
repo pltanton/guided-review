@@ -585,7 +585,7 @@ func TestExport(t *testing.T) {
 		}
 	}
 
-	assertContains(t, h.mustRun("", "mark-published"), "marked 2 comments published")
+	assertContains(t, h.mustRun("", "mark-published"), "marked 2 comments and 0 threads published")
 	if _, err := h.run("", "export", "--dry-run"); err == nil {
 		t.Fatal("mark-published must clear the prepared result")
 	}
@@ -825,4 +825,77 @@ func TestGitHubPR(t *testing.T) {
 			t.Fatalf("gr must not write to GitHub: %v", calls)
 		}
 	}
+}
+
+func TestThreads(t *testing.T) {
+	h := newHarness(t)
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	discussions := `[{"id":"d1","notes":[
+		{"body":"**major** return an error instead","author":{"username":"me"},"resolvable":true,
+		 "position":{"new_path":"api/transfer.go","new_line":5}},
+		{"body":"zero is what the caller expects","author":{"username":"alice"}}]},
+	 {"id":"d2","notes":[{"body":"**nit** spacing","author":{"username":"me"},"resolvable":true}]},
+	 {"id":"d3","notes":[{"body":"why?","author":{"username":"bob"},"resolvable":true}]},
+	 {"id":"d4","notes":[{"body":"**Guided review**","author":{"username":"me"}}]}]`
+	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		switch path := args[len(args)-1]; {
+		case path == "user":
+			return []byte(`{"username":"me"}`), nil
+		case strings.Contains(path, "/discussions"):
+			return []byte(discussions), nil
+		}
+		return fmt.Appendf(nil, `{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7",
+			"source_branch":"feature","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
+			base, base, head), nil
+	}
+	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	assertContains(t, out, "your threads: 2 open, 1 answered")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+
+	out = h.mustRun("", "thread", "list")
+	assertContains(t, out, "thread d1  api/transfer.go:5  answered, undecided",
+		"@alice:\n    zero is what the caller expects", "thread d2  general  no reply")
+	if strings.Contains(out, "d3") || strings.Contains(out, "d4") {
+		t.Fatalf("only your resolvable threads are listed:\n%s", out)
+	}
+	changes := []string{"prepare", "--verdict", "changes"}
+	if _, err := h.run("", changes...); err == nil || !strings.Contains(err.Error(), "d1") {
+		t.Fatalf("prepare must wait for a decision on d1, got %v", err)
+	}
+	h.mustRun("", "thread", "assess", "d1", "--propose", "open", "--reply", "callers can't tell",
+		"the", "reply", "does", "not", "address", "it")
+	assertContains(t, h.mustRun("", "thread", "list"), "agent (open): the reply does not address it")
+	h.mustRun("", "thread", "decide", "d1", "--verdict", "open", "--reply", "callers can't tell")
+	approve := []string{"prepare", "--verdict", "approve"}
+	if _, err := h.run("", approve...); err == nil || !strings.Contains(err.Error(), "still open") {
+		t.Fatalf("approve with open threads must fail, got %v", err)
+	}
+	h.mustRun("", changes...)
+	assertContains(t, h.mustRun("", "export", "--dry-run"),
+		"--- thread keep open api/transfer.go:5 d1\ncallers can't tell")
+
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	var x export
+	data, _ := os.ReadFile(filepath.Join(dir, "review.json"))
+	if err := json.Unmarshal(data, &x); err != nil {
+		t.Fatal(err)
+	}
+	want := threadAction{ID: "d1", Reply: "callers can't tell",
+		API:      "projects/g%2Fp/merge_requests/7/discussions/d1",
+		ReplyAPI: "projects/g%2Fp/merge_requests/7/discussions/d1/notes"}
+	if len(x.Threads) != 1 || x.Threads[0] != want {
+		t.Fatalf("threads = %+v, want %+v", x.Threads, want)
+	}
+	assertContains(t, h.mustRun("", "mark-published"), "1 threads published")
+	if out := h.mustRun("", "thread", "list"); strings.Contains(out, "d1") {
+		t.Fatalf("a published decision leaves the list until someone answers:\n%s", out)
+	}
+	discussions = strings.Replace(discussions, `"author":{"username":"alice"}}]}`,
+		`"author":{"username":"alice"}},{"body":"ok, fixed","author":{"username":"alice"}}]}`, 1)
+	h.mustRun("", "discussions")
+	assertContains(t, h.mustRun("", "thread", "list"),
+		"thread d1  api/transfer.go:5  answered, undecided")
 }

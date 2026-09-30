@@ -156,6 +156,16 @@ func printDiscussions(e env, r *state.Review, full bool) {
 	if !full {
 		e.printf("MR discussions: %d unresolved\n", len(open))
 	}
+	if mine := r.MyThreads(); len(mine) > 0 {
+		answered := 0
+		for _, d := range mine {
+			if r.Answered(d) {
+				answered++
+			}
+		}
+		e.printf("your threads: %d open, %d answered — assess them first, see gr thread list\n",
+			len(mine), answered)
+	}
 	for _, d := range open {
 		where := ""
 		if d.File != "" {

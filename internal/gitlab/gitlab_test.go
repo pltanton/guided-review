@@ -103,9 +103,12 @@ func TestFetchDiscussions(t *testing.T) {
 		t.Fatalf("args = %v", gotArgs)
 	}
 	want := []gitlab.Discussion{
-		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57},
-		{ID: "d6", Author: "ci", Body: "**Stuck** approval"},
-		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true},
+		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57,
+			Resolvable: true, Notes: []gitlab.Note{{Author: "alice", Body: "why float?"}, {Author: "bob", Body: "ok"}}},
+		{ID: "d6", Author: "ci", Body: "**Stuck** approval", Notes: []gitlab.Note{
+			{Author: "ci", Body: "<!-- review-bot fp=x -->\n**Stuck** approval"}}},
+		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true, Resolvable: true,
+			Notes: []gitlab.Note{{Author: "carol", Body: "general remark"}}},
 		{
 			ID:      "d4",
 			Author:  "dan",
@@ -113,6 +116,7 @@ func TestFetchDiscussions(t *testing.T) {
 			File:    "api/b.go",
 			Line:    12,
 			OldLine: true,
+			Notes:   []gitlab.Note{{Author: "dan", Body: "on removed line"}},
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

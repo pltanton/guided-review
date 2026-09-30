@@ -73,6 +73,14 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 		return fmt.Errorf("gate not passed, pending: %s (review or skip them first)",
 			strings.Join(pending, " "))
 	}
+	if ids := undecidedThreads(r); len(ids) > 0 {
+		return fmt.Errorf("answered threads without the reviewer's decision: %s "+
+			"(R in the viewer)", strings.Join(ids, " "))
+	}
+	if ids := openThreads(r); *verdict == "approve" && len(ids) > 0 {
+		return fmt.Errorf("approve with your threads still open: %s "+
+			"(resolve them or use --verdict changes)", strings.Join(ids, " "))
+	}
 	r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
 	if err := s.store.Save(r); err != nil {
 		return err
@@ -82,16 +90,59 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 }
 
 type export struct {
-	Provider string   `json:"provider"`
-	Request  string   `json:"request,omitempty"`
-	Host     string   `json:"host"`
-	API      string   `json:"api"`
-	URL      string   `json:"url"`
-	Verdict  string   `json:"verdict"`
-	Approve  bool     `json:"approve"`
-	Comments []int    `json:"comments"`
-	Summary  bool     `json:"summary"`
-	Drafts   []string `json:"drafts"`
+	Provider string         `json:"provider"`
+	Request  string         `json:"request,omitempty"`
+	Host     string         `json:"host"`
+	API      string         `json:"api"`
+	URL      string         `json:"url"`
+	Verdict  string         `json:"verdict"`
+	Approve  bool           `json:"approve"`
+	Comments []int          `json:"comments"`
+	Summary  bool           `json:"summary"`
+	Drafts   []string       `json:"drafts"`
+	Threads  []threadAction `json:"threads,omitempty"`
+}
+
+type threadAction struct {
+	ID       string `json:"id"`
+	Reply    string `json:"reply,omitempty"`
+	Resolve  bool   `json:"resolve"`
+	ReplyAPI string `json:"reply_api,omitempty"`
+	API      string `json:"api,omitempty"`
+}
+
+func threadActions(r *state.Review, md *strings.Builder) []threadAction {
+	var out []threadAction
+	for _, d := range r.MyThreads() {
+		t := r.ThreadState(d)
+		if t.Verdict == "" {
+			continue
+		}
+		a := threadAction{ID: d.ID, Reply: t.Reply, Resolve: t.Verdict == state.VerdictResolve}
+		if r.MR.Provider == state.ProviderGitHub {
+			if a.Reply != "" {
+				ref := github.PRRef{Project: r.MR.Project, Number: r.MR.IID}
+				a.ReplyAPI = ref.Path(fmt.Sprintf("/comments/%d/replies", d.ReplyTo))
+			}
+		} else {
+			ref := gitlab.MRRef{Project: r.MR.Project, IID: r.MR.IID}
+			a.API = ref.Path("/discussions/" + d.ID)
+			if a.Reply != "" {
+				a.ReplyAPI = a.API + "/notes"
+			}
+		}
+		where := "general"
+		if d.File != "" {
+			where = fmt.Sprintf("%s:%d", d.File, d.Line)
+		}
+		verdict := "keep open"
+		if a.Resolve {
+			verdict = "resolve"
+		}
+		fmt.Fprintf(md, "--- thread %s %s %s\n%s\n\n", verdict, where, d.ID, a.Reply)
+		out = append(out, a)
+	}
+	return out
 }
 
 func cmdExport(ctx context.Context, e env, args []string) error {
@@ -138,6 +189,7 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 		notes = append(notes, note)
 		x.Comments = append(x.Comments, c.ID)
 	}
+	x.Threads = threadActions(r, &md)
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
 		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
 		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
@@ -193,11 +245,18 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 	if x.Summary {
 		r.SummaryRound = max(r.Round, 1)
 	}
+	for _, a := range x.Threads {
+		if d := r.Discussion(a.ID); d != nil {
+			t := r.ThreadState(*d)
+			t.Published = true
+			r.SetThread(t)
+		}
+	}
 	r.Publish = nil
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
-	e.printf("marked %d comments published\n", len(x.Comments))
+	e.printf("marked %d comments and %d threads published\n", len(x.Comments), len(x.Threads))
 	return nil
 }
 
@@ -234,6 +293,7 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) erro
 		req.Comments = append(req.Comments, rc)
 		fmt.Fprintf(&md, "--- #%d %s:%d\n%s\n\n", c.ID, c.File, end, body)
 	}
+	x.Threads = threadActions(r, &md)
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
 		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
 		parts = append(parts, summary)

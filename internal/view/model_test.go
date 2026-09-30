@@ -1839,3 +1839,65 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 		t.Fatalf("esc must return to the details: %+v", m.popup)
 	}
 }
+
+func TestThreadsScreen(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(10) }
+	m.review.MR = &state.MR{IID: 7, Title: "guard", Me: "me"}
+	m.review.Discussions = []state.Discussion{
+		{ID: "d1", Author: "me", Body: "**major** return an error", File: "a.go", Line: 5,
+			Resolvable: true, Notes: []state.Note{
+				{Author: "me", Body: "**major** return an error"},
+				{Author: "alice", Body: "zero is expected"}}},
+		{ID: "d2", Author: "me", Body: "**nit** spacing", Resolvable: true,
+			Notes: []state.Note{{Author: "me", Body: "**nit** spacing"}}},
+	}
+	m.review.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
+		Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
+	var calls [][]string
+	m.runGr = func(args ...string) (string, error) {
+		calls = append(calls, args)
+		return "", nil
+	}
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "replies 1 · R") {
+		t.Fatalf("footer must offer the answered thread: %q", ansi.Strip(f))
+	}
+	m.Update(key("R"))
+	body := ansi.Strip(m.View())
+	for _, want := range []string{"a.go:5", "5 ▶ L5", "@alice", "zero is expected",
+		"agent: keep open?", "keep open: callers cannot tell", "reply: please return an error",
+		"no reply"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("threads screen misses %q:\n%s", want, body)
+		}
+	}
+	m.Update(key("a"))
+	m.Update(key("j"))
+	m.Update(key("r"))
+	m.Update(key("k"))
+	m.Update(key("o"))
+	if string(m.input) != "please return an error" {
+		t.Fatalf("o must start from the agent's reply, got %q", string(m.input))
+	}
+	m.Update(key("enter"))
+	m.Update(key("c"))
+	for _, r := range "why?" {
+		m.Update(key(string(r)))
+	}
+	m.Update(key("enter"))
+	want := [][]string{
+		{"thread", "decide", "d1", "--verdict", "open", "--reply", "please return an error"},
+		{"thread", "decide", "d2", "--verdict", "resolve"},
+		{"thread", "decide", "d1", "--verdict", "open", "--reply", "please return an error"},
+	}
+	if !reflect.DeepEqual(calls, want) {
+		t.Fatalf("calls = %q\nwant %q", calls, want)
+	}
+	if n := len(*sent); n != 1 || (*sent)[0].Text != "re thread d1: why?" {
+		t.Fatalf("c must ask the agent about the thread: %+v", *sent)
+	}
+	m.Update(key("esc"))
+	if m.threads {
+		t.Fatal("esc must close the threads screen")
+	}
+}

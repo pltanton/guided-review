@@ -23,7 +23,7 @@ func (m *model) startCompose(kind string) {
 		return
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
-	m.composeRef, m.anchorFile, m.anchorLines = 0, "", ""
+	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
 	switch kind {
 	case inbox.KindMessage:
 		m.anchorFile, m.anchorLines, m.composeRef = m.anchorAt()
@@ -86,13 +86,18 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.composing, m.input = false, nil
+		m.composing, m.input, m.composeThread = false, nil, ""
 		m.resume()
 	case tea.KeyEnter:
 		defer m.resume()
 		text := strings.TrimSpace(string(m.input))
-		m.composing, m.input = false, nil
+		thread := m.composeThread
+		m.composing, m.input, m.composeThread = false, nil, ""
 		switch {
+		case m.composeKind == kindThreadReply:
+			m.decideThread(thread, state.VerdictOpen, text)
+		case thread != "" && text != "":
+			m.emit(inbox.Event{Kind: inbox.KindMessage, Text: "re thread " + thread + ": " + text})
 		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":
 			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":

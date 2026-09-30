@@ -64,6 +64,10 @@ func (m *model) footerButtons() []button {
 		b("ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
 		b("skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
+	if n := m.pendingThreads(); n > 0 {
+		label := fmt.Sprintf("replies %d", n)
+		btns = append(btns, b(label, "replies", (*model).openThreads))
+	}
 	if m.review != nil && m.review.Publish != nil {
 		btns = append(btns, button{"finish", km.key("finish"), (*model).finish})
 	}
@@ -426,6 +430,10 @@ func (m *model) promptLines(width int) []string {
 			prompt = "skip reason › "
 		case m.composeKind == inbox.KindAsk:
 			prompt = fmt.Sprintf("ask %s:%s › ", m.anchorFile, m.anchorLines)
+		case m.composeKind == kindThreadReply:
+			prompt = "reply, thread stays open › "
+		case m.composeThread != "":
+			prompt = "ask about the thread › "
 		case m.composeKind == inbox.KindEdit:
 			prompt = fmt.Sprintf("edit #%d › ", m.composeRef)
 		case m.composeRef > 0:
@@ -486,6 +494,9 @@ func (m *model) View() string {
 			}
 		}
 		return strings.Join(out, "\n")
+	}
+	if m.threads {
+		return m.threadsView()
 	}
 	if m.step == nil {
 		return m.intakeView()
