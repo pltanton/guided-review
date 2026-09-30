@@ -195,13 +195,17 @@ func fileRows(
 				continue
 			}
 			text := expandTabs(l.Text)
+			highlighted := text
+			if hl := Highlight(fd.Path, text); len(hl) > 0 {
+				highlighted = hl[0]
+			}
 			removed[anchor] = append(
 				removed[anchor],
 				Row{
 					Kind:     RowRemoved,
 					File:     fd.Path,
 					OldLine:  old,
-					Text:     Highlight(fd.Path, text)[0],
+					Text:     highlighted,
 					Plain:    text,
 					Reformat: onlyFormat,
 				},

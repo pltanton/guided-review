@@ -72,6 +72,23 @@ func TestBuildRowsWholeFile(t *testing.T) {
 	}
 }
 
+func TestBuildRowsRemovedBlankLine(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 2, NewLines: 0, Lines: []diff.Line{{Kind: '-', Text: ""}, {Kind: '-', Text: "gone"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(3)},
+	}
+	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "F0:a.go\n 1:L1\n 2:L2\n->3:\n-3:gone\n 3:L3\n"
+	if got := summary(rows); got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 func TestBuildRowsRangeAndHotspot(t *testing.T) {
 	src := fakeSource{
 		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
