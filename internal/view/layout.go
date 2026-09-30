@@ -120,7 +120,7 @@ func (m *model) cursorHint() string {
 		del := k.key("delete-comment")
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
-	case cur.Kind == RowNote && cur.NoteKind != "mr" && cur.NoteKind != "pending":
+	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
 		return k.key("open") + " fold · " + k.key("details") + " details"
 	case cur.Kind == RowNote:
 		return k.key("open") + " fold"
@@ -802,6 +802,8 @@ var noteKinds = map[string]struct {
 	"comment": {youTone, "YOU"},
 	"mr":      {blueTone, "MR"},
 	"pending": {warnTone, "…"},
+	"error":   {badTone, "ERROR"},
+	"warning": {warnTone, "WARN"},
 }
 
 func noteBadge(kind, label string) string {

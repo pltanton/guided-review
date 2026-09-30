@@ -1,11 +1,13 @@
 package view
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/pltanton/guided-review/internal/diff"
 	"github.com/pltanton/guided-review/internal/lsp"
 )
 
@@ -39,6 +42,7 @@ const minPreviewWidth = 80
 type lspLoc struct {
 	Path string
 	Line int
+	End  int
 	Text string
 }
 
@@ -181,7 +185,14 @@ func (m *model) defaultLSP(kind, file string, line, col int) tea.Cmd {
 		if line-1 < len(lines) {
 			char = lsp.UTF16Column(lines[line-1], col, 4)
 		}
+		if q, ok := strings.CutPrefix(kind, "workspace:"); ok {
+			syms, err := c.WorkspaceSymbols(ctx, q)
+			return lspMsg{kind: "workspace", locs: symbolLocs(root, abs, syms), err: err}
+		}
 		switch kind {
+		case "symbols":
+			syms, err := c.DocumentSymbols(ctx, abs)
+			return lspMsg{kind: kind, locs: symbolLocs(root, abs, syms), err: err}
 		case "hover":
 			h, err := c.Hover(ctx, abs, line-1, char)
 			return lspMsg{kind: kind, hover: h, err: err}
@@ -354,9 +365,12 @@ func (m *model) handleLSP(msg lspMsg) {
 			title: "hover",
 			lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n"),
 		}
-	case len(msg.locs) == 1 && msg.kind != "references" && msg.kind != "callers":
+	case len(msg.locs) == 1 && !listKinds[msg.kind]:
 		m.openPeek(msg.locs[0])
 	default:
+		if msg.kind == "symbols" {
+			m.markChanged(msg.locs)
+		}
 		m.popup = &popup{
 			kind:  msg.kind,
 			title: fmt.Sprintf("%s · %d", name, len(msg.locs)),
@@ -469,7 +483,8 @@ func (m *model) popupLines(width, height int) []string {
 	border := dimStyle.Render("│ ")
 	hint := "esc close"
 	switch p.kind {
-	case "references", "definition", "implementation", "typeDefinition", "callers":
+	case "references", "definition", "implementation", "typeDefinition", "callers",
+		"symbols", "workspace":
 		hint = "j/k select · enter peek · e editor · esc close"
 	case "peek":
 		hint = "j/k w/b move · gd gr gi gy gc K · e editor · esc back"
@@ -581,6 +596,12 @@ var lspNames = map[string]string{
 	"implementation": "implementations",
 	"typeDefinition": "type definitions",
 	"callers":        "callers",
+	"symbols":        "symbols",
+	"workspace":      "symbols",
+}
+
+var listKinds = map[string]bool{
+	"references": true, "callers": true, "symbols": true, "workspace": true,
 }
 
 var peekG = map[string]string{
@@ -626,4 +647,91 @@ func (m *model) peekLSP(p *popup, plain, kind string) tea.Cmd {
 	p.col = wordStart(plain, p.col)
 	m.lspBusy = kind
 	return m.lspDo(kind, p.loc.Path, p.cursor+1, p.col)
+}
+
+const diagWait = 30 * time.Second
+
+var (
+	diagKinds  = map[int]string{1: "error", 2: "warning"}
+	agentKinds = map[string]bool{"note": true, "spec": true, "hotspot": true}
+)
+
+type diagMsg struct {
+	step  string
+	diags map[string][]lsp.Diagnostic
+}
+
+func (m *model) fetchDiagnostics() tea.Cmd {
+	mgr, root, parent, step := m.manager(), m.codeDir(), m.ctx, m.step.ID
+	var files []string
+	for _, h := range m.step.Hunks {
+		if !slices.Contains(files, h.File) {
+			files = append(files, h.File)
+		}
+	}
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, diagWait)
+		defer cancel()
+		type opened struct {
+			c         *lsp.Client
+			abs, file string
+		}
+		var open []opened
+		for _, f := range files {
+			abs := filepath.Join(root, f)
+			c, lang, err := mgr.client(ctx, abs)
+			if err != nil {
+				continue
+			}
+			content, err := os.ReadFile(abs)
+			if err != nil {
+				continue
+			}
+			mgr.open(c, abs, lang, string(content))
+			open = append(open, opened{c, abs, f})
+		}
+		out := map[string][]lsp.Diagnostic{}
+		for len(out) < len(open) {
+			for _, o := range open {
+				if ds, ok := o.c.Diagnostics(o.abs); ok {
+					out[o.file] = ds
+				}
+			}
+			select {
+			case <-ctx.Done():
+				return diagMsg{step: step, diags: out}
+			case <-time.After(200 * time.Millisecond):
+			}
+		}
+		return diagMsg{step: step, diags: out}
+	}
+}
+
+func symbolLocs(root, file string, syms []lsp.Symbol) []lspLoc {
+	out := make([]lspLoc, 0, len(syms))
+	for _, s := range syms {
+		path := cmp.Or(s.Path, file)
+		if rel, err := filepath.Rel(root, path); err == nil && !strings.HasPrefix(rel, "..") {
+			path = rel
+		}
+		text := strings.Repeat("  ", s.Depth) + s.Kind + " " + s.Name
+		out = append(out, lspLoc{Path: path, Line: s.Line + 1, End: s.End + 1, Text: text})
+	}
+	return out
+}
+
+func (m *model) markChanged(locs []lspLoc) {
+	if m.src == nil {
+		return
+	}
+	for i, l := range locs {
+		touches := func(h diff.Hunk) bool {
+			return h.NewStart <= max(l.End, l.Line) && l.Line <= h.NewEnd()
+		}
+		mark := "  "
+		if fd, err := m.src.FileDiff(l.Path); err == nil && slices.ContainsFunc(fd.Hunks, touches) {
+			mark = "● "
+		}
+		locs[i].Text = mark + l.Text
+	}
 }

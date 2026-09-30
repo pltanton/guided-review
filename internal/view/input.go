@@ -259,9 +259,7 @@ func (m *model) saveRaw(text string) {
 
 func (m *model) noteDetails() {
 	cur := m.current()
-	agentNote := cur.Kind == RowNote && cur.Ref == 0 && cur.NoteKind != "mr" &&
-		cur.NoteKind != "pending"
-	if !agentNote {
+	if cur.Kind != RowNote || cur.Ref > 0 || !agentKinds[cur.NoteKind] {
 		m.status = "put the cursor on one of the agent's notes"
 		return
 	}

@@ -30,6 +30,7 @@ type Client struct {
 	nextID  atomic.Int64
 	mu      sync.Mutex
 	pending map[int64]chan response
+	diags   map[string][]Diagnostic
 	cmd     *exec.Cmd
 }
 
@@ -50,7 +51,7 @@ type incoming struct {
 }
 
 func NewClient(r io.Reader, w io.Writer) *Client {
-	c := &Client{w: w, pending: map[int64]chan response{}}
+	c := &Client{w: w, pending: map[int64]chan response{}, diags: map[string][]Diagnostic{}}
 	go c.read(bufio.NewReader(r))
 	return c
 }
@@ -122,6 +123,8 @@ func (c *Client) read(r *bufio.Reader) {
 		switch {
 		case msg.Method != "" && len(msg.ID) > 0:
 			go c.answerServer(msg)
+		case msg.Method == "textDocument/publishDiagnostics":
+			c.storeDiagnostics(msg.Params)
 		case msg.Method != "":
 		default:
 			id, err := strconv.ParseInt(string(msg.ID), 10, 64)
@@ -204,10 +207,12 @@ func (c *Client) Initialize(ctx context.Context, root string) error {
 				"hover": map[string]any{
 					"contentFormat": []string{"plaintext", "markdown"},
 				},
-				"definition":     map[string]any{"linkSupport": true},
-				"implementation": map[string]any{"linkSupport": true},
-				"typeDefinition": map[string]any{"linkSupport": true},
-				"callHierarchy":  map[string]any{},
+				"definition":         map[string]any{"linkSupport": true},
+				"implementation":     map[string]any{"linkSupport": true},
+				"typeDefinition":     map[string]any{"linkSupport": true},
+				"callHierarchy":      map[string]any{},
+				"documentSymbol":     map[string]any{"hierarchicalDocumentSymbolSupport": true},
+				"publishDiagnostics": map[string]any{},
 			},
 			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
 		},
@@ -237,11 +242,14 @@ func position(path string, line, char int) map[string]any {
 	}
 }
 
+type lspPosition struct {
+	Line      int `json:"line"`
+	Character int `json:"character"`
+}
+
 type lspRange struct {
-	Start struct {
-		Line      int `json:"line"`
-		Character int `json:"character"`
-	} `json:"start"`
+	Start lspPosition `json:"start"`
+	End   lspPosition `json:"end"`
 }
 
 type rawLocation struct {
@@ -482,4 +490,116 @@ func UTF16Column(line string, display, tabWidth int) int {
 		units += utf16.RuneLen(r)
 	}
 	return units
+}
+
+type Diagnostic struct {
+	Line     int
+	Severity int
+	Message  string
+	Source   string
+}
+
+func (c *Client) storeDiagnostics(params json.RawMessage) {
+	var p struct {
+		URI         string `json:"uri"`
+		Diagnostics []struct {
+			Range    lspRange `json:"range"`
+			Severity int      `json:"severity"`
+			Message  string   `json:"message"`
+			Source   string   `json:"source"`
+		} `json:"diagnostics"`
+	}
+	if json.Unmarshal(params, &p) != nil {
+		return
+	}
+	ds := make([]Diagnostic, 0, len(p.Diagnostics))
+	for _, d := range p.Diagnostics {
+		ds = append(ds, Diagnostic{
+			Line: d.Range.Start.Line, Severity: d.Severity, Message: d.Message, Source: d.Source,
+		})
+	}
+	c.mu.Lock()
+	c.diags[uriPath(p.URI)] = ds
+	c.mu.Unlock()
+}
+
+func (c *Client) Diagnostics(path string) (ds []Diagnostic, ok bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ds, ok = c.diags[path]
+	return ds, ok
+}
+
+type Symbol struct {
+	Name  string
+	Kind  string
+	Path  string
+	Line  int
+	End   int
+	Depth int
+}
+
+var symbolKinds = map[int]string{
+	2: "module", 3: "namespace", 4: "package", 5: "class", 6: "method", 7: "property",
+	8: "field", 9: "constructor", 10: "enum", 11: "interface", 12: "func", 13: "var",
+	14: "const", 22: "enum member", 23: "struct", 26: "type param",
+}
+
+type docSymbol struct {
+	Name           string    `json:"name"`
+	Kind           int       `json:"kind"`
+	Range          *lspRange `json:"range"`
+	SelectionRange *lspRange `json:"selectionRange"`
+	Location       *struct {
+		URI   string   `json:"uri"`
+		Range lspRange `json:"range"`
+	} `json:"location"`
+	Children []docSymbol `json:"children"`
+}
+
+func flatten(syms []docSymbol, path string, depth int, out *[]Symbol) {
+	for _, s := range syms {
+		sym := Symbol{Name: s.Name, Kind: symbolKinds[s.Kind], Path: path, Depth: depth}
+		switch {
+		case s.SelectionRange != nil:
+			sym.Line, sym.End = s.SelectionRange.Start.Line, s.SelectionRange.Start.Line
+			if s.Range != nil {
+				sym.End = s.Range.End.Line
+			}
+		case s.Location != nil:
+			sym.Path, sym.Line = uriPath(s.Location.URI), s.Location.Range.Start.Line
+			sym.End = s.Location.Range.End.Line
+		}
+		*out = append(*out, sym)
+		flatten(s.Children, path, depth+1, out)
+	}
+}
+
+func (c *Client) DocumentSymbols(ctx context.Context, path string) ([]Symbol, error) {
+	raw, err := c.call(ctx, "textDocument/documentSymbol",
+		map[string]any{"textDocument": map[string]any{"uri": fileURI(path)}})
+	if err != nil {
+		return nil, err
+	}
+	var syms []docSymbol
+	if err := json.Unmarshal(raw, &syms); err != nil {
+		return nil, err
+	}
+	var out []Symbol
+	flatten(syms, path, 0, &out)
+	return out, nil
+}
+
+func (c *Client) WorkspaceSymbols(ctx context.Context, query string) ([]Symbol, error) {
+	raw, err := c.call(ctx, "workspace/symbol", map[string]any{"query": query})
+	if err != nil {
+		return nil, err
+	}
+	var syms []docSymbol
+	if err := json.Unmarshal(raw, &syms); err != nil {
+		return nil, err
+	}
+	var out []Symbol
+	flatten(syms, "", 0, &out)
+	return out, nil
 }

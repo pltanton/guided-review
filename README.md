@@ -101,6 +101,7 @@ both sides in full.
 | `:42` | go to line 42 of the file under the cursor |
 | `:s3`, `:all`, `:boilerplate`, `:generated` | open a step or view |
 | `:f transfer` | jump to the first file of the step whose path contains the text |
+| `:sym Transfer` | find a symbol in the project (LSP) |
 | `:set context=10`, `:set diff=patience` | context lines, diff algorithm |
 | `:msg text`, `:skip reason`, `:q` | message the agent, skip the step, quit |
 | `:split`, `:next`, `:definition`, … | any action by name (see `h`) |
@@ -140,6 +141,8 @@ both sides in full.
 | `m` | mouse capture on/off (off lets the terminal select text) |
 | `w` / `b`, click a word | move the symbol cursor within the line |
 | `g` | shows what can follow it (`gg`, `gd`, `gr`); `esc` cancels |
+| `gs` | symbols of the file, `●` marks those with changed lines; `:sym name` searches the project |
+| `ERROR` / `WARN` under a line | the language server's diagnostics for the step's files, collected in the background |
 | `gd` / `gr` / `gi` / `gy` / `gc` / `K` | LSP: definition (peek), references, implementations, type definition, callers (incoming calls), hover. Lists show a code preview of the selected item, `enter` peeks. Inside a peek `j`/`k` and `w`/`b` move a cursor and the same keys go further; `esc` / `ctrl+o` step back, `e` opens the editor there |
 | `tab` / `shift+tab` | more / default context |
 | `e` | open `$EDITOR` at the line (tmux popup) |

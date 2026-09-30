@@ -13,6 +13,7 @@ import (
 
 	"github.com/pltanton/guided-review/internal/config"
 	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/lsp"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -1578,5 +1579,42 @@ func TestLSPFromPeek(t *testing.T) {
 	if len(asked) != 3 || !strings.HasPrefix(asked[1], "typeDefinition ") ||
 		!strings.HasPrefix(asked[2], "callers ") {
 		t.Fatalf("gy and gc must ask the server: %q", asked)
+	}
+}
+
+func TestDiagnosticsAndSymbols(t *testing.T) {
+	m, _ := newTestModel(t)
+	var asked []string
+	m.lspDo = func(kind, file string, line, col int) tea.Cmd {
+		asked = append(asked, kind)
+		return nil
+	}
+	if _, cmd := m.Update(key("j")); cmd == nil || m.diagStep != "s1" {
+		t.Fatal("opening a step must start collecting its diagnostics")
+	}
+	m.Update(diagMsg{step: "s2", diags: map[string][]lsp.Diagnostic{"a.go": {{Line: 1, Severity: 1}}}})
+	if m.diags != nil {
+		t.Fatal("diagnostics of another step are dropped")
+	}
+	m.Update(diagMsg{step: "s1", diags: map[string][]lsp.Diagnostic{"a.go": {
+		{Line: 1, Severity: 1, Message: "x declared and not used", Source: "compiler"},
+		{Line: 2, Severity: 3, Message: "hint"},
+	}}})
+	var diag []Note
+	for _, n := range m.notes() {
+		if n.Kind == "error" || n.Kind == "warning" {
+			diag = append(diag, n)
+		}
+	}
+	want := Note{File: "a.go", Line: 2, Kind: "error", Text: "x declared and not used (compiler)"}
+	if len(diag) != 1 || diag[0] != want {
+		t.Fatalf("diagnostic notes %+v, want only %+v", diag, want)
+	}
+	m.cursor = 2
+	m.Update(key(":"))
+	typeText(m, "sym Transfer")
+	m.Update(key("enter"))
+	if len(asked) != 1 || asked[0] != "workspace:Transfer" {
+		t.Fatalf(":sym must search the workspace: %q", asked)
 	}
 }

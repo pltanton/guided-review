@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,32 @@ func TestGopls(t *testing.T) {
 		t.Fatalf("Hover = %q, %v", hover, err)
 	}
 	t.Logf("hover: %q", hover)
+	syms, err := c.DocumentSymbols(ctx, b)
+	if err != nil || len(syms) != 1 || syms[0].Name != "Transfer" || syms[0].Kind != "func" ||
+		syms[0].Line != 3 {
+		t.Fatalf("DocumentSymbols = %+v, %v", syms, err)
+	}
+	found, err := c.WorkspaceSymbols(ctx, "Transfer")
+	if err != nil || !slices.ContainsFunc(found, func(s Symbol) bool {
+		return s.Name == "Transfer" && filepath.Base(s.Path) == "b.go"
+	}) {
+		t.Fatalf("WorkspaceSymbols = %+v, %v", found, err)
+	}
+	write("c.go", "package m\n\nfunc broken() {\n\tx := 1\n}\n")
+	cf := filepath.Join(dir, "c.go")
+	data, _ = os.ReadFile(cf)
+	_ = c.DidOpen(cf, "go", string(data))
+	var diags []Diagnostic
+	for range 100 {
+		if ds, ok := c.Diagnostics(cf); ok && len(ds) > 0 {
+			diags = ds
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(diags) == 0 || diags[0].Line != 3 || diags[0].Severity != 1 {
+		t.Fatalf("Diagnostics = %+v", diags)
+	}
 	callers, err := c.IncomingCalls(ctx, b, 3, 6)
 	if err != nil || len(callers) != 1 || filepath.Base(callers[0].Path) != "a.go" || callers[0].Line != 3 {
 		t.Fatalf("IncomingCalls = %+v, %v", callers, err)
