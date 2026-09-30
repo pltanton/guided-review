@@ -66,6 +66,7 @@ type popup struct {
 	cursor int
 	col    int
 	gKey   bool
+	refs   []lspLoc
 }
 
 type lspManager struct {
@@ -468,6 +469,11 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 			cmd := editorCmd(m.codeDir(), loc.Path, max(loc.Line, 1))
 			return tea.ExecProcess(cmd, func(err error) tea.Msg { return editorDoneMsg{err} })
 		}
+	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
+		if i := int(msg.String()[0] - '1'); i < len(p.refs) {
+			m.popupStack = append(m.popupStack, p)
+			m.openPeek(p.refs[i])
+		}
 	case "esc", "q", "ctrl+o":
 		if n := len(m.popupStack); n > 0 {
 			m.popup, m.popupStack = m.popupStack[n-1], m.popupStack[:n-1]
@@ -490,6 +496,9 @@ func (m *model) popupLines(width, height int) []string {
 		hint = "j/k w/b move · gd gr gi gy gc K · e editor · esc back"
 	case "detail":
 		hint = "j/k or wheel scroll · esc close"
+		if len(p.refs) > 0 {
+			hint = "1-9 open code · j/k scroll · esc close"
+		}
 	}
 	head := fmt.Sprintf("┌─ %s ", p.title)
 	fill := max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)

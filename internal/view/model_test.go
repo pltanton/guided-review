@@ -1814,3 +1814,28 @@ func TestFlowCompact(t *testing.T) {
 		t.Fatalf("calls show method first, no parameters, deduped and capped:\n%s", v)
 	}
 }
+
+func TestNoteDetailsShowMentionedCode(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.seek(func(l line) bool { return l.Kind == RowNote })
+	note := m.current()
+	m.step.Details = []state.Detail{{File: note.File, Line: note.Line,
+		Text: "claim races in a.go:7 and (a.go:7), not in missing.go:3."}}
+	m.Update(key("i"))
+	if got := m.popup.refs; len(got) != 1 || got[0] != (lspLoc{Path: "a.go", Line: 7}) {
+		t.Fatalf("refs = %+v, want only a.go:7", got)
+	}
+	body := ansi.Strip(strings.Join(m.popup.lines, "\n"))
+	if !strings.Contains(body, "1  a.go:7") || !strings.Contains(body, "7 ▶ L7") {
+		t.Fatalf("popup must show the mentioned code:\n%s", body)
+	}
+	m.Update(key("1"))
+	if m.popup.kind != "peek" || m.popup.loc.Line != 7 {
+		t.Fatalf("1 must peek a.go:7: %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	if m.popup == nil || m.popup.kind != "detail" {
+		t.Fatalf("esc must return to the details: %+v", m.popup)
+	}
+}

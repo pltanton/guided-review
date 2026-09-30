@@ -299,7 +299,9 @@ func (m *model) refreshDetail() bool {
 	}
 	text, ok := m.step.Detail(p.loc.Path, p.loc.Line)
 	if ok {
-		p.lines = markdownLines(expandTabs(text), min(max(m.mainWidth()-4, 20), detailWidth))
+		width := min(max(m.mainWidth()-4, 20), detailWidth)
+		p.refs = m.detailRefs(text)
+		p.lines = append(markdownLines(expandTabs(text), width), m.refLines(p, width)...)
 	}
 	return ok
 }
