@@ -32,19 +32,31 @@ pool: called outside reserve() it would commit on its own.`
 # Review comments (`gr comment add` BODY)
 
 This text goes to the MR author, who was not in the review. Keep the human's point and
-tone, but make it readable on its own:
+tone, in their language, and give it this shape — at most three short lines, each on its
+own line, no paragraph:
 
-- What is wrong or unclear, pointing at the identifier, not "here".
-- Why it matters: the scenario or consequence in one sentence.
-- What to do, or the question to answer.
+1. **The problem**, about a dozen words, naming the identifier in backticks.
+2. **Why it matters**: the concrete scenario or consequence. Skip it for a nit.
+3. **The ask**: what to do, or the question to answer. A `--suggestion` replaces it when
+   the fix is obvious.
 
-Two to five sentences; a nit can be one, but a full sentence. Write in the language the
-human used. Do not add points they did not make.
+Around forty words in all. No filler ("I think", "maybe consider"), no line numbers (the
+comment sits on the line), no praise, nothing the human did not say. The longer reasoning
+stays in your note's `detail`, not in the comment.
 
-Bad: `nil check noise`
-Good: `The nil check in Hndl can never fire: every handler is a literal in the same
-package, so a nil can only come from a typo that the compiler already catches. It adds a
-branch and a test for nothing — let's drop both.`
+Bad (a wall):
+`The nil check in Hndl can never fire because every handler is declared as a literal in the
+same package, so a nil could only come from a typo that the compiler already catches, which
+means it adds a branch and a test for nothing and we should drop both.`
+
+Good:
+```
+`Hndl` checks for a nil handler that can never be nil.
+Handlers are literals in this package; a typo would not compile.
+Drop the check and its test.
+```
+
+Good nit: `` `cnt` → `count`: the rest of the file spells it out. ``
 
 # Never
 
