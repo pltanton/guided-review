@@ -697,6 +697,10 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
 	}
+	if i, ok := m.optionKey(msg.String()); ok {
+		m.answer(i)
+		return nil
+	}
 	return m.dispatch(msg.String())
 }
 

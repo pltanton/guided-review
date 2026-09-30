@@ -34,7 +34,9 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 		if m.onChatInput(msg.X, msg.Y) {
-			if !m.composing {
+			if i := m.optionAt(msg.X - m.inputRowX()); i >= 0 && !m.composing {
+				m.answer(i)
+			} else if !m.composing {
 				m.startCompose(inbox.KindMessage)
 			}
 			return nil
@@ -142,5 +144,15 @@ func (m *model) onChatInput(x, y int) bool {
 	case m.chatWidth() > 0:
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
-	return false
+	return len(m.answerOptions()) > 0 && y == m.height-2
+}
+
+func (m *model) inputRowX() int {
+	switch {
+	case m.step == nil:
+		return max((m.width-min(max(m.width-2, 20), intakeWidth))/2, 0)
+	case m.chatWidth() > 0:
+		return m.width - m.chatWidth() + 2
+	}
+	return 0
 }

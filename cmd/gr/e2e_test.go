@@ -720,3 +720,21 @@ func TestOutdatedPlanOnResume(t *testing.T) {
 		t.Fatal("a plan with reviewed steps is kept")
 	}
 }
+
+func TestSayOptions(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun("", "say", "--option", "да", "--option", "нет", "Верно понял?")
+	h.mustRun("", "say", "- a list item")
+	_, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, second := r.Messages[len(r.Messages)-2], r.Messages[len(r.Messages)-1]
+	if first.Text != "Верно понял?" || !slices.Equal(first.Options, []string{"да", "нет"}) {
+		t.Fatalf("options not stored: %+v", first)
+	}
+	if second.Text != "- a list item" || second.Options != nil {
+		t.Fatalf("a message starting with - is text: %+v", second)
+	}
+}

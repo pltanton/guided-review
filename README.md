@@ -117,6 +117,7 @@ both sides in full.
 | `c` / `enter` | message the agent; the cursor line (or selection) is attached, `backspace` on empty input (or `ctrl+x`) detaches it; on one of your comments it is a reply |
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
 | `C` | message the agent without attaching a line |
+| `1`…`9` before the plan, `alt+1`…`alt+9` during steps, click | pick one of the answers the agent offered |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `t` | bigger / smaller chat at the bottom |

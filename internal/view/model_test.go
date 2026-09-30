@@ -1548,3 +1548,35 @@ func TestClickChatInput(t *testing.T) {
 		t.Fatal("a click on the intake answer field must open the input")
 	}
 }
+
+func TestAnswerOptions(t *testing.T) {
+	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	var sent []inbox.Event
+	r := &state.Review{ID: "mr-1", Messages: []state.Message{
+		{Time: t0, Text: "Верно понял?", Options: []string{"да", "нет, поправлю"}},
+	}}
+	m := &model{review: r, width: 100, height: 20,
+		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, " 1 да   2 нет, поправлю") {
+		t.Fatalf("intake must offer the answers:\n%s", v)
+	}
+	m.Update(key("2"))
+	if len(sent) != 1 || sent[0].Text != "нет, поправлю" {
+		t.Fatalf("2 must send the second answer: %+v", sent)
+	}
+	m.events = []inbox.Event{{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Text: "x"}}
+	if len(m.answerOptions()) != 0 {
+		t.Fatal("answers disappear once the human replied")
+	}
+
+	s, sentS := newTestModel(t)
+	s.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: []string{"да"}}}
+	s.Update(key("1"))
+	if len(*sentS) != 0 {
+		t.Fatal("during steps a bare digit is a count, not an answer")
+	}
+	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1"), Alt: true})
+	if len(*sentS) != 1 || (*sentS)[0].Text != "да" {
+		t.Fatalf("alt+1 must answer: %+v", *sentS)
+	}
+}

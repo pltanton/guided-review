@@ -170,8 +170,12 @@ func (m *model) sideChatLines(h, w int) []string {
 	km := m.keys()
 	prompt := []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
 		km.key("message"), km.key("message-general")))}
-	if m.inputInSideChat() {
+	switch {
+	case m.inputInSideChat():
 		prompt = append([]string{rule}, m.promptLines(w)...)
+	case len(m.answerOptions()) > 0:
+		pills, _ := m.optionPills()
+		prompt = []string{rule, pills}
 	}
 	lines = append(lines, window(m.chatLines(w, true), h-len(lines)-len(prompt), m.chatTop)...)
 	for len(lines)+len(prompt) < h {
@@ -378,6 +382,9 @@ func (m *model) bottomLines() []string {
 			shown = append([]string{""}, shown...)
 		}
 		lines = append(lines, shown...)
+		if pills, _ := m.optionPills(); len(m.answerOptions()) > 0 && !m.composing {
+			lines = append(lines, pills)
+		}
 	}
 	if m.inputInSideChat() {
 		footer, _ := m.footer()
@@ -885,7 +892,11 @@ func (m *model) intakeView() string {
 	prompt := m.promptLines(w)
 	if !m.composing && m.err == nil {
 		field := fmt.Sprintf("› press %s or enter to answer the agent", m.keys().key("message"))
-		prompt = append([]string{fieldStyle.Render(fit(field, w))}, prompt...)
+		line := fieldStyle.Render(fit(field, w))
+		if len(m.answerOptions()) > 0 {
+			line, _ = m.optionPills()
+		}
+		prompt = append([]string{line}, prompt...)
 	}
 	chatH := max(m.height-len(top)-len(prompt)-1, 1)
 	chat := window(m.chatLines(w, false), chatH, m.chatTop)

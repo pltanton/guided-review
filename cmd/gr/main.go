@@ -34,7 +34,7 @@ review
 viewer channel
   view [--return PANE]
   wait [--timeout 9m]
-  say TEXT... | say -
+  say [--option ANSWER]... TEXT... | -   options become answer buttons in the viewer
   progress TEXT...
   idle                 Stop hook: tells the viewer the agent ended its turn
 

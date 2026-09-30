@@ -55,6 +55,10 @@ func cmdWait(ctx context.Context, e env, args []string) error {
 }
 
 func cmdSay(ctx context.Context, e env, args []string) error {
+	var options []string
+	for len(args) > 1 && args[0] == "--option" {
+		options, args = append(options, args[1]), args[2:]
+	}
 	text := strings.Join(args, " ")
 	if text == "-" {
 		data, err := readInput(e, "-")
@@ -64,13 +68,11 @@ func cmdSay(ctx context.Context, e env, args []string) error {
 		text = string(data)
 	}
 	if text = strings.TrimSpace(text); text == "" {
-		return errors.New("usage: gr say TEXT (or - to read stdin)")
+		return errors.New("usage: gr say [--option ANSWER]... TEXT (or - to read stdin)")
 	}
 	return update(ctx, e, func(r *state.Review) {
-		r.Messages = append(
-			r.Messages,
-			state.Message{Time: time.Now(), Step: r.Current, Text: text},
-		)
+		msg := state.Message{Time: time.Now(), Step: r.Current, Text: text, Options: options}
+		r.Messages = append(r.Messages, msg)
 		r.Messages = r.Messages[max(len(r.Messages)-state.MaxMessages, 0):]
 		r.Progress = nil
 	})

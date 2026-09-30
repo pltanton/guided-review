@@ -14,6 +14,11 @@ with your annotations, your messages, and types replies there. You talk to them 
 `gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
 turn — they are not looking at it.
 
+When you ask a question with a few likely answers, offer them:
+`gr say --option "да" --option "нет, поправлю" "…"`. They become buttons in the viewer
+(the human can still type anything). Two to four options, a few words each, in the
+human's language; the chosen text arrives as an ordinary `[message]`.
+
 Never end your turn while the viewer is open: every question goes through `gr say` and
 then `gr wait`. If you end it anyway, the viewer shows "agent stopped" and their replies
 sit unread. Once the human finishes in the viewer (`[finished]`, see Wrap-up) it closes,
@@ -62,7 +67,7 @@ the unresolved MR discussions (`gr discussions` prints them in full), and
 `git diff --stat <base> <head>`. Do not read code yet.
 
 `gr say` at most three lines: the task in one line, how the change solves it in one
-line, then «верно понял?». Everything else you noticed — failing checks, open
+line, then «верно понял?» with options such as «да» and «нет, поправлю». Everything else you noticed — failing checks, open
 discussions, spec mismatches, stale examples in the description — is not intake:
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
@@ -195,8 +200,8 @@ before leaving a step. You only hear about what needs you.
    viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
    and do not move the current step; they return to it themselves.
 
-3. After a blocker gr prints the stale steps. `gr say` once: «дальше смотрим
-   независимые (N шагов) или завершаем?» and wait.
+3. After a blocker gr prints the stale steps. `gr say` once, with both answers as
+   options: «дальше смотрим независимые (N шагов) или завершаем?», and wait.
 4. If the human writes in the terminal chat instead, handle it the same way, then
    return to `gr wait`.
 

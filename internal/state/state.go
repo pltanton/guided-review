@@ -81,9 +81,10 @@ type Review struct {
 }
 
 type Message struct {
-	Time time.Time `yaml:"time"`
-	Step string    `yaml:"step,omitempty"`
-	Text string    `yaml:"text"`
+	Time    time.Time `yaml:"time"`
+	Step    string    `yaml:"step,omitempty"`
+	Text    string    `yaml:"text"`
+	Options []string  `yaml:"options,omitempty"`
 }
 
 const MaxMessages = 50
