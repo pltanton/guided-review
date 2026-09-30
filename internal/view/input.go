@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
@@ -336,4 +337,51 @@ func (m *model) resume() {
 	if err != nil {
 		m.err = err
 	}
+}
+
+func (m *model) yank() {
+	lo, hi := m.cursor, m.cursor
+	if m.visual {
+		lo, hi = min(m.anchor, m.cursor), max(m.anchor, m.cursor)
+	}
+	var out []string
+	for i := lo; i <= hi && i < len(m.lines); i++ {
+		switch l := m.lines[i]; l.Kind {
+		case RowCode, RowAdded, RowRemoved:
+			out = append(out, cmp.Or(l.Plain, ansi.Strip(l.Text)))
+		case RowNote:
+			out = append(out, l.Text)
+		}
+	}
+	if len(out) == 0 {
+		m.status = "nothing to copy here"
+		return
+	}
+	copyText := m.clip
+	if copyText == nil {
+		copyText = clipboard
+	}
+	if err := copyText(strings.Join(out, "\n")); err != nil {
+		m.err = err
+		return
+	}
+	m.visual = false
+	m.status = fmt.Sprintf("copied %d lines", len(out))
+}
+
+func clipboard(text string) error {
+	for _, argv := range [][]string{
+		{"pbcopy"},
+		{"wl-copy"},
+		{"xclip", "-selection", "clipboard"},
+		{"xsel", "--clipboard", "--input"},
+	} {
+		if _, err := exec.LookPath(argv[0]); err != nil {
+			continue
+		}
+		cmd := exec.Command(argv[0], argv[1:]...)
+		cmd.Stdin = strings.NewReader(text)
+		return cmd.Run()
+	}
+	return errors.New("no clipboard tool: install pbcopy, wl-copy or xclip")
 }

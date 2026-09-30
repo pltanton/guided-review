@@ -81,6 +81,7 @@ type model struct {
 	returnPane  string
 	interrupted bool
 	tmux        func(args ...string) error
+	clip        func(text string) error
 	closed      bool
 	preview     string
 	previewTop  int

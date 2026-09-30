@@ -1707,3 +1707,16 @@ func TestInterruptAgent(t *testing.T) {
 		t.Fatalf("the agent must be told to go on: %q", tmux)
 	}
 }
+
+func TestYank(t *testing.T) {
+	m, _ := newTestModel(t)
+	var got string
+	m.clip = func(text string) error { got = text; return nil }
+	m.cursor = 1
+	m.Update(key("v"))
+	m.Update(key("j"))
+	m.Update(key("y"))
+	if got != "package a\nx := 1" || m.visual || !strings.Contains(m.status, "copied 2 lines") {
+		t.Fatalf("y copied %q, status %q", got, m.status)
+	}
+}
