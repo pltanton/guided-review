@@ -1063,7 +1063,11 @@ func (m *model) animate(r Row) Row {
 }
 
 func (m *model) inputWithCursor(pos int) string {
-	return string(m.input[:pos]) + "█" + string(m.input[pos:])
+	if pos >= len(m.input) {
+		return string(m.input) + "█"
+	}
+	under := lipgloss.NewStyle().Reverse(true).Render(string(m.input[pos]))
+	return string(m.input[:pos]) + under + string(m.input[pos+1:])
 }
 
 func (m *model) keyHints(prefix string) []string {
