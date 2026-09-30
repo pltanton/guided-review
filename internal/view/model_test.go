@@ -1444,8 +1444,8 @@ func TestLocalNext(t *testing.T) {
 	out := "step s2\n"
 	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return out, nil }
 	m.Update(key(">"))
-	if len(ran) != 0 || !strings.Contains(m.status, "risk question") {
-		t.Fatalf("first > on a hotspot step must only remind: ran %v status %q", ran, m.status)
+	if len(ran) != 0 || !strings.Contains(m.notice, "risk question") {
+		t.Fatalf("first > on a hotspot step must only remind: ran %v notice %q", ran, m.notice)
 	}
 	m.Update(key(">"))
 	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "next"}) || len(*sent) != 0 {
@@ -1607,8 +1607,11 @@ func TestSeenLines(t *testing.T) {
 		t.Fatal("nothing is seen before the step is on screen")
 	}
 	m.Update(key(">"))
-	if ran != 0 || !strings.Contains(m.status, "changed lines not seen yet") {
-		t.Fatalf("> must warn about unseen lines: ran %d status %q", ran, m.status)
+	if ran != 0 || !strings.Contains(m.notice, "changed lines not seen yet") {
+		t.Fatalf("> must warn about unseen lines: ran %d notice %q", ran, m.notice)
+	}
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "press > again") {
+		t.Fatalf("the reminder must be in the footer: %q", ansi.Strip(f))
 	}
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "✓ seen") || m.unseen() != 0 {
 		t.Fatalf("rendering the whole step marks it seen:\n%s", v)
@@ -1646,7 +1649,7 @@ func TestFlowSection(t *testing.T) {
 		{name: "reserve", in: []string{"Handle", "Retry"}, out: []string{"Insert"}},
 	}})
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"FLOW", "reserve", "← Handle", "    Retry", "→ Insert"} {
+	for _, want := range []string{"FLOW", "reserve", "← Handle", "← Retry", "→ Insert"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("plan pane lacks %q:\n%s", want, v)
 		}
@@ -1797,13 +1800,17 @@ func TestInputCursorKeepsText(t *testing.T) {
 	}
 }
 
-func TestFlowWraps(t *testing.T) {
+func TestFlowCompact(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.height = 40
-	m.flow = []flowEntry{{name: "save", out: []string{"RepositoryMetrics.operationWithAVeryLongName(String, Function)"}}}
+	calls := []string{"RepositoryMetrics.operation(String, Function)", "RepositoryMetrics.operation(String)"}
+	for i := range 6 {
+		calls = append(calls, fmt.Sprintf("Repo.find%d", i))
+	}
+	m.flow = []flowEntry{{name: "save", out: calls}}
 	v := ansi.Strip(m.View())
-	if strings.Contains(v, "(String") || !strings.Contains(v, "→ RepositoryMetrics.") ||
-		!strings.Contains(v, "↳ operationWithAVery") {
-		t.Fatalf("callee names drop their parameters and wrap:\n%s", v)
+	if strings.Contains(v, "(String") || !strings.Contains(v, "→ operation · Repositor") ||
+		strings.Count(v, "→ operation") != 1 || !strings.Contains(v, "+3 more") {
+		t.Fatalf("calls show method first, no parameters, deduped and capped:\n%s", v)
 	}
 }

@@ -35,8 +35,6 @@ var (
 	fieldStyle    = mutedTone.fg().Background(surfaceTone.color())
 	labelStyle    = mutedTone.fg().Bold(true)
 	chapterStyle  = accentTone.fg()
-	addEmphStyle  = textTone.fg().Background(addBgTone.color()).Bold(true)
-	delEmphStyle  = textTone.fg().Background(delBgTone.color()).Bold(true)
 )
 
 const (
@@ -109,6 +107,9 @@ func (m *model) footer() (string, []span) {
 		spans = append(spans, span{x, x + w, b})
 		line += buttonStyle.Render(" "+b.label+" · ") + keyStyle.Render(b.key+" ") + " "
 		x += w + 1
+	}
+	if m.notice != "" {
+		return line + " " + hotStyle.Render(m.notice), spans
 	}
 	return line + " " + dimStyle.Render(tail), spans
 }
@@ -543,6 +544,10 @@ func (m *model) View() string {
 			line = paint(line, selectTone)
 		case m.lines[i].Kind == RowFile:
 			line = paint(line, fileTone)
+		case m.lines[i].Kind == RowNote && m.lines[i].Dim:
+			line = paint(line, surfaceTone)
+		case m.lines[i].Kind == RowNote:
+			line = paint(line, noteKinds[m.lines[i].NoteKind].bg)
 		case m.lines[i].Pair:
 		case m.lines[i].Kind == RowAdded:
 			line = paint(line, addLineTone)
@@ -732,27 +737,34 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	if len(m.flow) > 0 {
 		n := dimStyle.Render(fmt.Sprint(len(m.flow)))
 		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FLOW"), n))})
-		wrapped := func(lead, text string, style lipgloss.Style) {
-			for i, l := range strings.Split(ansi.Wrap(text, max(iw-len(lead)-2, 8), "."), "\n") {
-				head := style.Render(lead)
-				if i > 0 {
-					head = strings.Repeat(" ", max(len(lead)-2, 0)) + chapterStyle.Faint(true).Render("↳ ")
-				}
-				out = append(out, sideEntry{text: plain(head + style.Render(l))})
-			}
-		}
 		calls := func(arrow string, names []string) {
-			for i, n := range names {
-				lead := "    "
-				if i == 0 {
-					lead = "  " + arrow + " "
-				}
+			var seen []string
+			for _, n := range names {
 				n, _, _ = strings.Cut(n, "(")
-				wrapped(lead, n, dimStyle)
+				if slices.Contains(seen, n) {
+					continue
+				}
+				seen = append(seen, n)
+				if len(seen) > maxFlowCalls {
+					continue
+				}
+				cls, method := "", n
+				if i := strings.LastIndex(n, "."); i > 0 {
+					cls, method = n[:i], n[i+1:]
+				}
+				text := dimStyle.Render("  "+arrow+" ") + textTone.fg().Render(method)
+				if cls != "" {
+					text += faintTone.fg().Render(" · " + cls)
+				}
+				out = append(out, sideEntry{text: plain(row(text, ""))})
+			}
+			if extra := len(seen) - maxFlowCalls; extra > 0 {
+				more := dimStyle.Render(fmt.Sprintf("    +%d more", extra))
+				out = append(out, sideEntry{text: plain(row(more, ""))})
 			}
 		}
 		for _, f := range m.flow {
-			wrapped("", f.name, textTone.fg())
+			out = append(out, sideEntry{text: plain(row(boldStyle.Render(f.name), ""))})
 			calls("←", f.in)
 			calls("→", f.out)
 		}
@@ -814,7 +826,7 @@ func renderCode(c Cell, hot bool) string {
 	case RowAdded:
 		marker = addStyle.Render("+")
 	case RowRemoved:
-		marker, text = delStyle.Render("-"), delStyle.Render(c.Text)
+		marker = delStyle.Render("-")
 	}
 	switch {
 	case c.Moved:
@@ -822,7 +834,7 @@ func renderCode(c Cell, hot bool) string {
 	case c.Reformat:
 		marker = dimStyle.Render("≈")
 	case c.Emph != nil:
-		text = renderEmph(c.Plain, c.Emph, c.Kind)
+		text = emphasize(c.Text, c.Emph, c.Kind)
 	}
 	if c.RenamedFrom != "" {
 		marker = gapStyle.Render("⇄")
@@ -838,42 +850,32 @@ func renderCode(c Cell, hot bool) string {
 	return marker + dimStyle.Render(num) + sep + text
 }
 
-func renderEmph(plain string, emph [][2]int, kind RowKind) string {
-	base, strong := addStyle, addEmphStyle
+func emphasize(text string, emph [][2]int, kind RowKind) string {
+	strong, line := addBgTone, addLineTone
 	if kind == RowRemoved {
-		base, strong = delStyle, delEmphStyle
+		strong, line = delBgTone, delLineTone
 	}
-	runes := []rune(plain)
-	var b strings.Builder
-	pos := 0
 	for _, e := range emph {
-		from, to := min(e[0], len(runes)), min(e[1], len(runes))
-		if from > pos {
-			b.WriteString(base.Render(string(runes[pos:from])))
-		}
-		if to > from {
-			b.WriteString(strong.Render(string(runes[from:to])))
-		}
-		pos = max(pos, to)
+		text = markRange(text, e[0], e[1], bgSeq(strong)+"\x1b[1m", "\x1b[22m"+bgSeq(line))
 	}
-	if pos < len(runes) {
-		b.WriteString(base.Render(string(runes[pos:])))
-	}
-	return b.String()
+	return text
 }
 
-const noteIndent = 1 + 7 + 2
+const (
+	noteIndent   = 1 + 7 + 2
+	maxFlowCalls = 4
+)
 
 var noteKinds = map[string]struct {
-	tone  tone
-	label string
+	tone, bg tone
+	label    string
 }{
-	"note":    {agentTone, "NOTE"},
-	"spec":    {badTone, "SPEC"},
-	"hotspot": {warnTone, "RISK"},
-	"comment": {youTone, "YOU"},
-	"mr":      {blueTone, "MR"},
-	"pending": {warnTone, "…"},
+	"note":    {agentTone, tone{"#E8F6F8", "#162529"}, "NOTE"},
+	"spec":    {badTone, tone{"#FBEDED", "#2A1A1D"}, "SPEC"},
+	"hotspot": {warnTone, tone{"#FBF4E4", "#292316"}, "RISK"},
+	"comment": {youTone, tone{"#FAEBF3", "#291827"}, "YOU"},
+	"mr":      {blueTone, tone{"#EAF0FB", "#172033"}, "MR"},
+	"pending": {warnTone, tone{"#FBF4E4", "#292316"}, "…"},
 }
 
 func noteBadge(kind, label string) string {
@@ -912,7 +914,7 @@ func expandNotes(rows []Row, width int, folded map[string]bool) []Row {
 }
 
 func renderNote(r Row) string {
-	t, text := noteKinds[r.NoteKind].tone, textTone
+	t, text := noteKinds[r.NoteKind].tone, noteTextTone
 	if r.Dim {
 		t, text = faintTone, mutedTone
 	}
@@ -922,7 +924,7 @@ func renderNote(r Row) string {
 		pill := inkTone.fg().Background(t.color()).Bold(true)
 		lead = pill.Render(badge) + " "
 	}
-	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Render(r.Text)
+	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Italic(true).Render(r.Text)
 }
 
 func (m *model) renderSplit(i, w int) string {

@@ -201,7 +201,7 @@ func fileRows(
 					Kind:     RowRemoved,
 					File:     fd.Path,
 					OldLine:  old,
-					Text:     text,
+					Text:     Highlight(fd.Path, text)[0],
 					Plain:    text,
 					Reformat: onlyFormat,
 				},

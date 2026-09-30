@@ -98,9 +98,9 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
    explanation saves the reader real effort: what a non-obvious call does and why,
    where the spec disagrees (`kind: spec`). Full sentences, not fragments. One to three
    annotations per step; none is fine. Give every annotation and every hotspot a
-   `detail`: three to eight sentences on what exactly the point or problem is, the
-   scenario where it bites and what to do, with a short code excerpt in a fenced block
-   when it helps. You have all of it in context now; `i` in the viewer shows it at once
+   `detail` in three short paragraphs, one or two sentences each — `**Problem.** …`,
+   `**When it bites.** …` (the scenario), `**What to do.** …` — plus a short code excerpt
+   in a fenced block when it helps. You have all of it in context now; `i` in the viewer shows it at once
    instead of asking you again.
 5. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists. It posts
    s1's message itself.
@@ -199,9 +199,8 @@ before leaving a step. You only hear about what needs you.
      answer with `gr say` in a few lines. Do not create comments or notes for it.
    - `[detail] sN file:line: <note text>` — a note without a `detail` (add one with every
      note from now on). Read
-     the code again and write three to eight sentences: what exactly the problem or the
-     point is, the scenario where it bites, and what to do about it; add a short code
-     excerpt in a fenced block when it helps. Save it with
+     the code again and write it in the same three short paragraphs — `**Problem.**`,
+     `**When it bites.**`, `**What to do.**` — with a code excerpt when it helps. Save it with
      `gr note detail --file F --line N [--step sN] - <<'EOF' … EOF`; the viewer shows it
      in the popup that is already open. No `gr say` needed.
    - `[reviewed] sN` — the human went past the last step: go to Wrap-up.

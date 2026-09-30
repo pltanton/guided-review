@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -272,7 +273,7 @@ func (m *model) noteDetails() {
 		return
 	}
 	loc := lspLoc{Path: cur.File, Line: cur.Line}
-	title := fmt.Sprintf("details · %s:%d", cur.File, cur.Line)
+	title := fmt.Sprintf("details · %s:%d", filepath.Base(cur.File), cur.Line)
 	m.popup = &popup{kind: "detail", title: title, loc: loc}
 	if m.refreshDetail() {
 		return
@@ -298,12 +299,15 @@ func (m *model) refreshDetail() bool {
 	}
 	text, ok := m.step.Detail(p.loc.Path, p.loc.Line)
 	if ok {
-		p.lines = markdownLines(expandTabs(text), max(m.mainWidth()-4, 20))
+		p.lines = markdownLines(expandTabs(text), min(max(m.mainWidth()-4, 20), detailWidth))
 	}
 	return ok
 }
 
-const resumeAgent = "Continue the guided review: run gr wait."
+const (
+	resumeAgent = "Continue the guided review: run gr wait."
+	detailWidth = 96
+)
 
 func (m *model) runTmux(args ...string) error {
 	if m.tmux != nil {

@@ -17,25 +17,26 @@ func (t tone) color() lipgloss.AdaptiveColor {
 func (t tone) fg() lipgloss.Style { return lipgloss.NewStyle().Foreground(t.color()) }
 
 var (
-	accentTone  = tone{"#6D28D9", "#A78BFA"}
-	agentTone   = tone{"#0E7490", "#67E8F9"}
-	youTone     = tone{"#BE185D", "#F9A8D4"}
-	okTone      = tone{"#047857", "#6EE7B7"}
-	warnTone    = tone{"#B45309", "#FCD34D"}
-	badTone     = tone{"#B91C1C", "#FCA5A5"}
-	blueTone    = tone{"#1D4ED8", "#93C5FD"}
-	textTone    = tone{"#1F2937", "#E5E7EB"}
-	mutedTone   = tone{"#6B7280", "#7C8394"}
-	faintTone   = tone{"#9CA3AF", "#4B5263"}
-	surfaceTone = tone{"#EEF0F6", "#232737"}
-	cursorTone  = tone{"#E3E7F2", "#2B3044"}
-	selectTone  = tone{"#DAD5FB", "#3A3360"}
-	fileTone    = tone{"#ECE9FD", "#29243F"}
-	addBgTone   = tone{"#BBF7D0", "#14532D"}
-	addLineTone = tone{"#F0FAF3", "#18261D"}
-	delLineTone = tone{"#FCF1F1", "#2A1B1D"}
-	delBgTone   = tone{"#FECACA", "#7F1D1D"}
-	inkTone     = tone{"#FFFFFF", "#111827"}
+	accentTone   = tone{"#6D28D9", "#A78BFA"}
+	agentTone    = tone{"#0E7490", "#67E8F9"}
+	youTone      = tone{"#BE185D", "#F9A8D4"}
+	okTone       = tone{"#047857", "#6EE7B7"}
+	warnTone     = tone{"#B45309", "#FCD34D"}
+	badTone      = tone{"#B91C1C", "#FCA5A5"}
+	blueTone     = tone{"#1D4ED8", "#93C5FD"}
+	textTone     = tone{"#1F2937", "#E5E7EB"}
+	noteTextTone = tone{"#374151", "#BAC2CF"}
+	mutedTone    = tone{"#6B7280", "#7C8394"}
+	faintTone    = tone{"#9CA3AF", "#4B5263"}
+	surfaceTone  = tone{"#EEF0F6", "#232737"}
+	cursorTone   = tone{"#E3E7F2", "#2B3044"}
+	selectTone   = tone{"#DAD5FB", "#3A3360"}
+	fileTone     = tone{"#ECE9FD", "#29243F"}
+	addBgTone    = tone{"#BBF7D0", "#14532D"}
+	addLineTone  = tone{"#F0FAF3", "#18261D"}
+	delLineTone  = tone{"#FCF1F1", "#2A1B1D"}
+	delBgTone    = tone{"#FECACA", "#7F1D1D"}
+	inkTone      = tone{"#FFFFFF", "#111827"}
 )
 
 // paint puts a background under an already styled line. Styled spans end with a full

@@ -121,6 +121,7 @@ type model struct {
 	raw         bool
 	deleteArmed int
 	confirmNext string
+	notice      string
 	lspStep     string
 	seen        map[string]bool
 	flow        []flowEntry
@@ -641,7 +642,7 @@ func (m *model) next() {
 		}
 		if len(why) > 0 && m.confirmNext != m.step.ID {
 			m.confirmNext = m.step.ID
-			m.status = strings.Join(why, " · ") + ": press > again to move on"
+			m.notice = strings.Join(why, " · ") + " — press > again to move on"
 			return
 		}
 		m.confirmNext = ""
@@ -717,7 +718,7 @@ func (m *model) finish() tea.Cmd {
 }
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	m.status = ""
+	m.status, m.notice = "", ""
 	if msg.String() != m.keys().key("delete-comment") {
 		m.deleteArmed = 0
 	}

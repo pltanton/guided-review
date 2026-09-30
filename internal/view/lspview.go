@@ -549,7 +549,10 @@ func (m *model) popupLines(width, height int) []string {
 
 // Styled spans end with a full SGR reset, so the underline is re-armed after each escape.
 func underline(s string, from, to int) string {
-	const on, off = "\x1b[4m", "\x1b[24m"
+	return markRange(s, from, to, "\x1b[4m", "\x1b[24m")
+}
+
+func markRange(s string, from, to int, on, off string) string {
 	if from >= to {
 		return s
 	}
