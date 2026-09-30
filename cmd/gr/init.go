@@ -13,6 +13,7 @@ import (
 
 	"github.com/pltanton/guided-review/internal/classify"
 	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/state"
@@ -40,7 +41,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	t, err := resolveTarget(ctx, s.repo, e.glab, fs.Arg(0), *base)
+	t, err := resolveTarget(ctx, e, s.repo, fs.Arg(0), *base)
 	if err != nil {
 		return err
 	}
@@ -83,7 +84,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if *self {
 		r.Mode = modeSelf
 	}
-	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+	if err := syncDiscussions(ctx, e, r); err != nil {
 		return err
 	}
 	if err := s.store.Save(r); err != nil {
@@ -108,17 +109,19 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 
 func resolveTarget(
 	ctx context.Context,
+	e env,
 	repo gitx.Repo,
-	glab gitlab.Runner,
 	arg, base string,
 ) (target, error) {
 	switch {
+	case github.IsPRURL(arg):
+		return githubTarget(ctx, e, repo, arg)
 	case gitlab.IsMRURL(arg):
 		ref, err := gitlab.ParseMRURL(arg)
 		if err != nil {
 			return target{}, err
 		}
-		mr, err := gitlab.FetchMR(ctx, glab, ref)
+		mr, err := gitlab.FetchMR(ctx, e.glab, ref)
 		if err != nil {
 			return target{}, err
 		}
@@ -343,7 +346,7 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 		r.CodeDir(s.repo.Dir),
 	)
 	if r.MR != nil {
-		e.printf("MR !%d %s\n%s\n", r.MR.IID, r.MR.Title, r.MR.URL)
+		e.printf("%s %s\n%s\n", r.MR.Label(), r.MR.Title, r.MR.URL)
 	}
 	if r.Domain != "" {
 		e.printf("domain: %s\n", r.Domain)
@@ -381,20 +384,61 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 	e.printf("\nnext: %s\n", next)
 }
 
-func syncDiscussions(ctx context.Context, glab gitlab.Runner, r *state.Review) error {
+func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 	if r.MR == nil {
 		return nil
 	}
-	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
-	ds, err := gitlab.FetchDiscussions(ctx, glab, ref)
-	if err != nil {
+	r.Discussions = r.Discussions[:0]
+	if r.MR.Provider == state.ProviderGitHub {
+		ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
+		ds, err := github.FetchDiscussions(ctx, e.gh, ref)
+		for _, d := range ds {
+			r.Discussions = append(r.Discussions, state.Discussion(d))
+		}
 		return err
 	}
-	r.Discussions = r.Discussions[:0]
+	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
+	ds, err := gitlab.FetchDiscussions(ctx, e.glab, ref)
 	for _, d := range ds {
 		r.Discussions = append(r.Discussions, state.Discussion(d))
 	}
-	return nil
+	return err
+}
+
+func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (target, error) {
+	ref, err := github.ParsePRURL(arg)
+	if err != nil {
+		return target{}, err
+	}
+	pr, err := github.FetchPR(ctx, e.gh, ref)
+	if err != nil {
+		return target{}, err
+	}
+	fetch := map[string]string{
+		pr.Base.SHA: "git fetch origin",
+		pr.Head.SHA: fmt.Sprintf("git fetch origin pull/%d/head", ref.Number),
+	}
+	for sha, how := range fetch {
+		if _, err := repo.Commit(ctx, sha); err != nil {
+			return target{}, fmt.Errorf("commit %s not found locally: run %s", short(sha), how)
+		}
+	}
+	base, err := repo.MergeBase(ctx, pr.Base.SHA, pr.Head.SHA)
+	if err != nil {
+		return target{}, err
+	}
+	return target{
+		id:     fmt.Sprintf("pr-%d", ref.Number),
+		source: arg,
+		branch: pr.Head.Ref,
+		base:   base,
+		start:  base,
+		head:   pr.Head.SHA,
+		mr: &state.MR{
+			Provider: state.ProviderGitHub, URL: pr.URL, Host: ref.Host,
+			Project: ref.Project, IID: ref.Number, Title: pr.Title,
+		},
+	}, nil
 }
 
 func planOutdated(r *state.Review) bool {

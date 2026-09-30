@@ -907,7 +907,7 @@ func (m *model) intakeTop(w int) []string {
 	r := m.review
 	title := "guided review · " + r.ID
 	if r.MR != nil {
-		title = fmt.Sprintf("guided review · !%d %s", r.MR.IID, r.MR.Title)
+		title = "guided review · " + r.MR.Label() + " " + r.MR.Title
 	}
 	var stages []string
 	cur := 0

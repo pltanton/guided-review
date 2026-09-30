@@ -112,11 +112,12 @@ type Discussion struct {
 }
 
 type MR struct {
-	URL     string `yaml:"url"`
-	Host    string `yaml:"host"`
-	Project string `yaml:"project"`
-	IID     int    `yaml:"iid"`
-	Title   string `yaml:"title"`
+	Provider string `yaml:"provider,omitempty"`
+	URL      string `yaml:"url"`
+	Host     string `yaml:"host"`
+	Project  string `yaml:"project"`
+	IID      int    `yaml:"iid"`
+	Title    string `yaml:"title"`
 }
 
 type File struct {
@@ -272,4 +273,13 @@ func (s *Step) HotspotFile(h Hotspot) (file string, sure bool) {
 		}
 	}
 	return files[0], len(files) == 1
+}
+
+const ProviderGitHub = "github"
+
+func (m *MR) Label() string {
+	if m.Provider == ProviderGitHub {
+		return fmt.Sprintf("PR #%d", m.IID)
+	}
+	return fmt.Sprintf("MR !%d", m.IID)
 }

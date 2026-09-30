@@ -90,7 +90,7 @@ func (m *model) finishView() string {
 	r := m.review
 	title := "finish"
 	if r.MR != nil {
-		title += fmt.Sprintf(" · !%d %s", r.MR.IID, r.MR.Title)
+		title += " · " + r.MR.Label() + " " + r.MR.Title
 	}
 	comments := strings.Count("\n"+m.preview, "\n--- ") - strings.Count(m.preview, "--- summary")
 	facts := []string{fmt.Sprintf("%d comments to post", comments)}

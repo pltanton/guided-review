@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/pltanton/guided-review/internal/diff"
+	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
@@ -30,7 +31,7 @@ func cmdDiscussions(ctx context.Context, e env, _ []string) error {
 	if r.MR == nil {
 		return errors.New("not a merge request review")
 	}
-	if err := syncDiscussions(ctx, e.glab, r); err != nil {
+	if err := syncDiscussions(ctx, e, r); err != nil {
 		return err
 	}
 	if err := s.store.Save(r); err != nil {
@@ -81,6 +82,8 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 }
 
 type export struct {
+	Provider string   `json:"provider"`
+	Request  string   `json:"request,omitempty"`
 	Host     string   `json:"host"`
 	API      string   `json:"api"`
 	URL      string   `json:"url"`
@@ -112,9 +115,17 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
+	if r.MR.Provider == state.ProviderGitHub {
+		return exportGitHub(e, r, mrFiles, *dryRun)
+	}
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
 	x := export{
-		Host: ref.Host, API: ref.Path(""), URL: r.MR.URL, Verdict: p.Verdict, Approve: p.Approve,
+		Provider: "gitlab",
+		Host:     ref.Host,
+		API:      ref.Path(""),
+		URL:      r.MR.URL,
+		Verdict:  p.Verdict,
+		Approve:  p.Approve,
 	}
 	var md strings.Builder
 	var notes []gitlab.DraftNote
@@ -188,6 +199,91 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 	}
 	e.printf("marked %d comments published\n", len(x.Comments))
 	return nil
+}
+
+func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) error {
+	p := r.Publish
+	ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
+	x := export{
+		Provider: state.ProviderGitHub, Request: "review-request.json", Host: ref.Host,
+		API: ref.Path("/reviews"), URL: r.MR.URL, Verdict: p.Verdict, Approve: p.Approve,
+	}
+	req := github.Review{CommitID: r.HeadSHA, Event: "COMMENT"}
+	var md strings.Builder
+	var parts, general []string
+	for _, c := range r.Comments {
+		if c.Published {
+			continue
+		}
+		x.Comments = append(x.Comments, c.ID)
+		body := fmt.Sprintf("**%s** %s", c.Severity, c.Body)
+		if c.Suggestion != "" {
+			body += fmt.Sprintf("\n\n```suggestion\n%s\n```", c.Suggestion)
+		}
+		start, end, _ := state.ParseLines(c.Lines)
+		if c.SHA != r.HeadSHA || !inPRDiff(mrFiles, c.File, end) {
+			note := fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)
+			general = append(general, note)
+			fmt.Fprintf(&md, "--- %s:%d (general note)\n%s\n\n", c.File, end, note)
+			continue
+		}
+		rc := github.ReviewComment{Path: c.File, Line: end, Side: "RIGHT", Body: body}
+		if start < end && inPRDiff(mrFiles, c.File, start) {
+			rc.StartLine, rc.StartSide = start, "RIGHT"
+		}
+		req.Comments = append(req.Comments, rc)
+		fmt.Fprintf(&md, "--- %s:%d\n%s\n\n", c.File, end, body)
+	}
+	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
+		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
+		parts = append(parts, summary)
+		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
+	}
+	req.Body = strings.Join(append(parts, general...), "\n\n")
+	switch {
+	case p.Verdict == "approve" && p.Approve:
+		req.Event = "APPROVE"
+	case p.Verdict != "approve":
+		req.Event = "REQUEST_CHANGES"
+	}
+	if req.Body == "" && req.Event != "COMMENT" {
+		req.Body = "See the inline comments."
+	}
+	if dryRun {
+		e.printf("%s", md.String())
+		return nil
+	}
+	dir := filepath.Join(e.exportDir, r.ID)
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(dir, x.Request), req); err != nil {
+		return err
+	}
+	if err := writeJSON(filepath.Join(dir, "review.json"), x); err != nil {
+		return err
+	}
+	mdPath := filepath.Join(dir, "review.md")
+	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
+		return err
+	}
+	e.println(dir)
+	return nil
+}
+
+// GitHub accepts review comments only on lines of the PR diff, which carries three lines
+// of context around each change.
+func inPRDiff(files []diff.File, path string, line int) bool {
+	i := slices.IndexFunc(files, func(f diff.File) bool { return f.Path == path })
+	if i < 0 {
+		return false
+	}
+	return slices.ContainsFunc(files[i].Hunks, func(h diff.Hunk) bool {
+		return line >= h.NewStart-3 && line <= h.NewEnd()+3
+	})
 }
 
 const modeSelf = "self"

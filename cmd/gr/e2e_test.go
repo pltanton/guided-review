@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
 	"github.com/pltanton/guided-review/internal/testrepo"
@@ -21,6 +22,7 @@ type harness struct {
 	repo  *testrepo.Repo
 	cache string
 	glab  func(context.Context, ...string) ([]byte, error)
+	gh    func(context.Context, ...string) ([]byte, error)
 }
 
 func newHarness(t *testing.T) *harness {
@@ -56,6 +58,7 @@ func (h *harness) run(stdin string, args ...string) (string, error) {
 			stdin:     strings.NewReader(stdin),
 			stdout:    &out,
 			glab:      h.glab,
+			gh:        h.gh,
 		},
 		args,
 	)
@@ -767,5 +770,55 @@ func TestPlanFromParts(t *testing.T) {
 	}
 	if f := r.File("wire.go"); f == nil || f.Tier != state.TierBoilerplate {
 		t.Fatal("boilerplate from the skeleton must apply")
+	}
+}
+
+func TestGitHubPR(t *testing.T) {
+	h := newHarness(t)
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	var calls []string
+	h.gh = func(_ context.Context, args ...string) ([]byte, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if slices.Contains(args, "graphql") {
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
+				{"id":"t1","isResolved":false,"path":"api/transfer.go","line":5,"diffSide":"RIGHT",
+				 "comments":{"totalCount":1,"nodes":[{"body":"why 0?","author":{"login":"bob"}}]}}]},
+				"comments":{"nodes":[]}}}}}`), nil
+		}
+		return fmt.Appendf(nil, `{"title":"Add guard","html_url":"https://github.com/o/r/pull/7",
+			"head":{"ref":"feature","sha":%q},"base":{"sha":%q}}`, head, base), nil
+	}
+	out := h.mustRun("", "init", "https://github.com/o/r/pull/7")
+	assertContains(t, out, "review pr-7", "PR #7 Add guard", "@bob")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4-6",
+		"--severity", "major", "--suggestion", "\tif a <= 0 {", "zero is negative too")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes", "--decisions", "fix the guard")
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	data, err := os.ReadFile(filepath.Join(dir, "review-request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req github.Review
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatal(err)
+	}
+	want := github.ReviewComment{Path: "api/transfer.go", Line: 6, Side: "RIGHT", StartLine: 4,
+		StartSide: "RIGHT", Body: "**major** zero is negative too\n\n```suggestion\n\tif a <= 0 {\n```"}
+	if req.Event != "REQUEST_CHANGES" || req.CommitID != head || len(req.Comments) != 1 ||
+		req.Comments[0] != want || !strings.Contains(req.Body, "Guided review: changes requested") {
+		t.Fatalf("review request: %s", data)
+	}
+	x, err := os.ReadFile(filepath.Join(dir, "review.json"))
+	if err != nil || !strings.Contains(string(x), `"api": "repos/o/r/pulls/7/reviews"`) {
+		t.Fatalf("review.json: %s %v", x, err)
+	}
+	for _, c := range calls {
+		if strings.Contains(c, "-X POST") {
+			t.Fatalf("gr must not write to GitHub: %v", calls)
+		}
 	}
 }

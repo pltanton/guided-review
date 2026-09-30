@@ -29,7 +29,7 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 	}
 	e.printf("review %s  %s..%s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA))
 	if r.MR != nil {
-		e.printf("MR !%d %s\n", r.MR.IID, r.MR.Title)
+		e.printf("%s %s\n", r.MR.Label(), r.MR.Title)
 	}
 	e.printf("code: %s\n", r.CodeDir(s.repo.Dir))
 	if r.Round > 1 {
@@ -105,10 +105,11 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 	}
 	fs := e.flags("plan set")
 	var paths []string
-	fs.Func("f", "plan file, repeat to join parts in order (default: stdin)", func(v string) error {
+	addPath := func(v string) error {
 		paths = append(paths, v)
 		return nil
-	})
+	}
+	fs.Func("f", "plan file, repeat to join parts in order (default: stdin)", addPath)
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}

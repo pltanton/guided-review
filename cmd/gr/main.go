@@ -9,13 +9,14 @@ import (
 	"os"
 	"os/signal"
 
+	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 )
 
 const usage = `usage: gr <command> [args]
 
 review
-  init [--base REV] [--id ID] [--force] [--self] [MR-URL | BRANCH | BASE..HEAD]
+  init [--base REV] [--id ID] [--force] [--self] [MR-URL | PR-URL | BRANCH | BASE..HEAD]
   status [--gate]
   hunks
   plan set [-f FILE]...
@@ -75,6 +76,7 @@ type env struct {
 	stdin     io.Reader
 	stdout    io.Writer
 	glab      gitlab.Runner
+	gh        github.Runner
 	exportDir string
 }
 
@@ -112,7 +114,8 @@ func start(ctx context.Context) error {
 		return err
 	}
 	e := env{
-		dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout, glab: gitlab.Glab,
+		dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout,
+		glab: gitlab.Glab, gh: github.Gh,
 		exportDir: "/tmp/guided-review",
 	}
 	return run(ctx, e, os.Args[1:])

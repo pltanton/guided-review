@@ -12,10 +12,10 @@ bug would be expensive, writes down your remarks and, when you are done, posts t
 the MR.
 
 It does not review for you. Every step needs your "next" or a skip with a reason, and
-nothing goes to GitLab before you have seen it. On the next round you only see what
+nothing goes to the MR before you have seen it. On the next round you only see what
 changed, starting with whether your comments were addressed.
 
-GitLab via `glab`, Claude Code or Codex as the agent, tmux for the viewer.
+GitLab via `glab` or GitHub via `gh`, Claude Code or Codex as the agent, tmux for the viewer.
 
 ## Install
 
@@ -31,7 +31,8 @@ Codex:
     ln -s "$PWD/skills/guided-review" ~/.codex/skills/guided-review
     ln -s "$PWD/skills/guided-selfreview" ~/.codex/skills/guided-selfreview
 
-Requirements: git, tmux for the viewer pane, `glab` (authenticated) for MR URLs. LSP
+Requirements: git, tmux for the viewer pane, `glab` (authenticated) for GitLab MR URLs or
+`gh` for GitHub PR URLs. LSP
 navigation uses `gopls`, `kotlin-lsp`, `basedpyright-langserver` and friends when they
 are on `PATH`; the server starts in the review's worktree on first use.
 
@@ -44,11 +45,12 @@ In tmux, in the repository (any branch — the MR is checked out into its own wo
 The viewer opens full screen in a `review-<id>` tmux window (restarted if it already exists). The bottom line shows what the
 agent is doing (spinner, progress text, timer) or `● your turn` when it is your turn.
 
-`gr` never writes to GitLab. At the end `P` in the viewer (or `gr export`) writes the
+`gr` never writes to GitLab or GitHub. At the end `P` in the viewer (or `gr export`) writes the
 result to `/tmp/guided-review/<id>/`: `review.md` to read, `review.json` and one ready
-GitLab draft-note body per inline comment (nits with an obvious fix as suggestions) plus a
+GitLab draft-note body per inline comment (for GitHub, one ready review request)
+(nits with an obvious fix as suggestions) plus a
 summary with the verdict, decisions, the step table and coverage. The agent shows what
-goes out, asks, posts the drafts with `glab` in one batch and runs `gr mark-published`.
+goes out, asks, posts it with `glab` or `gh` in one batch and runs `gr mark-published`.
 After publishing it tells the author: through your `guided-review-notify` skill if you
 have one (see Extending), otherwise it prints a line to forward.
 

@@ -247,7 +247,7 @@ func TestIntakeBeforePlan(t *testing.T) {
 		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"guided review · !1 Add guard", "● task & plan  ›  ○ steps  ›  ○ finish",
+		"guided review · MR !1 Add guard", "● task & plan  ›  ○ steps  ›  ○ finish",
 		"2 files  +310 −2   core 1 · boilerplate 0 · generated 1", "1 open discussions",
 		"claude │ Task: reject negatives. Верно понял?",
 	} {

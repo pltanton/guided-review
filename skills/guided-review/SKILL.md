@@ -1,6 +1,6 @@
 ---
 name: guided-review
-description: Use when the user wants to review a merge request, branch or change set step by step — "проведи по ревью", "давай поревьюим MR", "guided review", "review this MR with me", a GitLab MR URL together with a request to review it. Plans the route through the change, walks the reviewer through small ordered pieces with the gr CLI and a tmux viewer pane, records their comments.
+description: Use when the user wants to review a merge request, branch or change set step by step — "проведи по ревью", "давай поревьюим MR", "guided review", "review this MR with me", "review this PR", a GitLab MR or GitHub PR URL together with a request to review it. Plans the route through the change, walks the reviewer through small ordered pieces with the gr CLI and a tmux viewer pane, records their comments.
 ---
 
 # Guided review
@@ -29,7 +29,7 @@ and the rest happens in the terminal chat.
 
 ## Setup — no questions
 
-1. `gr init <what the user gave>` — pass the MR URL verbatim when they gave one; no
+1. `gr init <what the user gave>` — pass the MR or PR URL verbatim when they gave one; no
    argument only when they gave nothing (current branch against the default
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
@@ -62,7 +62,8 @@ screen. `gr say` and `gr plan set` clear it.
 
 ## Intake — fast and short
 
-Use only what is cheap: the MR description (`glab mr view <iid>`), a linked spec,
+Use only what is cheap: the description (`glab mr view <iid>` for GitLab,
+`gh pr view <n> --repo <owner/repo>` for GitHub), a linked spec,
 the unresolved MR discussions (`gr discussions` prints them in full), and
 `git diff --stat <base> <head>`. Do not read code yet.
 
@@ -72,7 +73,7 @@ discussions, spec mismatches, stale examples in the description — is not intak
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
 
-`glab` is read-only for you until the wrap-up: the only writes to the MR are the ones in
+`glab` and `gh` are read-only for you until the wrap-up: the only writes to the MR are the ones in
 "Publish" below, after the human said yes.
 
 ## Plan
@@ -274,11 +275,21 @@ line, say whether the code answers it.
    instead, run `gr export` yourself: it prints the same dir.
    From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
    `gr say` / `gr wait` — and ending your turn with a question is fine.
-4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted),
-   `review.json` (`host`, `api`, `url`, `verdict`, `approve`, `drafts`) and
-   `drafts/NN.json`, each the exact body of one GitLab draft note, the summary last.
-   Tell them what goes out — N comments, the summary, the verdict, approve or not — and
-   ask «публикую?». Only on a clear yes:
+4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
+   `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
+   goes out — N comments, the summary, the verdict, approve or not — and ask «публикую?».
+   Only on a clear yes, by provider:
+
+   **GitHub** — one request carries the summary, the verdict and every comment:
+   ```bash
+   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
+   gh api --hostname $host -X POST "$api" --input "$dir/review-request.json"
+   gr mark-published
+   ```
+   GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set `"event": "COMMENT"`
+   in `review-request.json` and post again.
+
+   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last:
    ```bash
    dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
    glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
@@ -290,8 +301,8 @@ line, say whether the code answers it.
    glab api --hostname $host -X POST "$api/approve"
    gr mark-published
    ```
-   If a POST fails, stop: `gr say` the GitLab error and that the drafts created so far sit
-   unpublished on the MR; do not retry blindly. After success give the MR link.
+   If a GitLab POST fails, stop: say the error and that the drafts created so far sit
+   unpublished on the MR; do not retry blindly. After success give the link.
 5. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
