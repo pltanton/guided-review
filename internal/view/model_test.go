@@ -349,12 +349,12 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"✓ next", "✎ message", "? ask", "↷ skip"} {
+	for _, b := range []string{"next · >", "message · c", "ask · ?", "skip · S"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
 	}
-	x := ansi.StringWidth(last[:strings.Index(last, "✓ next")])
+	x := ansi.StringWidth(last[:strings.Index(last, "next · >")])
 	m.Update(
 		tea.MouseMsg{
 			X:      x + 2,
@@ -366,7 +366,7 @@ func TestButtons(t *testing.T) {
 	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
 		t.Fatalf("click on next: %+v", *sent)
 	}
-	x = ansi.StringWidth(last[:strings.Index(last, "✎ message")])
+	x = ansi.StringWidth(last[:strings.Index(last, "message · c")])
 	m.Update(
 		tea.MouseMsg{
 			X:      x + 2,
@@ -784,7 +784,7 @@ func TestFinishButton(t *testing.T) {
 		t.Fatalf("P before prepare: status %q ran %v", m.status, ran)
 	}
 	m.review.Publish = &state.PublishPlan{Verdict: "approve"}
-	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "✓ finish · P") {
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "finish · P") {
 		t.Fatalf("finish button missing: %q", ansi.Strip(f))
 	}
 	m.Update(key("P"))

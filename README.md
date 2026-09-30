@@ -121,7 +121,7 @@ both sides in full.
 | `ctrl+r` while writing | raw mode: the text is saved as a comment exactly as typed, without the agent (`tab` picks the severity); works for `E` edits too |
 | `C` | message the agent without attaching a line |
 | `1`…`9` before the plan, `alt+1`…`alt+9` during steps, click | pick one of the answers the agent offered |
-| `y` | copy the selection (`v`) or the line to the system clipboard |
+| `y` | copy the selection (`v`) or the line to the system clipboard (through tmux, or OSC 52 outside it — works over SSH) |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `ctrl+y` / `ctrl+e`, wheel | scroll the chat |

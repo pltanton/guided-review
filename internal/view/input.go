@@ -2,8 +2,10 @@ package view
 
 import (
 	"cmp"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -370,18 +372,12 @@ func (m *model) yank() {
 }
 
 func clipboard(text string) error {
-	for _, argv := range [][]string{
-		{"pbcopy"},
-		{"wl-copy"},
-		{"xclip", "-selection", "clipboard"},
-		{"xsel", "--clipboard", "--input"},
-	} {
-		if _, err := exec.LookPath(argv[0]); err != nil {
-			continue
-		}
-		cmd := exec.Command(argv[0], argv[1:]...)
+	if os.Getenv("TMUX") != "" {
+		cmd := exec.Command("tmux", "load-buffer", "-w", "-")
 		cmd.Stdin = strings.NewReader(text)
 		return cmd.Run()
 	}
-	return errors.New("no clipboard tool: install pbcopy, wl-copy or xclip")
+	encoded := base64.StdEncoding.EncodeToString([]byte(text))
+	_, err := fmt.Fprintf(os.Stdout, "\x1b]52;c;%s\x07", encoded)
+	return err
 }

@@ -61,13 +61,13 @@ func (m *model) footerButtons() []button {
 		return button{label, km.key(action), func(m *model) tea.Cmd { press(m); return nil }}
 	}
 	btns := []button{
-		b("✓ next", "next", (*model).next),
-		b("✎ message", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
-		b("? ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
-		b("↷ skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
+		b("next", "next", (*model).next),
+		b("message", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
+		b("ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
+		b("skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
 	if m.review != nil && m.review.Publish != nil {
-		btns = append(btns, button{"✓ finish", km.key("finish"), (*model).finish})
+		btns = append(btns, button{"finish", km.key("finish"), (*model).finish})
 	}
 	return btns
 }
