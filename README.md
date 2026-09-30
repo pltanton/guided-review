@@ -49,56 +49,87 @@ viewer lists every key.
 
 ## How it works
 
-**Plan.** The agent reads the whole change before you see anything and groups it into
-chapters by behaviour — "transfers", "limits", "migration" — not by file. Inside a
-chapter the steps go spec, contracts, then each entry point and the code it calls, tests
-right after the code they test. A step is small: about 300 changed lines at most, unless
-the agent says why it can't be split. Boilerplate and generated files are kept out of
-the steps but stay one keypress away.
+1. **The agent plans.** It reads the whole change and splits it into small steps,
+   grouped by behaviour, in reading order.
+2. **You walk the steps.** Each step is a piece of code with a two-line explanation,
+   notes on tricky lines and ⚑ on risky ones.
+3. **You say what is wrong.** In your own words; the agent turns it into review comments.
+4. **Nothing is skipped silently.** Every step needs your "next" or a skip with a reason.
+5. **You approve what gets posted.** `gr` writes the result locally; the agent posts it
+   only after your yes.
+6. **Next round shows only what changed**, starting with the replies to your threads.
 
-**Step.** Each step shows its code and a short message from the agent: what the code
-does, where it disagrees with the spec, the one question worth asking. Some lines carry
-notes that explain a non-obvious call; hotspots (⚑) mark the places where a mistake is
-expensive — money, security, consistency, migrations. Behind every note and hotspot is
-a longer explanation with the code it refers to, written while the agent planned, so it
-opens instantly.
+<details>
+<summary>Plan and steps</summary>
 
-**Conversation.** You talk to the agent from the viewer. Point at a line or a selection
-and write in your own words; the agent turns it into a review comment with a severity
-and, for an obvious fix, a suggestion. You can also ask about code without leaving a
-comment, or save a comment exactly as typed. When the agent needs a decision it offers
-answers you pick with one key.
+Chapters follow behaviour ("transfers", "limits", "migration"), not files. Inside a
+chapter: spec, contracts, each entry point with the code it calls, tests right after
+the code they test. A step is up to about 300 changed lines. Boilerplate and generated
+files stay out of the steps but are one keypress away.
 
-**No rubber stamp.** A step counts as reviewed only when you move past it or skip it
-with a reason. The viewer tracks which changed lines you actually scrolled past and
-reminds you once about the rest, or about a hotspot nobody discussed. Before anything is
-published, every step must be reviewed or skipped.
+Notes explain non-obvious calls; ⚑ hotspots mark where a mistake is expensive: money,
+security, consistency, migrations. Each has a longer explanation with the code it
+mentions, written during planning, so it opens instantly.
 
-**Reading the diff.** The unified view shows the resulting code. Large removals fold
-away, moved code is marked as moved instead of shown twice, whitespace-only changes and
-identifier renames are marked rather than highlighted, and only the words that changed
-inside a line are coloured. With a language server installed you can jump to
-definitions, references, implementations and callers, and the plan pane shows who calls
-the functions changed in this step.
+</details>
 
-**Publishing.** `gr` never writes to GitLab or GitHub. When you finish, it writes the
-result — inline comments, a summary with the verdict and the decisions you made, what
-was skipped and why — to `/tmp/guided-review/<id>/`. You see it, edit or drop comments,
-and the agent posts it only after you say yes: GitLab draft notes published in one
-batch, or one GitHub review. A `guided-review-notify` skill, if you have one, then tells
-the author (see Extending).
+<details>
+<summary>Talking to the agent</summary>
 
-**Next round.** After the author pushes, run the same command again. You see only what
-changed since your last round. Your open threads on the merge request come first, with
-the author's replies: the agent checks each reply against the new code and suggests
-resolve or keep open with a reply; you decide, and the replies and resolves go out with
-the rest. Approving is refused while any of your threads stays open.
+Point at a line or a selection and write. The agent writes the comment with a severity
+and, for an obvious fix, a suggestion. You can also just ask about code without leaving
+a comment, or save a comment exactly as typed. When the agent needs a decision, it
+offers answers you pick with one key.
 
-**Self-review.** In the session where the code was written, ask for a self-review
-(`/guided-selfreview`). The agent that wrote the code does not review it: a fresh
-reviewer gets only the task, no history, and walks you through the branch in the same
-viewer. At the end the fixes you agreed on go back to the original session, which
-applies them and offers another round.
+</details>
+
+<details>
+<summary>No rubber stamp</summary>
+
+The viewer tracks which changed lines you scrolled past and reminds you once about the
+rest and about hotspots nobody discussed. Nothing can be published until every step is
+reviewed or skipped.
+
+</details>
+
+<details>
+<summary>Reading the diff</summary>
+
+The unified view shows the resulting code. Large removals fold away, moved code is
+marked as moved, whitespace-only changes and renames are marked instead of highlighted,
+and only the changed words inside a line are coloured. With a language server you get
+definitions, references, implementations, callers, and a call flow for the step.
+
+</details>
+
+<details>
+<summary>Publishing</summary>
+
+`gr` never writes to GitLab or GitHub. At the end it writes inline comments and a
+summary (verdict, decisions, what was skipped and why) to `/tmp/guided-review/<id>/`.
+You review and edit it, then the agent posts it: GitLab draft notes in one batch or one
+GitHub review. A `guided-review-notify` skill, if present, then tells the author.
+
+</details>
+
+<details>
+<summary>Next round and your threads</summary>
+
+Run the same command after the author pushes: you see only what changed. Your open
+threads come first with the author's replies. The agent checks each reply against the
+new code and suggests resolve or keep open with a reply; you decide. Approve is refused
+while any of your threads stays open.
+
+</details>
+
+<details>
+<summary>Self-review</summary>
+
+In the session where you wrote the code, run `/guided-selfreview`. A fresh reviewer
+that knows only the task walks you through the branch. The fixes you agree on go back to
+your session, which applies them and offers another round.
+
+</details>
 
 ## Settings
 
