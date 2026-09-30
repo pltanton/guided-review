@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"os/exec"
 	"slices"
 	"strings"
 
@@ -82,7 +83,9 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.composing, m.input = false, nil
+		m.resume()
 	case tea.KeyEnter:
+		defer m.resume()
 		text := strings.TrimSpace(string(m.input))
 		m.composing, m.input = false, nil
 		switch {
@@ -293,4 +296,44 @@ func (m *model) refreshDetail() bool {
 		p.lines = markdownLines(expandTabs(text), max(m.mainWidth()-4, 20))
 	}
 	return ok
+}
+
+const resumeAgent = "Continue the guided review: run gr wait."
+
+func (m *model) runTmux(args ...string) error {
+	if m.tmux != nil {
+		return m.tmux(args...)
+	}
+	return exec.Command("tmux", args...).Run()
+}
+
+func (m *model) interrupt() {
+	switch {
+	case m.review == nil || m.agentWaiting || m.agentIdle:
+		m.status = "the agent is not working now · " + m.keys().key("quit") + " quits"
+	case m.returnPane == "":
+		m.status = "no agent pane known: start the viewer with gr view --return $TMUX_PANE"
+	default:
+		if err := m.runTmux("send-keys", "-t", m.returnPane, "Escape"); err != nil {
+			m.err = err
+			return
+		}
+		m.interrupted = true
+		m.startCompose(inbox.KindMessage)
+		m.status = "agent interrupted: add to your question"
+	}
+}
+
+func (m *model) resume() {
+	if !m.interrupted {
+		return
+	}
+	m.interrupted = false
+	err := m.runTmux("send-keys", "-t", m.returnPane, "-l", resumeAgent)
+	if err == nil {
+		err = m.runTmux("send-keys", "-t", m.returnPane, "Enter")
+	}
+	if err != nil {
+		m.err = err
+	}
 }

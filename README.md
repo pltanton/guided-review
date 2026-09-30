@@ -149,6 +149,7 @@ both sides in full.
 | `tab` / `shift+tab` | more / default context |
 | `e` | open `$EDITOR` at the line (tmux popup) |
 | `a` | back to the agent's tmux window |
+| `ctrl+c` | while the agent works: interrupt it (sends Esc to its pane), add to your question, and it goes on |
 | `q` | quit |
 
 ## Extending

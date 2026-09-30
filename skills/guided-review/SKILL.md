@@ -179,7 +179,10 @@ before leaving a step. You only hear about what needs you.
    `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line) and
    its detail right away with `gr note detail --file F --line <last line> - <<'EOF' … EOF`.
 2. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
-   nothing happened: run it again. Each printed line is one event from the viewer:
+   nothing happened: run it again. If your turn was interrupted and the human's next
+   prompt is "Continue the guided review: run gr wait.", the viewer did that with `ctrl+c`:
+   just run `gr wait`, their message is waiting there. Each printed line is one event from
+   the viewer:
 
    - `[message] sN file:lines: text` — a remark: pick severity (blocker changes the
      approach, major is local rework, minor, nit),

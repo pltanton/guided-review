@@ -1669,3 +1669,36 @@ func TestFlowSection(t *testing.T) {
 		}
 	}
 }
+
+func TestInterruptAgent(t *testing.T) {
+	m, sent := newTestModel(t)
+	var tmux [][]string
+	m.tmux = func(args ...string) error { tmux = append(tmux, args); return nil }
+	m.agentWaiting = true
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if len(tmux) != 0 || m.composing {
+		t.Fatal("ctrl+c does nothing while it is the human's turn")
+	}
+	m.agentWaiting, m.returnPane = false, "%11"
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd != nil {
+		if _, quit := cmd().(tea.QuitMsg); quit {
+			t.Fatal("ctrl+c must not quit the viewer")
+		}
+	}
+	if len(tmux) != 1 || !slices.Equal(tmux[0], []string{"send-keys", "-t", "%11", "Escape"}) ||
+		!m.composing {
+		t.Fatalf("ctrl+c must interrupt the agent and open the input: %q", tmux)
+	}
+	typeText(m, "and check the rollback too")
+	m.Update(key("enter"))
+	if n := len(*sent); n != 1 || (*sent)[0].Text != "and check the rollback too" {
+		t.Fatalf("the message goes through the inbox: %+v", *sent)
+	}
+	want := [][]string{
+		{"send-keys", "-t", "%11", "-l", resumeAgent},
+		{"send-keys", "-t", "%11", "Enter"},
+	}
+	if len(tmux) != 3 || !slices.Equal(tmux[1], want[0]) || !slices.Equal(tmux[2], want[1]) {
+		t.Fatalf("the agent must be told to go on: %q", tmux)
+	}
+}

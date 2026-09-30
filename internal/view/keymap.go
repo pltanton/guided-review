@@ -169,7 +169,9 @@ func DefaultActions() []Action {
 		},
 		{Name: "help", Group: vw, Desc: "this help", Keys: k("h", "f1"),
 			run: do(func(m *model) { m.help, m.helpTop = true, 0 })},
-		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q", "ctrl+c"),
+		{Name: "interrupt", Group: rev, Desc: "stop the agent's current work and add to your question",
+			Keys: k("ctrl+c"), run: do((*model).interrupt)},
+		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q"),
 			run: func(*model) tea.Cmd { return tea.Quit }},
 	}
 }

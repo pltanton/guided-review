@@ -417,6 +417,9 @@ func (m *model) promptLines(width int) []string {
 			prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
 		}
 		hints := []string{"ctrl+r raw"}
+		if m.interrupted {
+			prompt = "paused · " + prompt
+		}
 		lead := cursorStyle.Render(prompt)
 		if m.rawMode() {
 			hints = []string{"tab severity", "ctrl+r via the agent"}

@@ -79,6 +79,8 @@ type model struct {
 	algo        string
 	loading     string
 	returnPane  string
+	interrupted bool
+	tmux        func(args ...string) error
 	closed      bool
 	preview     string
 	previewTop  int
@@ -680,7 +682,7 @@ func (m *model) moveStep(args ...string) {
 func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	files := m.stepFiles()
 	switch msg.String() {
-	case "q", "ctrl+c":
+	case "q":
 		return tea.Quit
 	case "j", "down":
 		m.fileCursor = min(m.fileCursor+1, len(files)-1)
