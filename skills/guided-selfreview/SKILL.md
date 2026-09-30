@@ -1,20 +1,20 @@
 ---
 name: guided-selfreview
-description: Use when the author wants to review their own change before sending it — "давай сами поревьюим перед отправкой", "проверь мой MR свежим взглядом", "self-review", "guided self-review" — in the session where the code was written. Starts a fresh-context reviewer in a tmux window that walks the author through the branch in the guided-review viewer, then applies the fixes it returns.
+description: Use when the author wants to review their own change before sending it — "давай сами поревьюим перед отправкой", "проверь мой MR свежим взглядом", "self-review", "guided self-review" — in the session where the code was written. Starts a fresh-context reviewer that walks the author through the branch in the guided-review viewer, then applies the fixes it returns.
 ---
 
 # Guided self-review
 
 You wrote this change, so you are the wrong one to review it: you know what the code was
 meant to do and read that into it. Hand the review to a fresh agent, let the human walk
-through it there, and take back a list of fixes. Needs tmux and `gr`.
+through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
 
 ## Start
 
 1. `gr` reviews commits (default branch → HEAD). If `git status` shows changes, ask
    whether to commit them (a WIP commit is fine); never stash or commit silently.
 2. `gr init --self` in the repository. Note the id it prints (`review self-<branch>`).
-3. Write the reviewer's prompt to `/tmp/guided-review/<id>.prompt`:
+3. Write the reviewer's prompt:
    ```
    Guided review, self mode. Use the guided-review skill.
    Review id: <id>. Author agent pane: <your $TMUX_PANE>.
@@ -22,21 +22,21 @@ through it there, and take back a list of fixes. Needs tmux and `gr`.
    ```
    Only the goal. Not how you implemented it and not what you think is fragile: the
    reviewer is useful exactly because it does not know.
-4. Start it with the agent CLI you run in (`claude` or `codex`) and keep the window id it
-   prints:
-   ```bash
-   tmux new-window -P -F '#{window_id}' -n selfreview -c "$PWD" "claude \"\$(cat /tmp/guided-review/<id>.prompt)\""
-   ```
-   Tell the human in one line that the reviewer is starting in the `selfreview` window
-   and its viewer opens there; they talk to it, not to you, until they press `P`.
-5. Wait for the result, with the Bash tool timeout at 600000 ms, repeating until the file
-   appears:
-   ```bash
-   timeout 590 sh -c 'until [ -f /tmp/guided-review/<id>/fixes.json ]; do sleep 5; done'
-   ```
-   If the human writes to you meanwhile, answer, then go back to waiting.
-6. The reviewer is done once the file is there: close its window and the review —
-   `tmux kill-window -t <window id>; gr done`.
+4. Start the reviewer:
+   - **Claude Code:** a general-purpose subagent with that prompt, in the background. It
+     starts without your context. Tell the human in one line that the reviewer is
+     running as a subagent and its viewer opens in a `review-<id>` window; they talk to
+     it there until they press `P`. You are told when it finishes — do not poll.
+   - **Codex or no subagents:** write the prompt to `/tmp/guided-review/<id>.prompt`, then
+     ```bash
+     tmux new-window -P -F '#{window_id}' -n selfreview -c "$PWD" "codex \"\$(cat /tmp/guided-review/<id>.prompt)\""
+     ```
+     and wait, with the Bash tool timeout at 600000 ms, repeating until the file appears:
+     ```bash
+     timeout 590 sh -c 'until [ -f /tmp/guided-review/<id>/fixes.json ]; do sleep 5; done'
+     ```
+     then `tmux kill-window -t <window id>`.
+5. When the reviewer is done: `gr done`.
 
 ## Apply
 

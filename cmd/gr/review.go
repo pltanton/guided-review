@@ -101,7 +101,7 @@ func cmdHunks(ctx context.Context, e env, _ []string) error {
 
 func cmdPlan(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 || args[0] != "set" {
-		return errors.New("usage: gr plan set [-f FILE]...")
+		return errors.New("usage: gr plan set [-f FILE] (repeat -f to join parts)")
 	}
 	fs := e.flags("plan set")
 	var paths []string
