@@ -535,6 +535,7 @@ type Symbol struct {
 	Kind  string
 	Path  string
 	Line  int
+	Char  int
 	End   int
 	Depth int
 }
@@ -563,6 +564,7 @@ func flatten(syms []docSymbol, path string, depth int, out *[]Symbol) {
 		switch {
 		case s.SelectionRange != nil:
 			sym.Line, sym.End = s.SelectionRange.Start.Line, s.SelectionRange.Start.Line
+			sym.Char = s.SelectionRange.Start.Character
 			if s.Range != nil {
 				sym.End = s.Range.End.Line
 			}
@@ -602,4 +604,54 @@ func (c *Client) WorkspaceSymbols(ctx context.Context, query string) ([]Symbol, 
 	var out []Symbol
 	flatten(syms, "", 0, &out)
 	return out, nil
+}
+
+type Call struct {
+	Name string
+	Path string
+}
+
+func (c *Client) Calls(
+	ctx context.Context,
+	path string,
+	line, char int,
+) (in, out []Call, err error) {
+	raw, err := c.call(ctx, "textDocument/prepareCallHierarchy", position(path, line, char))
+	if err != nil {
+		return nil, nil, err
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
+		return nil, nil, nil
+	}
+	type end struct {
+		Name string `json:"name"`
+		URI  string `json:"uri"`
+	}
+	var incoming []struct {
+		From end `json:"from"`
+	}
+	var outgoing []struct {
+		To end `json:"to"`
+	}
+	params := map[string]any{"item": items[0]}
+	if raw, err = c.call(ctx, "callHierarchy/incomingCalls", params); err == nil {
+		err = json.Unmarshal(raw, &incoming)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if raw, err = c.call(ctx, "callHierarchy/outgoingCalls", params); err == nil {
+		err = json.Unmarshal(raw, &outgoing)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, x := range incoming {
+		in = append(in, Call{Name: x.From.Name, Path: uriPath(x.From.URI)})
+	}
+	for _, x := range outgoing {
+		out = append(out, Call{Name: x.To.Name, Path: uriPath(x.To.URI)})
+	}
+	return in, out, nil
 }

@@ -705,6 +705,21 @@ func (m *model) sidebar(h, w int) []sideEntry {
 			out = append(out, sideEntry{text: line, file: f})
 		}
 	}
+	if len(m.flow) > 0 {
+		n := dimStyle.Render(fmt.Sprint(len(m.flow)))
+		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FLOW"), n))})
+		calls := func(arrow string, names []string) {
+			if len(names) > 0 {
+				text := dimStyle.Render("  " + arrow + " " + strings.Join(names, ", "))
+				out = append(out, sideEntry{text: plain(row(text, ""))})
+			}
+		}
+		for _, f := range m.flow {
+			out = append(out, sideEntry{text: plain(row(textTone.fg().Render(f.name), ""))})
+			calls("←", f.in)
+			calls("→", f.out)
+		}
+	}
 	for len(out) < h {
 		out = append(out, sideEntry{})
 	}

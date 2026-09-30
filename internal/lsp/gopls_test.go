@@ -82,6 +82,10 @@ func TestGopls(t *testing.T) {
 	if len(diags) == 0 || diags[0].Line != 3 || diags[0].Severity != 1 {
 		t.Fatalf("Diagnostics = %+v", diags)
 	}
+	in, out, err := c.Calls(ctx, a, 2, 5)
+	if err != nil || len(in) != 0 || len(out) != 1 || out[0].Name != "Transfer" {
+		t.Fatalf("Calls(Use) = %+v, %+v, %v", in, out, err)
+	}
 	callers, err := c.IncomingCalls(ctx, b, 3, 6)
 	if err != nil || len(callers) != 1 || filepath.Base(callers[0].Path) != "a.go" || callers[0].Line != 3 {
 		t.Fatalf("IncomingCalls = %+v, %v", callers, err)

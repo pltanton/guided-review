@@ -1651,3 +1651,21 @@ func TestChapterIntro(t *testing.T) {
 		t.Fatalf("the chapter intro must head its first step:\n%s", v)
 	}
 }
+
+func TestFlowSection(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.height = 40
+	m.Update(flowMsg{step: "s2", entries: []flowEntry{{name: "ignored"}}})
+	if m.flow != nil {
+		t.Fatal("flow of another step is dropped")
+	}
+	m.Update(flowMsg{step: "s1", entries: []flowEntry{
+		{name: "reserve", in: []string{"Handle", "Retry"}, out: []string{"Insert"}},
+	}})
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"FLOW", "reserve", "← Handle, Retry", "→ Insert"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("plan pane lacks %q:\n%s", want, v)
+		}
+	}
+}

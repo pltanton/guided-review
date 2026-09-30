@@ -119,6 +119,7 @@ type model struct {
 	confirmNext string
 	diagStep    string
 	seen        map[string]bool
+	flow        []flowEntry
 	diags       map[string][]lsp.Diagnostic
 	rawSeverity state.Severity
 	anchorFile  string
@@ -400,14 +401,18 @@ func (m *model) refreshAgent() {
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
 	if m.step != nil && m.lspDo != nil && m.diagStep != m.step.ID && !isExtra(m.step.ID) {
-		m.diagStep = m.step.ID
-		cmd = tea.Batch(cmd, m.fetchDiagnostics())
+		m.diagStep, m.flow = m.step.ID, nil
+		cmd = tea.Batch(cmd, m.fetchDiagnostics(), m.fetchFlow())
 	}
 	return m, cmd
 }
 
 func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case flowMsg:
+		if m.step != nil && msg.step == m.step.ID {
+			m.flow = msg.entries
+		}
 	case diagMsg:
 		if m.step != nil && msg.step == m.step.ID {
 			m.diags = msg.diags
