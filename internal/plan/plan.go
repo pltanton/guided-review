@@ -50,6 +50,9 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 	ids := map[string]bool{}
 	closed := map[string]bool{}
 	for i, s := range p.Steps {
+		if s.Intro != "" && i > 0 && p.Steps[i-1].Chapter == s.Chapter {
+			fail("step %s: intro belongs on the first step of chapter %q", s.ID, s.Chapter)
+		}
 		if i > 0 && p.Steps[i-1].Chapter != s.Chapter {
 			closed[p.Steps[i-1].Chapter] = true
 			if closed[s.Chapter] {

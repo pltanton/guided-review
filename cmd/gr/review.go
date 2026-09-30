@@ -434,6 +434,10 @@ func announce(r *state.Review, st *state.Step) {
 		return
 	}
 	st.Announced = true
+	if st.Intro != "" {
+		intro := cmp.Or(st.Chapter, "chapter") + "\n" + st.Intro
+		r.Messages = append(r.Messages, state.Message{Time: time.Now(), Step: st.ID, Text: intro})
+	}
 	msg := state.Message{Time: time.Now(), Step: st.ID, Text: st.Message}
 	r.Messages = append(r.Messages, msg)
 	r.Messages = r.Messages[max(len(r.Messages)-state.MaxMessages, 0):]

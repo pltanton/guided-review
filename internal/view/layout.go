@@ -206,6 +206,14 @@ func (m *model) header() []string {
 		}
 	}
 	lines := []string{m.stepTitle(st)}
+	if st.Intro != "" {
+		bar := chapterStyle.Render("▌ ")
+		w := max(m.mainWidth()-4, 20)
+		lines = append(lines, bar+chapterStyle.Bold(true).Render(cmp.Or(st.Chapter, "chapter")))
+		for _, l := range strings.Split(ansi.Wrap(st.Intro, w, ""), "\n") {
+			lines = append(lines, bar+textTone.fg().Render(l))
+		}
+	}
 	if m.viewStep != "" {
 		back := fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)
 		lines = append(lines, hotStyle.Render(back))

@@ -278,3 +278,20 @@ func TestHotspotNeedsFileInMultiFileStep(t *testing.T) {
 		t.Fatalf("an ambiguous hotspot must be rejected: %v", errs)
 	}
 }
+
+func TestIntroOnFirstStepOnly(t *testing.T) {
+	r, files := fixture()
+	p, err := plan.Parse([]byte(`steps:
+  - {id: s1, title: a, kind: logic, chapter: A, intro: x, hunks: [{file: api/a.go}]}
+  - {id: s2, title: b, kind: logic, chapter: A, intro: y, hunks: [{file: wire.go}]}
+  - {id: s3, title: c, kind: logic, hunks: [{file: gone.go}]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := plan.Validate(p, r, files)
+	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "step s2: intro") }) ||
+		slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "step s1: intro") }) {
+		t.Fatalf("only a later step's intro is wrong: %v", errs)
+	}
+}

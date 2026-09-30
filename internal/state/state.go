@@ -134,6 +134,7 @@ type Step struct {
 	Title       string       `yaml:"title"`
 	Kind        string       `yaml:"kind"`
 	Chapter     string       `yaml:"chapter,omitempty"`
+	Intro       string       `yaml:"intro,omitempty"`
 	Hunks       []StepHunk   `yaml:"hunks"`
 	Hotspots    []Hotspot    `yaml:"hotspots,omitempty"`
 	DependsOn   []string     `yaml:"depends_on,omitempty"`

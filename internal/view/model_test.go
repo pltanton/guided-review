@@ -1641,3 +1641,13 @@ func TestSeenLines(t *testing.T) {
 		t.Fatal("a fully seen step moves on the first >")
 	}
 }
+
+func TestChapterIntro(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.step.Chapter = "Переводы"
+	m.step.Intro = "Before: a retry debited twice. After: the key returns the first result."
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "▌ Переводы") || !strings.Contains(v, "▌ Before: a retry debited twice.") {
+		t.Fatalf("the chapter intro must head its first step:\n%s", v)
+	}
+}

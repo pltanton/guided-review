@@ -91,7 +91,9 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 3. Read every step's code now, with enough surrounding code to be sure of what it does,
    and look for problems per references/checklist.md: the viewer moves between steps
    without you, so all per-step work happens here.
-4. For each step write its `message` (references/style.md: at most three lines, what
+4. Give the first step of each chapter an `intro`: two to four lines on how the
+   behaviour was before and how it is after, and, when it helps, the path the request
+   takes (`Handler → reserve() → ledger.Put → outbox`). For each step write its `message` (references/style.md: at most three lines, what
    the code does, a spec mismatch, the one question) and its `annotations` where an
    explanation saves the reader real effort: what a non-obvious call does and why,
    where the spec disagrees (`kind: spec`). Full sentences, not fragments. One to three
@@ -111,7 +113,10 @@ boilerplate: [internal/di/wire.go]
 steps:
   - id: s1
     chapter: "Переводы между счетами"
-    title: "POST /transfers accepts an idempotency key"
+    intro: |- # first step of a chapter only: before → after, and the path the request takes
+      Before: a retried POST /transfers debited twice.
+      After: the idempotency key returns the first result.
+      Handler → reserve() → ledger.Put → outbox
     kind: contract # contract|model|entry|logic|persistence|migration|test|config
     hunks:
       - { file: api/openapi.yaml, lines: 120-168 } # omit lines for the whole file
@@ -156,7 +161,8 @@ steps:
    Give each: the code path, base and head, the task in two lines, its chapter file, and
    the path of this skill's `references/` directory. Its job: read `style.md`,
    `hotspots.md` and `checklist.md` there, read its steps' code, and rewrite its chapter
-   file with the same steps (ids, titles, hunks and depends_on unchanged) plus `message`,
+   file with the same steps (ids, titles, hunks and depends_on unchanged) plus the first
+   step's `intro`, each step's `message`,
    `hotspots` (`file`, `line`, `q`, `detail`) and `annotations` (`file`, `line`, `to`,
    `kind`, `text`, `detail`); reply with one line when done.
 3. `gr plan set -f route.yaml -f chapter-1.yaml -f chapter-2.yaml …` in chapter order. If
