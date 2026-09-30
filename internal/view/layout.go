@@ -358,8 +358,7 @@ func window(lines []string, height, fromBottom int) []string {
 
 func (m *model) bottomLines() []string {
 	limit := messageLines
-	switch {
-	case m.step == nil:
+	if m.step == nil {
 		limit = max(m.height-4, 1)
 	}
 	var lines []string
