@@ -1646,7 +1646,7 @@ func TestFlowSection(t *testing.T) {
 		{name: "reserve", in: []string{"Handle", "Retry"}, out: []string{"Insert"}},
 	}})
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"FLOW", "reserve", "← Handle, Retry", "→ Insert"} {
+	for _, want := range []string{"FLOW", "reserve", "← Handle", "    Retry", "→ Insert"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("plan pane lacks %q:\n%s", want, v)
 		}
@@ -1794,5 +1794,15 @@ func TestInputCursorKeepsText(t *testing.T) {
 	}
 	if got := ansi.Strip(m.inputWithCursor(8)); got != "проблемы█" {
 		t.Fatalf("at the end the cursor is a block: %q", got)
+	}
+}
+
+func TestFlowWraps(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.height = 40
+	m.flow = []flowEntry{{name: "save", out: []string{"RepositoryMetrics.operationWithAVeryLongName(String, Function)"}}}
+	v := ansi.Strip(m.View())
+	if strings.Contains(v, "(String") || !strings.Contains(v, "→ RepositoryMetrics.") {
+		t.Fatalf("callee names drop their parameters and wrap:\n%s", v)
 	}
 }
