@@ -1802,7 +1802,8 @@ func TestFlowWraps(t *testing.T) {
 	m.height = 40
 	m.flow = []flowEntry{{name: "save", out: []string{"RepositoryMetrics.operationWithAVeryLongName(String, Function)"}}}
 	v := ansi.Strip(m.View())
-	if strings.Contains(v, "(String") || !strings.Contains(v, "→ RepositoryMetrics.") {
+	if strings.Contains(v, "(String") || !strings.Contains(v, "→ RepositoryMetrics.") ||
+		!strings.Contains(v, "↳ operationWithAVery") {
 		t.Fatalf("callee names drop their parameters and wrap:\n%s", v)
 	}
 }
