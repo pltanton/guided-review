@@ -245,6 +245,24 @@ before leaving a step. You only hear about what needs you.
    summary: resolved, still open, new questions.
 3. Then plan and walk only the round diff as usual.
 
+## Your threads on the MR (`gr init` printed "your threads: …")
+
+The reviewer's own open threads, with every reply, are in `gr thread list`. The
+human decides each one; you prepare the decision. Before planning:
+
+1. For every thread read the replies and the current code at that line. Then
+   `gr thread assess ID --propose resolve|open [--reply TEXT] - <<'EOF' … EOF`: one or two
+   sentences — fixed (where), the answer convinces (why), or it does not (what is still
+   wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
+   author asked something; keep it to the style of a review comment.
+2. `gr say` one line per answered thread (`d1 a.go:5: не исправлено, предлагаю оставить`)
+   and ask them to press `R` to decide. Never run `gr thread decide` yourself.
+3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
+   if your view changed, assess it again.
+
+`gr prepare` refuses while an answered thread has no decision, and refuses `approve` while
+any of your threads stays open. A decided resolve also resolves the matching gr comment.
+
 ## Self mode (`gr init` printed "mode: self")
 
 The author is reviewing their own branch before anyone else sees it, and you were started
@@ -290,7 +308,7 @@ line, say whether the code answers it.
    `gr say` / `gr wait` — and ending your turn with a question is fine.
 4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
-   goes out — N comments, the summary, the verdict, approve or not — and ask «публикую?».
+   goes out — N comments, thread replies and resolves, the summary, the verdict, approve or not — and ask «публикую?».
    Only on a clear yes, by provider:
 
    **GitHub** — one request carries the summary, the verdict and every comment:
@@ -316,6 +334,19 @@ line, say whether the code answers it.
    ```
    If a GitLab POST fails, stop: say the error and that the drafts created so far sit
    unpublished on the MR; do not retry blindly. After success give the link.
+
+   **Threads** — `review.json` `threads` holds each decision, before `gr mark-published`:
+   ```bash
+   jq -c '.threads[]?' $dir/review.json | while read -r t; do
+     id=$(jq -r .id <<<"$t"); reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
+     # GitLab: glab api --hostname $host …; GitHub: gh api --hostname $host …
+     [ -n "$reply" ] && glab api --hostname $host -X POST "$ra" -f body="$reply"
+     # GitLab resolve:
+     [ "$(jq -r .resolve <<<"$t")" = true ] && glab api --hostname $host -X PUT "$(jq -r .api <<<"$t")" -f resolved=true
+     # GitHub resolve (id is the review thread node id):
+     # gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id="$id"
+   done
+   ```
 5. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the

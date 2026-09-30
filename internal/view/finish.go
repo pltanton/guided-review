@@ -44,6 +44,20 @@ func (m *model) finishBody(w int) (lines []string, cards []finishCard) {
 			lines = append(lines, markdownLines(body, w)...)
 			continue
 		}
+		if rest, ok := strings.CutPrefix(head, "thread "); ok {
+			verdict := addStyle.Bold(true).Render("✔ resolve  ")
+			if rest, ok = strings.CutPrefix(rest, "keep open "); ok {
+				verdict = delStyle.Bold(true).Render("✖ keep open")
+			} else {
+				rest = strings.TrimPrefix(rest, "resolve ")
+			}
+			where, _, _ := strings.Cut(rest, " ")
+			lines = append(lines, "", verdict+" "+fileStyle.Render(where)+dimStyle.Render("  thread"))
+			for _, l := range markdownLines(body, w-4) {
+				lines = append(lines, okTone.fg().Render("  │ ")+l)
+			}
+			continue
+		}
 		id := 0
 		if ref, rest, ok := strings.Cut(head, " "); ok && strings.HasPrefix(ref, "#") {
 			if n, err := strconv.Atoi(ref[1:]); err == nil {
@@ -117,8 +131,13 @@ func (m *model) finishView() string {
 	if r.MR != nil {
 		title += " · " + r.MR.Label() + " " + r.MR.Title
 	}
-	comments := strings.Count("\n"+m.preview, "\n--- ") - strings.Count(m.preview, "--- summary")
+	threads := strings.Count("\n"+m.preview, "\n--- thread ")
+	comments := strings.Count("\n"+m.preview, "\n--- ") - strings.Count(m.preview, "--- summary") -
+		threads
 	facts := []string{fmt.Sprintf("%d comments to post", comments)}
+	if threads > 0 {
+		facts = append(facts, fmt.Sprintf("%d thread replies", threads))
+	}
 	if p := r.Publish; p != nil {
 		facts = append([]string{verdictStyle(p.Verdict)}, facts...)
 		if p.Approve {

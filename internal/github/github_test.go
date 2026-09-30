@@ -2,6 +2,7 @@ package github_test
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -35,7 +36,8 @@ func TestFetchDiscussions(t *testing.T) {
 		return []byte(`{"data":{"repository":{"pullRequest":{
 			"reviewThreads":{"nodes":[
 				{"id":"t1","isResolved":false,"path":"a.go","line":12,"diffSide":"RIGHT",
-				 "comments":{"totalCount":3,"nodes":[{"body":"why float?","author":{"login":"alice"}}]}},
+				 "comments":{"totalCount":3,"nodes":[{"databaseId":71,"body":"why float?","author":{"login":"alice"}},
+				   {"databaseId":72,"body":"it is money","author":{"login":"bob"}}]}},
 				{"id":"t2","isResolved":true,"path":"b.go","line":null,"originalLine":4,"diffSide":"RIGHT",
 				 "comments":{"totalCount":1,"nodes":[{"body":"<!-- bot -->","author":{"login":"ci"}}]}},
 				{"id":"t3","isResolved":false,"path":"c.go","line":null,"originalLine":9,"diffSide":"RIGHT",
@@ -51,15 +53,18 @@ func TestFetchDiscussions(t *testing.T) {
 		t.Fatalf("query args %q", args)
 	}
 	want := []github.Discussion{
-		{ID: "t1", Author: "alice", Body: "why float?", Replies: 2, File: "a.go", Line: 12},
-		{ID: "t3", Author: "bob", Body: "outdated", File: "c.go", Line: 9, OldLine: true},
+		{ID: "t1", Author: "alice", Body: "why float?", Replies: 2, File: "a.go", Line: 12,
+			ReplyTo: 71, Resolvable: true, Notes: []github.Note{
+				{Author: "alice", Body: "why float?"}, {Author: "bob", Body: "it is money"}}},
+		{ID: "t3", Author: "bob", Body: "outdated", File: "c.go", Line: 9, OldLine: true, Resolvable: true,
+			Notes: []github.Note{{Author: "bob", Body: "outdated"}}},
 		{ID: "c1", Author: "carol", Body: "LGTM overall"},
 	}
 	if len(ds) != len(want) {
 		t.Fatalf("got %+v", ds)
 	}
 	for i := range want {
-		if ds[i] != want[i] {
+		if !reflect.DeepEqual(ds[i], want[i]) {
 			t.Fatalf("discussion %d = %+v, want %+v", i, ds[i], want[i])
 		}
 	}

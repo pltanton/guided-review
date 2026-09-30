@@ -93,14 +93,21 @@ func FetchMR(ctx context.Context, run Runner, ref MRRef) (MR, error) {
 }
 
 type Discussion struct {
-	ID       string
-	Author   string
-	Body     string
-	Replies  int
-	File     string
-	Line     int
-	OldLine  bool
-	Resolved bool
+	ID         string
+	Author     string
+	Body       string
+	Replies    int
+	File       string
+	Line       int
+	OldLine    bool
+	Resolved   bool
+	Resolvable bool
+	Notes      []Note
+}
+
+type Note struct {
+	Author string
+	Body   string
 }
 
 type apiDiscussion struct {
@@ -114,8 +121,9 @@ type apiNote struct {
 	Author struct {
 		Username string `json:"username"`
 	} `json:"author"`
-	Resolved bool         `json:"resolved"`
-	Position *apiPosition `json:"position"`
+	Resolved   bool         `json:"resolved"`
+	Resolvable bool         `json:"resolvable"`
+	Position   *apiPosition `json:"position"`
 }
 
 type apiPosition struct {
@@ -152,11 +160,17 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 				continue
 			}
 			disc := Discussion{
-				ID:       d.ID,
-				Author:   first.Author.Username,
-				Body:     body,
-				Replies:  len(d.Notes) - 1,
-				Resolved: first.Resolved,
+				ID:         d.ID,
+				Author:     first.Author.Username,
+				Body:       body,
+				Replies:    len(d.Notes) - 1,
+				Resolved:   first.Resolved,
+				Resolvable: first.Resolvable,
+			}
+			for _, n := range d.Notes {
+				if !n.System {
+					disc.Notes = append(disc.Notes, Note{Author: n.Author.Username, Body: n.Body})
+				}
 			}
 			if p := first.Position; p != nil {
 				switch {
@@ -186,6 +200,20 @@ type Position struct {
 type DraftNote struct {
 	Note     string    `json:"note"`
 	Position *Position `json:"position,omitempty"`
+}
+
+func CurrentUser(ctx context.Context, run Runner, host string) (string, error) {
+	out, err := run(ctx, "api", "--hostname", host, "user")
+	if err != nil {
+		return "", err
+	}
+	var u struct {
+		Username string `json:"username"`
+	}
+	if err := json.Unmarshal(out, &u); err != nil {
+		return "", fmt.Errorf("decode user: %w", err)
+	}
+	return u.Username, nil
 }
 
 func (r MRRef) Path(suffix string) string {

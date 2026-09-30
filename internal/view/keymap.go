@@ -147,6 +147,8 @@ func DefaultActions() []Action {
 			run: do((*model).startEdit)},
 		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (twice)",
 			Keys: k("D"), run: do((*model).deleteComment)},
+		{Name: "replies", Group: rev, Desc: "your MR threads: answers, resolve or keep open",
+			Keys: k("R"), run: do((*model).openThreads)},
 		{Name: "finish", Group: rev, Desc: "finish: preview, then hand to the agent",
 			Keys: k("P"), run: (*model).finish},
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),

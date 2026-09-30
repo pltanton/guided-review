@@ -74,6 +74,7 @@ type Review struct {
 	Current      string       `yaml:"current,omitempty"`
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
+	Threads      []Thread     `yaml:"threads,omitempty"`
 	Messages     []Message    `yaml:"messages,omitempty"`
 	Progress     *Progress    `yaml:"progress,omitempty"`
 	SummaryRound int          `yaml:"summary_round,omitempty"`
@@ -101,14 +102,38 @@ type Progress struct {
 }
 
 type Discussion struct {
-	ID       string `yaml:"id"`
-	Author   string `yaml:"author"`
-	Body     string `yaml:"body"`
-	Replies  int    `yaml:"replies,omitempty"`
-	File     string `yaml:"file,omitempty"`
-	Line     int    `yaml:"line,omitempty"`
-	OldLine  bool   `yaml:"old_line,omitempty"`
-	Resolved bool   `yaml:"resolved,omitempty"`
+	ID         string `yaml:"id"`
+	Author     string `yaml:"author"`
+	Body       string `yaml:"body"`
+	Replies    int    `yaml:"replies,omitempty"`
+	File       string `yaml:"file,omitempty"`
+	Line       int    `yaml:"line,omitempty"`
+	OldLine    bool   `yaml:"old_line,omitempty"`
+	Resolved   bool   `yaml:"resolved,omitempty"`
+	Resolvable bool   `yaml:"resolvable,omitempty"`
+	Notes      []Note `yaml:"notes,omitempty"`
+	ReplyTo    int64  `yaml:"reply_to,omitempty"`
+}
+
+type Note struct {
+	Author string `yaml:"author"`
+	Body   string `yaml:"body"`
+}
+
+const (
+	VerdictResolve = "resolve"
+	VerdictOpen    = "open"
+)
+
+type Thread struct {
+	ID            string `yaml:"id"`
+	Notes         int    `yaml:"notes"`
+	Assessment    string `yaml:"assessment,omitempty"`
+	Proposed      string `yaml:"proposed,omitempty"`
+	ProposedReply string `yaml:"proposed_reply,omitempty"`
+	Verdict       string `yaml:"verdict,omitempty"`
+	Reply         string `yaml:"reply,omitempty"`
+	Published     bool   `yaml:"published,omitempty"`
 }
 
 type MR struct {
@@ -118,6 +143,7 @@ type MR struct {
 	Project  string `yaml:"project"`
 	IID      int    `yaml:"iid"`
 	Title    string `yaml:"title"`
+	Me       string `yaml:"me,omitempty"`
 }
 
 type File struct {

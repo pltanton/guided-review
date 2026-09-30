@@ -390,19 +390,41 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 	}
 	r.Discussions = r.Discussions[:0]
 	if r.MR.Provider == state.ProviderGitHub {
+		if r.MR.Me == "" {
+			r.MR.Me, _ = github.CurrentUser(ctx, e.gh, r.MR.Host)
+		}
 		ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
 		ds, err := github.FetchDiscussions(ctx, e.gh, ref)
 		for _, d := range ds {
-			r.Discussions = append(r.Discussions, state.Discussion(d))
+			r.Discussions = append(r.Discussions, state.Discussion{
+				ID: d.ID, Author: d.Author, Body: d.Body, Replies: d.Replies, File: d.File,
+				Line: d.Line, OldLine: d.OldLine, Resolved: d.Resolved, Resolvable: d.Resolvable,
+				Notes: notes(d.Notes), ReplyTo: d.ReplyTo,
+			})
 		}
 		return err
+	}
+	if r.MR.Me == "" {
+		r.MR.Me, _ = gitlab.CurrentUser(ctx, e.glab, r.MR.Host)
 	}
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
 	ds, err := gitlab.FetchDiscussions(ctx, e.glab, ref)
 	for _, d := range ds {
-		r.Discussions = append(r.Discussions, state.Discussion(d))
+		r.Discussions = append(r.Discussions, state.Discussion{
+			ID: d.ID, Author: d.Author, Body: d.Body, Replies: d.Replies, File: d.File,
+			Line: d.Line, OldLine: d.OldLine, Resolved: d.Resolved, Resolvable: d.Resolvable,
+			Notes: notes(d.Notes),
+		})
 	}
 	return err
+}
+
+func notes[N ~struct{ Author, Body string }](in []N) []state.Note {
+	out := make([]state.Note, len(in))
+	for i, n := range in {
+		out[i] = state.Note(n)
+	}
+	return out
 }
 
 func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (target, error) {

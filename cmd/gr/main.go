@@ -26,6 +26,8 @@ review
   note add --file F --line N | --lines N-M [--kind note|spec] [--step ID] TEXT...
   note detail --file F --line N [--step ID] TEXT... | -   details behind a note (viewer: i)
   discussions
+  thread list | assess ID --propose resolve|open [--reply T] TEXT|-
+  thread decide ID --verdict resolve|open|none [--reply T]   your MR threads (viewer: R)
   prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--approve]
   export [--dry-run]   write the result to /tmp/guided-review/<id> for the agent to publish
   mark-published       after the agent posted the export to the MR
@@ -56,6 +58,7 @@ func init() {
 		"comment":        cmdComment,
 		"note":           cmdNote,
 		"discussions":    cmdDiscussions,
+		"thread":         cmdThread,
 		"prepare":        cmdPrepare,
 		"export":         cmdExport,
 		"mark-published": cmdMarkPublished,

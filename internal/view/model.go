@@ -86,6 +86,11 @@ type model struct {
 	previewTop    int
 	previewSel    int
 	previewFollow bool
+	threads       bool
+	threadSel     int
+	threadTop     int
+	threadFollow  bool
+	composeThread string
 	runGr         func(args ...string) (string, error)
 
 	planW    int
@@ -727,6 +732,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleHelpKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
+	case m.threads && !m.composing:
+		return m.handleThreadsKey(msg)
 	case m.popup != nil:
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
