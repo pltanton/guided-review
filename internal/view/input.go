@@ -155,8 +155,9 @@ func (m *model) insert(rs []rune) {
 	m.inputPos += len(rs)
 }
 
-func (m *model) deleteComment() {
-	ref := m.current().Ref
+func (m *model) deleteComment() { m.deleteCommentID(m.current().Ref) }
+
+func (m *model) deleteCommentID(ref int) {
 	switch {
 	case ref == 0:
 		m.status = "put the cursor on one of your comments to delete it"
@@ -173,6 +174,7 @@ func (m *model) deleteComment() {
 		}
 		m.emit(inbox.Event{Kind: inbox.KindComment, Text: out})
 		m.status = out
+		m.refreshPreview()
 	}
 }
 

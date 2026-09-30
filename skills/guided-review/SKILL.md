@@ -280,7 +280,10 @@ line, say whether the code answers it.
    (add `--approve` only if they asked to approve). The viewer now shows `finish · P`:
    `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/`, sends you
    `[finished] sN: <dir>` and closes the viewer, returning the human to your pane.
-   `gr say` «готово: P во вьювере» and `gr wait`. If they say «заканчиваем» in chat
+   `gr say` «готово: P во вьювере» and `gr wait`. While the human reads the result they
+   can message you from it — `re #N …` about one comment (`gr comment edit N`), or about
+   the summary or decisions (run `gr prepare` again with the new text); the viewer
+   refreshes the preview by itself. If they say «заканчиваем» in chat
    instead, run `gr export` yourself: it prints the same dir.
    From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
    `gr say` / `gr wait` — and ending your turn with a question is fine.

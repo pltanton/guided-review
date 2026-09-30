@@ -637,7 +637,7 @@ func TestSelfReview(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "changes", "--decisions", "fix the guard")
 
 	assertContains(t, h.mustRun("", "export", "--dry-run"),
-		"--- api/transfer.go:4", "**minor** zero is negative too", "```suggestion", "--- summary")
+		"--- #1 api/transfer.go:4", "**minor** zero is negative too", "```suggestion", "--- summary")
 	dir := filepath.Join(h.cache, "export", "self-feature")
 	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
 		t.Fatalf("export printed %q, want %q", out, dir)

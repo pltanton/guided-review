@@ -4,10 +4,14 @@ import (
 	"cmp"
 	"fmt"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 const finishWidth = 110
@@ -25,31 +29,52 @@ func (m *model) finishColumn() (pad string, w int) {
 	return strings.Repeat(" ", max((m.width-w)/2, 0)), w
 }
 
-func (m *model) finishBody(w int) []string {
-	var out []string
+type finishCard struct {
+	id, line int
+}
+
+func (m *model) finishBody(w int) (lines []string, cards []finishCard) {
 	for _, sec := range strings.Split("\n"+expandTabs(m.preview), "\n--- ")[1:] {
 		head, body, _ := strings.Cut(sec, "\n")
 		body = strings.TrimRight(body, "\n")
 		if head == "summary" {
 			rule := "── summary comment "
 			rule += strings.Repeat("─", max(w-ansi.StringWidth(rule), 0))
-			out = append(out, "", dimStyle.Render(rule))
-			out = append(out, markdownLines(body, w)...)
+			lines = append(lines, "", dimStyle.Render(rule))
+			lines = append(lines, markdownLines(body, w)...)
 			continue
+		}
+		id := 0
+		if ref, rest, ok := strings.Cut(head, " "); ok && strings.HasPrefix(ref, "#") {
+			if n, err := strconv.Atoi(ref[1:]); err == nil {
+				id, head = n, rest
+			}
 		}
 		severity := ""
 		if mm := severityHead.FindStringSubmatch(body); mm != nil {
 			severity, body = mm[1], strings.TrimPrefix(body, mm[0])
 		}
 		t := severityTones[severity]
-		title := t.fg().Bold(true).Render(fmt.Sprintf("● %-7s", severity))
-		out = append(out, "", title+" "+fileStyle.Render(head))
+		badge := t.fg().Bold(true).Render(fmt.Sprintf("● %-7s", severity))
+		title := badge + " " + fileStyle.Render(head)
+		if id > 0 {
+			title += dimStyle.Render(fmt.Sprintf("  #%d", id))
+		}
+		selected := len(cards) == m.previewSel && id > 0
+		if selected {
+			title = paint(fit(accentTone.fg().Render("▌")+title, w), cursorTone)
+		}
+		lines = append(lines, "")
+		if id > 0 {
+			cards = append(cards, finishCard{id: id, line: len(lines)})
+		}
+		lines = append(lines, title)
 		bar := t.fg().Render("  │ ")
 		for _, l := range markdownLines(body, w-4) {
-			out = append(out, bar+l)
+			lines = append(lines, bar+l)
 		}
 	}
-	return out
+	return lines, cards
 }
 
 func markdownLines(text string, w int) []string {
@@ -109,20 +134,35 @@ func (m *model) finishView() string {
 		dimStyle.Render(strings.Repeat("─", w)),
 		strings.Join(facts, dimStyle.Render(" · ")),
 	}
-	body := m.finishBody(w)
+	body, cards := m.finishBody(w)
 	h := max(m.height-len(top)-2, 1)
+	if m.previewFollow && m.previewSel < len(cards) {
+		line := cards[m.previewSel].line
+		m.previewTop = max(min(m.previewTop, line-1), line+3-h)
+		m.previewFollow = false
+	}
 	m.previewTop = max(0, min(m.previewTop, len(body)-h))
 	shown := body[m.previewTop:min(len(body), m.previewTop+h)]
 	lines := append(top, shown...)
 	for len(lines) < m.height-1 {
 		lines = append(lines, "")
 	}
-	k := m.keys().key("finish")
-	hint := fmt.Sprintf("%s hand to the agent and close · esc back · j/k ctrl+d/u g/G wheel", k)
+	hint := fmt.Sprintf("%s hand to the agent · j/k comment · E edit · DD delete · s severity"+
+		" · c ask the agent · esc back", m.keys().key("finish"))
 	if len(body) > h {
-		hint += fmt.Sprintf(" · %d–%d of %d", m.previewTop+1, m.previewTop+len(shown), len(body))
+		at := fmt.Sprintf("%d–%d of %d · ", m.previewTop+1, m.previewTop+len(shown), len(body))
+		hint = at + hint
 	}
-	lines = append(lines[:m.height-1], hotStyle.Render(hint))
+	bottom := []string{hotStyle.Render(hint)}
+	switch {
+	case m.composing:
+		bottom = m.promptLines(w)
+	case m.err != nil:
+		bottom = []string{delStyle.Render(m.err.Error())}
+	case m.status != "":
+		bottom = []string{dimStyle.Render(m.status)}
+	}
+	lines = append(lines[:max(m.height-len(bottom), 0)], bottom...)
 	for i, l := range lines {
 		lines[i] = pad + fit(l, w)
 	}
@@ -141,15 +181,20 @@ func verdictStyle(v string) string {
 
 func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 	page := max(m.height/2, 1)
+	_, cards := m.finishBody(max(m.width-2, 20))
+	selected := 0
+	if m.previewSel < len(cards) {
+		selected = cards[m.previewSel].id
+	}
 	switch msg.String() {
 	case "P":
 		return m.finish()
 	case "esc", "q":
 		m.preview = ""
 	case "j", "down":
-		m.previewTop++
+		m.previewSel, m.previewFollow = min(m.previewSel+1, max(len(cards)-1, 0)), true
 	case "k", "up":
-		m.previewTop = max(m.previewTop-1, 0)
+		m.previewSel, m.previewFollow = max(m.previewSel-1, 0), true
 	case "ctrl+d", "pgdown":
 		m.previewTop += page
 	case "ctrl+u", "pgup":
@@ -158,6 +203,59 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 		m.previewTop = 0
 	case "G", "end":
 		m.previewTop = 1 << 20
+	case "c", "enter":
+		m.startCompose(inbox.KindMessage)
+		m.anchorFile, m.anchorLines, m.composeRef = "", "", selected
+	case "E":
+		m.editComment(selected)
+	case "D":
+		m.deleteCommentID(selected)
+	case "s":
+		m.cycleSeverity(selected)
 	}
 	return nil
+}
+
+func (m *model) editComment(id int) {
+	for _, c := range m.review.Comments {
+		if c.ID == id {
+			m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, id
+			m.anchorFile, m.anchorLines = "", ""
+			m.input = []rune(c.Body)
+			m.inputPos = len(m.input)
+			return
+		}
+	}
+	m.status = "select a comment first (j/k)"
+}
+
+func (m *model) cycleSeverity(id int) {
+	for _, c := range m.review.Comments {
+		if c.ID != id {
+			continue
+		}
+		i := slices.Index(state.Severities, c.Severity)
+		next := string(state.Severities[(i+1)%len(state.Severities)])
+		args := []string{"comment", "edit", fmt.Sprint(id), "--severity", next, "--", c.Body}
+		if out, err := m.runGr(args...); err != nil {
+			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+			return
+		}
+		m.status = fmt.Sprintf("#%d is %s now", id, next)
+		m.refreshPreview()
+		return
+	}
+	m.status = "select a comment first (j/k)"
+}
+
+func (m *model) refreshPreview() {
+	if m.preview == "" || m.runGr == nil {
+		return
+	}
+	out, err := m.runGr("export", "--dry-run")
+	if err != nil {
+		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+		return
+	}
+	m.preview = out
 }

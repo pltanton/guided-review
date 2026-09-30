@@ -134,7 +134,7 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 			continue
 		}
 		note, where := commentDraft(r, c, mrFiles)
-		fmt.Fprintf(&md, "--- %s\n%s\n\n", where, note.Note)
+		fmt.Fprintf(&md, "--- #%d %s\n%s\n\n", c.ID, where, note.Note)
 		notes = append(notes, note)
 		x.Comments = append(x.Comments, c.ID)
 	}
@@ -224,7 +224,7 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) erro
 		if c.SHA != r.HeadSHA || !inPRDiff(mrFiles, c.File, end) {
 			note := fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)
 			general = append(general, note)
-			fmt.Fprintf(&md, "--- %s:%d (general note)\n%s\n\n", c.File, end, note)
+			fmt.Fprintf(&md, "--- #%d %s:%d (general note)\n%s\n\n", c.ID, c.File, end, note)
 			continue
 		}
 		rc := github.ReviewComment{Path: c.File, Line: end, Side: "RIGHT", Body: body}
@@ -232,7 +232,7 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) erro
 			rc.StartLine, rc.StartSide = start, "RIGHT"
 		}
 		req.Comments = append(req.Comments, rc)
-		fmt.Fprintf(&md, "--- %s:%d\n%s\n\n", c.File, end, body)
+		fmt.Fprintf(&md, "--- #%d %s:%d\n%s\n\n", c.ID, c.File, end, body)
 	}
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
 		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
@@ -309,7 +309,7 @@ func exportSelf(e env, r *state.Review, dryRun bool) error {
 		if c.Resolved {
 			continue
 		}
-		fmt.Fprintf(&md, "--- %s:%s\n**%s** %s\n", c.File, c.Lines, c.Severity, c.Body)
+		fmt.Fprintf(&md, "--- #%d %s:%s\n**%s** %s\n", c.ID, c.File, c.Lines, c.Severity, c.Body)
 		if c.Suggestion != "" {
 			fmt.Fprintf(&md, "```suggestion\n%s\n```\n", c.Suggestion)
 		}

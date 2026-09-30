@@ -72,19 +72,21 @@ type model struct {
 	fileCursor int
 	viewStep   string
 
-	showRemoved bool
-	unfolded    map[string]bool
-	folded      map[string]bool
-	algo        string
-	loading     string
-	returnPane  string
-	interrupted bool
-	tmux        func(args ...string) error
-	clip        func(text string) error
-	closed      bool
-	preview     string
-	previewTop  int
-	runGr       func(args ...string) (string, error)
+	showRemoved   bool
+	unfolded      map[string]bool
+	folded        map[string]bool
+	algo          string
+	loading       string
+	returnPane    string
+	interrupted   bool
+	tmux          func(args ...string) error
+	clip          func(text string) error
+	closed        bool
+	preview       string
+	previewTop    int
+	previewSel    int
+	previewFollow bool
+	runGr         func(args ...string) (string, error)
 
 	planW    int
 	sideW    int
@@ -209,6 +211,7 @@ func (m *model) reload() {
 	}
 	m.rebuild(changed)
 	m.refreshDetail()
+	m.refreshPreview()
 }
 
 func (m *model) rebuild(jumpToHunk bool) {

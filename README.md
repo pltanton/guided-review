@@ -126,6 +126,7 @@ both sides in full.
 | `D` `D` | delete the comment under the cursor (not yet published) |
 | `ctrl+y` / `ctrl+e`, wheel | scroll the chat |
 | drag a `│` | resize the plan or the chat on the right (in a narrow terminal the chat sits under the code) |
+| on the result screen | `j`/`k` pick a comment, `E` edit it (`ctrl+r` as typed), `D` `D` delete, `s` next severity, `c` ask the agent to change something; the preview refreshes as things change |
 | `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step, instantly: the agent prepares every step with the plan. The first press reminds of an open ⚑ question or of changed lines you have not scrolled past yet (the title shows `seen 12/40`) |

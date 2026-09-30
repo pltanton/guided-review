@@ -1744,3 +1744,44 @@ func TestChangedLinesTinted(t *testing.T) {
 		t.Fatalf("only the added line gets the tint:\nadded %q\ncontext %q", added, context)
 	}
 }
+
+func TestFinishScreenEdits(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Publish = &state.PublishPlan{Verdict: "changes"}
+	m.review.Comments = []state.Comment{
+		{ID: 4, Severity: "nit", Body: "rename"},
+		{ID: 5, Severity: "minor", Body: "round later"},
+	}
+	preview := "--- #4 a.go:3\n**nit** rename\n\n--- #5 b.go:1\n**minor** round later\n\n--- summary\nok\n"
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) {
+		ran = append(ran, args)
+		return preview, nil
+	}
+	m.Update(key("P"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌● nit     a.go:3  #4") {
+		t.Fatalf("the first comment starts selected:\n%s", v)
+	}
+	m.Update(key("j"))
+	m.Update(key("s"))
+	want := []string{"comment", "edit", "5", "--severity", "nit", "--", "round later"}
+	if !slices.ContainsFunc(ran, func(a []string) bool { return slices.Equal(a, want) }) {
+		t.Fatalf("s must cycle the selected comment's severity: %q", ran)
+	}
+	m.Update(key("E"))
+	if !m.composing || m.composeKind != inbox.KindEdit || m.composeRef != 5 ||
+		string(m.input) != "round later" {
+		t.Fatalf("E edits the selected comment: ref %d input %q", m.composeRef, string(m.input))
+	}
+	m.Update(key("esc"))
+	m.Update(key("c"))
+	if !m.composing || m.composeKind != inbox.KindMessage || m.composeRef != 5 {
+		t.Fatal("c messages the agent about the selected comment")
+	}
+	m.Update(key("esc"))
+	m.Update(key("D"))
+	m.Update(key("D"))
+	if !slices.ContainsFunc(ran, func(a []string) bool { return slices.Equal(a, []string{"comment", "delete", "5"}) }) {
+		t.Fatalf("D D deletes the selected comment: %q", ran)
+	}
+}
