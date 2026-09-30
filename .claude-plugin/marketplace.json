@@ -1,0 +1,11 @@
+{
+  "name": "guided-review",
+  "owner": { "name": "pltanton" },
+  "plugins": [
+    {
+      "name": "guided-review",
+      "source": "./",
+      "description": "Walks a reviewer through a merge request step by step with the gr CLI and a tmux viewer"
+    }
+  ]
+}
