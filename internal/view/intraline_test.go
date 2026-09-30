@@ -2,8 +2,10 @@ package view
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pltanton/guided-review/internal/diff"
 	"github.com/pltanton/guided-review/internal/state"
 )
@@ -121,5 +123,44 @@ func TestFoldRemoved(t *testing.T) {
 	open := foldRemoved(rows, map[string]bool{out[1].FoldKey: true})
 	if len(open) != len(rows) {
 		t.Fatalf("unfolded: %d rows, want %d", len(open), len(rows))
+	}
+}
+
+func TestRenames(t *testing.T) {
+	tests := []struct {
+		a, b     string
+		from, to string
+		ok       bool
+	}{
+		{"x := calcFee(a)", "x := computeFee(a)", "calcFee", "computeFee", true},
+		{"return calcFee(calcFee(a))", "return computeFee(computeFee(a))", "calcFee", "computeFee", true},
+		{"ok := true", "ok := false", "", "", false},
+		{"n := 1", "n := 2", "", "", false},
+		{"a := b + c", "z := b + d", "", "", false},
+	}
+	for _, tt := range tests {
+		from, to, ok := renamePair(tt.a, tt.b)
+		if from != tt.from || to != tt.to || ok != tt.ok {
+			t.Errorf("renamePair(%q, %q) = %q, %q, %v", tt.a, tt.b, from, to, ok)
+		}
+	}
+	row := func(kind RowKind, text string) Row { return Row{Kind: kind, Plain: text, Text: text} }
+	rows := []Row{
+		row(RowRemoved, "a := calcFee(x)"), row(RowRemoved, "b := calcFee(y)"),
+		row(RowAdded, "a := computeFee(x)"), row(RowAdded, "b := computeFee(y)"),
+		row(RowRemoved, "ok := true"), row(RowAdded, "ok := false"),
+	}
+	markRenames(rows)
+	if !rows[0].RenameHide || rows[2].RenamedFrom != "calcFee" || rows[4].RenameHide {
+		t.Fatalf("renames: %+v", rows)
+	}
+	lone := []Row{row(RowRemoved, "a := calcFee(x)"), row(RowAdded, "a := computeFee(x)")}
+	if markRenames(lone); lone[0].RenameHide {
+		t.Fatal("a single swapped identifier stays a normal change")
+	}
+	out := ansi.Strip(renderUnified(Row{Kind: RowAdded, Line: 3, Text: "a := computeFee(x)",
+		Plain: "a := computeFee(x)", RenamedFrom: "calcFee"}))
+	if !strings.HasPrefix(out, "⇄") || !strings.HasSuffix(out, "← was calcFee") {
+		t.Fatalf("rename line: %q", out)
 	}
 }

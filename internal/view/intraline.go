@@ -8,10 +8,11 @@ import (
 )
 
 const (
-	minSimilarity = 0.5
-	maxWordDiff   = 400
-	minMovedLines = 3
-	minFoldLines  = 3
+	minSimilarity  = 0.5
+	maxWordDiff    = 400
+	minMovedLines  = 3
+	minFoldLines   = 3
+	minRenameLines = 2
 )
 
 var tokenRe = regexp.MustCompile(`\w+|\s+|[^\w\s]`)
@@ -241,4 +242,63 @@ func foldRun(run []Row, unfolded map[string]bool) []Row {
 	f := fold(loose, fmt.Sprintf("▸ %d removed lines hidden", len(loose)))
 	f.HunkStart = run[0].HunkStart
 	return append([]Row{f}, kept...)
+}
+
+var notRenamed = map[string]bool{
+	"true": true, "false": true, "True": true, "False": true, "nil": true, "null": true,
+	"None": true, "undefined": true, "and": true, "or": true, "not": true, "is": true, "in": true,
+}
+
+func renamePair(a, b string) (from, to string, ok bool) {
+	ta, tb := tokens(a), tokens(b)
+	if len(ta) != len(tb) {
+		return "", "", false
+	}
+	ident := func(s string) bool {
+		c := s[0]
+		return (c == '_' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= 0x80) &&
+			!notRenamed[s]
+	}
+	for i := range ta {
+		x, y := ta[i].text, tb[i].text
+		switch {
+		case x == y:
+		case !ident(x) || !ident(y):
+			return "", "", false
+		case from == "":
+			from, to = x, y
+		case x != from || y != to:
+			return "", "", false
+		}
+	}
+	return from, to, from != ""
+}
+
+func markRenames(rows []Row) {
+	type pair struct{ rem, add int }
+	byName := map[string][]pair{}
+	changeRuns(rows, func(i, j, k int) {
+		if j-i != k-j {
+			return
+		}
+		for p := range j - i {
+			a, b := rows[i+p], rows[j+p]
+			if a.Moved || b.Moved || a.Reformat || b.Reformat {
+				continue
+			}
+			if from, to, ok := renamePair(a.Plain, b.Plain); ok {
+				byName[from+" "+to] = append(byName[from+" "+to], pair{i + p, j + p})
+			}
+		}
+	})
+	for name, pairs := range byName {
+		if len(pairs) < minRenameLines {
+			continue
+		}
+		from, _, _ := strings.Cut(name, " ")
+		for _, p := range pairs {
+			rows[p.rem].RenameHide = true
+			rows[p.add].RenamedFrom = from
+		}
+	}
 }

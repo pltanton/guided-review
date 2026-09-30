@@ -1,14 +1,15 @@
 package view
 
 type Cell struct {
-	Line     int
-	Text     string
-	Kind     RowKind
-	Plain    string
-	Emph     [][2]int
-	Moved    bool
-	Reformat bool
-	Mark     string
+	Line        int
+	Text        string
+	Kind        RowKind
+	Plain       string
+	Emph        [][2]int
+	Moved       bool
+	Reformat    bool
+	Mark        string
+	RenamedFrom string
 }
 
 func cellOf(r Row, line int) Cell {
@@ -21,6 +22,8 @@ func cellOf(r Row, line int) Cell {
 		Moved:    r.Moved,
 		Reformat: r.Reformat,
 		Mark:     r.Mark,
+
+		RenamedFrom: r.RenamedFrom,
 	}
 }
 

@@ -50,6 +50,9 @@ type Row struct {
 	GapTo     int
 	FileInfo  string
 	Mark      string
+
+	RenamedFrom string
+	RenameHide  bool
 }
 
 type Note struct {
@@ -122,6 +125,7 @@ func buildRows(
 	}
 	markIntraline(rows)
 	markMoved(rows)
+	markRenames(rows)
 	return rows, nil
 }
 

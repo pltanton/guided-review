@@ -772,6 +772,10 @@ func renderCode(c Cell, hot bool) string {
 	case c.Emph != nil:
 		text = renderEmph(c.Plain, c.Emph, c.Kind)
 	}
+	if c.RenamedFrom != "" {
+		marker = gapStyle.Render("⇄")
+		text += dimStyle.Render("  ← was " + c.RenamedFrom)
+	}
 	if hot {
 		marker = hotStyle.Render("⚑")
 	}

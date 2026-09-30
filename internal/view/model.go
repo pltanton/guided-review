@@ -312,7 +312,9 @@ func (m *model) relist() {
 	} else {
 		rows := m.rows
 		if !m.showRemoved {
-			rows = foldRemoved(rows, m.unfolded)
+			rows = foldRemoved(slices.DeleteFunc(slices.Clone(rows), func(r Row) bool {
+				return r.RenameHide
+			}), m.unfolded)
 		}
 		m.lines = unifiedLines(expandNotes(rows, width, m.folded))
 	}
@@ -856,7 +858,7 @@ func (m *model) changedKeys() []string {
 		switch {
 		case r.Kind == RowAdded:
 			keys = append(keys, fmt.Sprintf("+%s:%d", r.File, r.Line))
-		case r.Kind == RowRemoved && !r.Reformat:
+		case r.Kind == RowRemoved && !r.Reformat && !r.RenameHide:
 			keys = append(keys, fmt.Sprintf("-%s:%d", r.File, r.OldLine))
 		}
 	}

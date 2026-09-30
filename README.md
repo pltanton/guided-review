@@ -142,6 +142,7 @@ both sides in full.
 | `w` / `b`, click a word | move the symbol cursor within the line |
 | `g` | shows what can follow it (`gg`, `gd`, `gr`); `esc` cancels |
 | `gs` | symbols of the file, `●` marks those with changed lines; `:sym name` searches the project |
+| `⇄ … ← was fooBar` | a line where only an identifier was renamed (the same rename on 2+ lines of the step); `O` shows the old line again |
 | `ERROR` / `WARN` under a line | the language server's diagnostics for the step's files, collected in the background |
 | `gd` / `gr` / `gi` / `gy` / `gc` / `K` | LSP: definition (peek), references, implementations, type definition, callers (incoming calls), hover. Lists show a code preview of the selected item, `enter` peeks. Inside a peek `j`/`k` and `w`/`b` move a cursor and the same keys go further; `esc` / `ctrl+o` step back, `e` opens the editor there |
 | `tab` / `shift+tab` | more / default context |
