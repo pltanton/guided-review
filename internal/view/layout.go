@@ -206,13 +206,17 @@ func (m *model) header() []string {
 		}
 	}
 	lines := []string{m.stepTitle(st)}
-	if st.Intro != "" {
-		bar := chapterStyle.Render("▌ ")
-		w := max(m.mainWidth()-4, 20)
+	bar, w := chapterStyle.Render("▌ "), max(m.mainWidth()-4, 20)
+	switch intro := m.chapterIntro(st); {
+	case st.Intro != "":
 		lines = append(lines, bar+chapterStyle.Bold(true).Render(cmp.Or(st.Chapter, "chapter")))
 		for _, l := range strings.Split(ansi.Wrap(st.Intro, w, ""), "\n") {
 			lines = append(lines, bar+textTone.fg().Render(l))
 		}
+	case intro != "":
+		first, _, _ := strings.Cut(intro, "\n")
+		line := chapterStyle.Bold(true).Render(st.Chapter) + dimStyle.Render(" · "+first)
+		lines = append(lines, bar+ansi.Truncate(line, w, "…"))
 	}
 	if m.viewStep != "" {
 		back := fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)
@@ -263,6 +267,18 @@ func (m *model) stepTitle(st *state.Step) string {
 		return left
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+func (m *model) chapterIntro(st *state.Step) string {
+	if st.Chapter == "" || m.review == nil {
+		return ""
+	}
+	for _, s := range m.review.Steps {
+		if s.Chapter == st.Chapter && s.Intro != "" {
+			return s.Intro
+		}
+	}
+	return ""
 }
 
 func (m *model) separator() string {

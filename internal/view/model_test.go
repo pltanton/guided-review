@@ -1650,6 +1650,11 @@ func TestChapterIntro(t *testing.T) {
 	if !strings.Contains(v, "▌ Переводы") || !strings.Contains(v, "▌ Before: a retry debited twice.") {
 		t.Fatalf("the chapter intro must head its first step:\n%s", v)
 	}
+	m.review.Steps[1].Chapter = "Переводы"
+	m.step = &m.review.Steps[1]
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ Переводы · Before: a retry debited twice.") {
+		t.Fatalf("later steps of the chapter keep a one-line reminder:\n%s", v)
+	}
 }
 
 func TestFlowSection(t *testing.T) {
