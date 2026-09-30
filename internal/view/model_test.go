@@ -1727,3 +1727,20 @@ func TestLSPRefreshCycle(t *testing.T) {
 		t.Fatal("refreshing stops after the last attempt")
 	}
 }
+
+func TestChangedLinesTinted(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.cursor = 0
+	var added, context string
+	for _, l := range strings.Split(m.View(), "\n") {
+		switch plain := ansi.Strip(l); {
+		case strings.Contains(plain, "x := 1"):
+			added = l
+		case strings.Contains(plain, "package a"):
+			context = l
+		}
+	}
+	if !strings.Contains(added, bgSeq(addLineTone)) || strings.Contains(context, bgSeq(addLineTone)) {
+		t.Fatalf("only the added line gets the tint:\nadded %q\ncontext %q", added, context)
+	}
+}

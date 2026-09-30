@@ -32,6 +32,8 @@ var (
 	selectTone  = tone{"#DAD5FB", "#3A3360"}
 	fileTone    = tone{"#ECE9FD", "#29243F"}
 	addBgTone   = tone{"#BBF7D0", "#14532D"}
+	addLineTone = tone{"#F0FAF3", "#18261D"}
+	delLineTone = tone{"#FCF1F1", "#2A1B1D"}
 	delBgTone   = tone{"#FECACA", "#7F1D1D"}
 	inkTone     = tone{"#FFFFFF", "#111827"}
 )

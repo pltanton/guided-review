@@ -543,6 +543,11 @@ func (m *model) View() string {
 			line = paint(line, selectTone)
 		case m.lines[i].Kind == RowFile:
 			line = paint(line, fileTone)
+		case m.lines[i].Pair:
+		case m.lines[i].Kind == RowAdded:
+			line = paint(line, addLineTone)
+		case m.lines[i].Kind == RowRemoved:
+			line = paint(line, delLineTone)
 		}
 		main = append(main, line)
 	}
@@ -919,8 +924,18 @@ func (m *model) renderSplit(i, w int) string {
 		}
 		return renderCode(c, hot)
 	}
-	right := cell(l.Right, l.Hotspot && l.Right.Line > 0)
-	return fit(cell(l.Left, false), side) + dimStyle.Render("┃") + right
+	tint := func(s string, c Cell, w int) string {
+		switch c.Kind {
+		case RowAdded:
+			return paint(fit(s, w), addLineTone)
+		case RowRemoved:
+			return paint(fit(s, w), delLineTone)
+		}
+		return fit(s, w)
+	}
+	left := tint(cell(l.Left, false), l.Left, side)
+	right := tint(cell(l.Right, l.Hotspot && l.Right.Line > 0), l.Right, w-side-1)
+	return left + dimStyle.Render("┃") + right
 }
 
 const intakeWidth = 100
