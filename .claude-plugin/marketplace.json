@@ -1,6 +1,9 @@
 {
   "name": "guided-review",
   "owner": { "name": "pltanton" },
+  "metadata": {
+    "description": "Step-by-step, agent-guided merge request review"
+  },
   "plugins": [
     {
       "name": "guided-review",
