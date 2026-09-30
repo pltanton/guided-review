@@ -127,7 +127,7 @@ both sides in full.
 | drag a `│` | resize the plan or the chat on the right (in a narrow terminal the chat sits under the code) |
 | `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
-| `>` | next step, instantly: the agent prepares every step with the plan; on a step with ⚑ the first press reminds of the question |
+| `>` | next step, instantly: the agent prepares every step with the plan. The first press reminds of an open ⚑ question or of changed lines you have not scrolled past yet (the title shows `seen 12/40`) |
 | `S` | skip the step with a reason |
 | `H`/`L`, click a step in the plan | look at an earlier/later step without losing progress; `esc` returns |
 | `L` past the last step | `boilerplate`, `generated` and `all changes` views: every diff of the MR, nothing left out |

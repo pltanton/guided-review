@@ -1460,6 +1460,7 @@ func TestLocalNext(t *testing.T) {
 	}
 	out = "all steps reviewed: run gr status\n"
 	m.review.Steps[0].Hotspots = nil
+	m.View()
 	m.Update(key(">"))
 	if n := len(*sent); n != 1 || (*sent)[0].Kind != inbox.KindReviewed {
 		t.Fatalf("the agent must hear when all steps are reviewed: %+v", *sent)
@@ -1616,5 +1617,27 @@ func TestDiagnosticsAndSymbols(t *testing.T) {
 	m.Update(key("enter"))
 	if len(asked) != 1 || asked[0] != "workspace:Transfer" {
 		t.Fatalf(":sym must search the workspace: %q", asked)
+	}
+}
+
+func TestSeenLines(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Steps[0].Message = "s1"
+	var ran int
+	m.runGr = func(...string) (string, error) { ran++; return "", nil }
+	if m.unseen() == 0 {
+		t.Fatal("nothing is seen before the step is on screen")
+	}
+	m.Update(key(">"))
+	if ran != 0 || !strings.Contains(m.status, "changed lines not seen yet") {
+		t.Fatalf("> must warn about unseen lines: ran %d status %q", ran, m.status)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "✓ seen") || m.unseen() != 0 {
+		t.Fatalf("rendering the whole step marks it seen:\n%s", v)
+	}
+	m.confirmNext = ""
+	m.Update(key(">"))
+	if ran != 1 {
+		t.Fatal("a fully seen step moves on the first >")
 	}
 }

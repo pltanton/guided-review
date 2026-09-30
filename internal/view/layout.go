@@ -234,6 +234,11 @@ func (m *model) stepTitle(st *state.Step) string {
 	if m.review.Round > 1 {
 		left += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
 	}
+	if total, unseen := m.changedRows(), m.unseen(); total > 0 && unseen == 0 {
+		left += addStyle.Render("  ✓ seen")
+	} else if total > 0 {
+		left += dimStyle.Render(fmt.Sprintf("  seen %d/%d", total-unseen, total))
+	}
 	total, reviewed := len(m.review.Steps), 0
 	for _, s := range m.review.Steps {
 		if s.Status != state.StatusPending {
@@ -470,6 +475,9 @@ func (m *model) View() string {
 	}
 
 	body := m.bodyHeight()
+	for i := m.offset; !m.help && i < min(len(m.lines), m.offset+body); i++ {
+		m.markSeen(m.lines[i])
+	}
 	below := ""
 	if rest := len(m.lines) - (m.offset + body); rest > 0 {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))

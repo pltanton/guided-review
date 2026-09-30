@@ -118,6 +118,7 @@ type model struct {
 	deleteArmed int
 	confirmNext string
 	diagStep    string
+	seen        map[string]bool
 	diags       map[string][]lsp.Diagnostic
 	rawSeverity state.Severity
 	anchorFile  string
@@ -634,10 +635,19 @@ func (m *model) next() {
 		m.status = "viewing an earlier step: esc to return, then >"
 	case !m.localSteps():
 		m.emit(inbox.Event{Kind: inbox.KindNext})
-	case len(m.step.Hotspots) > 0 && m.confirmNext != m.step.ID:
-		m.confirmNext = m.step.ID
-		m.status = "⚑ this step has a risk question: answer it, or press > again to move on"
 	default:
+		var why []string
+		if len(m.step.Hotspots) > 0 {
+			why = append(why, "⚑ a risk question to answer")
+		}
+		if n := m.unseen(); n > 0 {
+			why = append(why, fmt.Sprintf("%d changed lines not seen yet", n))
+		}
+		if len(why) > 0 && m.confirmNext != m.step.ID {
+			m.confirmNext = m.step.ID
+			m.status = strings.Join(why, " · ") + ": press > again to move on"
+			return
+		}
 		m.confirmNext = ""
 		m.moveStep("next")
 	}
@@ -805,4 +815,62 @@ func focusAgent(pane string) error {
 		return err
 	}
 	return exec.Command("tmux", "select-pane", "-t", pane).Run()
+}
+
+func seenKeys(l line) []string {
+	var keys []string
+	if l.Pair {
+		if l.Left.Kind == RowRemoved {
+			keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.Left.Line))
+		}
+		if l.Right.Kind == RowAdded {
+			keys = append(keys, fmt.Sprintf("+%s:%d", l.File, l.Right.Line))
+		}
+		return keys
+	}
+	switch l.Kind {
+	case RowAdded:
+		keys = append(keys, fmt.Sprintf("+%s:%d", l.File, l.Line))
+	case RowRemoved:
+		keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.OldLine))
+	case RowFold:
+		for k := range l.FoldCount {
+			keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.OldLine+k))
+		}
+	}
+	return keys
+}
+
+func (m *model) markSeen(l line) {
+	if m.seen == nil {
+		m.seen = map[string]bool{}
+	}
+	for _, k := range seenKeys(l) {
+		m.seen[k] = true
+	}
+}
+
+func (m *model) changedKeys() []string {
+	var keys []string
+	for _, r := range m.rows {
+		switch {
+		case r.Kind == RowAdded:
+			keys = append(keys, fmt.Sprintf("+%s:%d", r.File, r.Line))
+		case r.Kind == RowRemoved && !r.Reformat:
+			keys = append(keys, fmt.Sprintf("-%s:%d", r.File, r.OldLine))
+		}
+	}
+	return keys
+}
+
+func (m *model) changedRows() int { return len(m.changedKeys()) }
+
+func (m *model) unseen() int {
+	n := 0
+	for _, k := range m.changedKeys() {
+		if !m.seen[k] {
+			n++
+		}
+	}
+	return n
 }
