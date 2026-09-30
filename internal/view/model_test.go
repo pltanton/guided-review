@@ -1720,3 +1720,17 @@ func TestYank(t *testing.T) {
 		t.Fatalf("y copied %q, status %q", got, m.status)
 	}
 }
+
+func TestNextAfterDiscussion(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Steps[0].Message = "s1"
+	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?"}}
+	var ran int
+	m.runGr = func(...string) (string, error) { ran++; return "", nil }
+	m.View()
+	m.events = []inbox.Event{{Kind: inbox.KindMessage, Step: "s1", Text: "rounding is fine"}}
+	m.Update(key(">"))
+	if ran != 1 {
+		t.Fatalf("a discussed hotspot on a seen step must not stop >: %q", m.status)
+	}
+}

@@ -647,7 +647,7 @@ func (m *model) next() {
 		m.emit(inbox.Event{Kind: inbox.KindNext})
 	default:
 		var why []string
-		if len(m.step.Hotspots) > 0 {
+		if len(m.step.Hotspots) > 0 && !m.discussed() {
 			why = append(why, "⚑ a risk question to answer")
 		}
 		if n := m.unseen(); n > 0 {
@@ -883,4 +883,10 @@ func (m *model) unseen() int {
 		}
 	}
 	return n
+}
+
+func (m *model) discussed() bool {
+	return slices.ContainsFunc(m.events, func(e inbox.Event) bool {
+		return e.Step == m.step.ID && (e.Kind == inbox.KindMessage || e.Kind == inbox.KindAsk)
+	})
 }
