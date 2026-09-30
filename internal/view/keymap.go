@@ -148,17 +148,10 @@ func DefaultActions() []Action {
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
-		{Name: "chat", Group: vw, Desc: "bigger / smaller chat",
-			Keys: k("t"), run: do(func(m *model) {
-				m.bigChat, m.chatTop, m.chatH = !m.bigChat, 0, 0
-				m.clamp()
-			})},
 		{Name: "chat-up", Group: vw, Desc: "scroll the chat up", Keys: k("ctrl+y"),
 			run: do(func(m *model) { m.chatTop += wheelStep })},
 		{Name: "chat-down", Group: vw, Desc: "scroll the chat down", Keys: k("ctrl+e"),
 			run: do(func(m *model) { m.chatTop = max(m.chatTop-wheelStep, 0) })},
-		{Name: "chat-side", Group: vw, Desc: "chat in a column on the right", Keys: k("T"),
-			run: do(func(m *model) { m.sideChat, m.chatTop = !m.sideChat, 0; m.relist() })},
 		{
 			Name:  "command",
 			Group: vw,
@@ -313,8 +306,6 @@ func (m *model) back() tea.Cmd {
 		m.visual = false
 	case m.search != "":
 		m.search = ""
-	case m.bigChat:
-		m.bigChat, m.chatTop = false, 0
 	case m.viewStep != "":
 		return m.showStep(m.review.Current)
 	}

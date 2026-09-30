@@ -1058,6 +1058,7 @@ func TestSearch(t *testing.T) {
 
 func TestChatPanel(t *testing.T) {
 	m, _ := newTestModel(t)
+	m.width = 160
 	base := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
 	for i := range 30 {
 		step := "s1"
@@ -1073,18 +1074,6 @@ func TestChatPanel(t *testing.T) {
 			},
 		)
 	}
-	if n := len(m.bottomLines()); n > messageLines+2 {
-		t.Fatalf("normal chat too tall: %d", n)
-	}
-	m.Update(key("t"))
-	if n := len(m.bottomLines()); n < m.height/2-2 {
-		t.Fatalf("half chat: %d lines of %d", n, m.height)
-	}
-	m.Update(key("t"))
-	if n := len(m.bottomLines()); n > messageLines+2 {
-		t.Fatalf("second t must shrink the chat back: %d", n)
-	}
-	m.Update(key("T"))
 	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "│ CHAT") || !strings.Contains(out, "message 29") ||
 		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width-m.planWidth() {
@@ -1103,17 +1092,14 @@ func TestChatPanel(t *testing.T) {
 	if m.chatTop != 0 {
 		t.Fatal("ctrl+e must scroll the chat back down")
 	}
-	m.Update(key("T"))
-	m.Update(key("t"))
+	m.width = 90
+	if n := len(m.bottomLines()); n < 3 || n > messageLines+2 {
+		t.Fatalf("a narrow terminal keeps a small chat under the code: %d lines", n)
+	}
 	m.Update(key("c"))
 	typeText(m, strings.Repeat("long words here ", 20))
-	if lines := len(m.bottomLines()); lines < 2 {
+	if lines := len(m.bottomLines()); lines < messageLines+3 {
 		t.Fatal("long input must wrap")
-	}
-	m.Update(key("esc"))
-	m.Update(key("esc"))
-	if m.bigChat {
-		t.Fatal("esc must shrink the chat back")
 	}
 }
 
@@ -1216,11 +1202,6 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 		t.Fatalf("gr args = %q, want %q", ran, want)
 	}
 
-	m.Update(key("t"))
-	m.Update(key("t"))
-	if m.bigChat {
-		t.Fatal("t must toggle the chat size")
-	}
 }
 
 func TestBackspaceDetachesLine(t *testing.T) {
@@ -1372,7 +1353,6 @@ func TestGeneralMessage(t *testing.T) {
 func TestSideChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
-	m.Update(key("T"))
 	if !strings.Contains(ansi.Strip(m.View()), "› c to write · C without a line") {
 		t.Fatal("the side chat must always show where to write")
 	}
@@ -1398,7 +1378,7 @@ func TestSideChatInput(t *testing.T) {
 
 func TestDragResize(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.width = 150
+	m.width = 200
 	m.review.Messages = []state.Message{{Step: "s1", Text: "hi"}}
 	drag := func(fromX, fromY, toX, toY int) {
 		m.handleMouse(tea.MouseMsg{X: fromX, Y: fromY, Action: tea.MouseActionPress,
@@ -1411,12 +1391,6 @@ func TestDragResize(t *testing.T) {
 	if got := m.planWidth(); got != 46 {
 		t.Fatalf("plan width after drag = %d, want 46", got)
 	}
-	top := m.height - len(m.bottomLines())
-	drag(60, top, 60, top-8)
-	if got := m.height - len(m.bottomLines()); got != top-8 {
-		t.Fatalf("bottom chat top after drag = %d, want %d", got, top-8)
-	}
-	m.Update(key("T"))
 	drag(m.width-m.chatWidth(), 3, m.width-60, 3)
 	if got := m.chatWidth(); got != 60 {
 		t.Fatalf("side chat width after drag = %d, want 60", got)
@@ -1517,22 +1491,9 @@ func TestDetailPopupUX(t *testing.T) {
 	}
 }
 
-func TestChatOnTheRightByDefault(t *testing.T) {
-	m := &model{}
-	m.applyConfig(config.Config{})
-	if !m.sideChat {
-		t.Fatal("the chat starts in the right-hand column")
-	}
-	m.applyConfig(config.Config{View: config.View{ChatBottom: true}})
-	if m.sideChat {
-		t.Fatal("chat_bottom keeps it under the code")
-	}
-}
-
 func TestClickChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
-	m.Update(key("T"))
 	bodyH := m.height - len(m.bottomLines())
 	m.handleMouse(tea.MouseMsg{X: m.width - 5, Y: bodyH - 1, Action: tea.MouseActionPress,
 		Button: tea.MouseButtonLeft})

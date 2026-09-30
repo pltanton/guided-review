@@ -21,12 +21,12 @@ import (
 )
 
 const (
-	defaultContext   = 3
-	minSplitWidth    = 80
-	minPlanWidth     = 90
-	minSideChatWidth = 100
-	maxPlanWidth     = 44
-	messageLines     = 5
+	defaultContext = 3
+	minSplitWidth  = 80
+	minPlanWidth   = 90
+	minCodeWidth   = 70
+	maxPlanWidth   = 44
+	messageLines   = 5
 )
 
 type (
@@ -83,11 +83,8 @@ type model struct {
 	previewTop  int
 	runGr       func(args ...string) (string, error)
 
-	bigChat  bool
-	sideChat bool
 	planW    int
 	sideW    int
-	chatH    int
 	resizing string
 	chatTop  int
 
@@ -343,7 +340,6 @@ func (m *model) applyConfig(c config.Config) {
 	m.km, err = newKeymap(c.Keys)
 	m.err = err
 	m.splitView, m.showPlan, m.mouse = c.View.Split, !c.View.HidePlan, !c.View.NoMouse
-	m.sideChat = !c.View.ChatBottom
 	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
 	m.context = m.baseCtx
 	if c.View.Style != "" {

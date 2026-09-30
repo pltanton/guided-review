@@ -146,13 +146,14 @@ func (m *model) mainWidth() int {
 }
 
 func (m *model) chatWidth() int {
-	if !m.sideChat || m.width < minSideChatWidth {
+	w := max(36, m.width/4)
+	if m.sideW > 0 {
+		w = max(24, min(m.sideW, m.width*2/3))
+	}
+	if m.help || m.width-m.planWidth()-w < minCodeWidth {
 		return 0
 	}
-	if m.sideW > 0 {
-		return max(24, min(m.sideW, m.width*2/3))
-	}
-	return max(36, m.width/3)
+	return w
 }
 
 func (m *model) chatScrollHint() string {
@@ -160,11 +161,10 @@ func (m *model) chatScrollHint() string {
 }
 
 func (m *model) sideChatLines(h, w int) []string {
-	k := m.keys().key("chat-side")
 	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
 	lines := []string{
 		labelStyle.Render("CHAT"),
-		dimStyle.Render(k + " closes · " + m.chatScrollHint()),
+		dimStyle.Render(m.chatScrollHint() + " · drag │ to resize"),
 		rule,
 	}
 	km := m.keys()
@@ -361,27 +361,14 @@ func (m *model) bottomLines() []string {
 	switch {
 	case m.step == nil:
 		limit = max(m.height-4, 1)
-	case m.chatH > 0:
-		limit = max(1, min(m.chatH, m.height-6))
-	case m.bigChat:
-		limit = max(m.height/2, messageLines)
 	}
 	var lines []string
-	chat := m.chatLines(m.width, m.bigChat || m.step == nil)
+	chat := m.chatLines(m.width, m.step == nil)
 	if len(chat) > 0 && m.chatWidth() == 0 {
-		k := m.keys()
-		label := fmt.Sprintf("── %s bigger · %s on the right · %s ",
-			k.key("chat"), k.key("chat-side"), m.chatScrollHint())
-		if m.bigChat {
-			label = fmt.Sprintf("── %s smaller · %s ", k.key("chat"), m.chatScrollHint())
-		}
+		label := "── chat · " + m.chatScrollHint() + " "
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
 		lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
-		shown := window(chat, limit, m.chatTop)
-		for m.chatH > 0 && len(shown) < limit {
-			shown = append([]string{""}, shown...)
-		}
-		lines = append(lines, shown...)
+		lines = append(lines, window(chat, limit, m.chatTop)...)
 		if pills, _ := m.optionPills(); len(m.answerOptions()) > 0 && !m.composing {
 			lines = append(lines, pills)
 		}

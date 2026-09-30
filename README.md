@@ -120,10 +120,8 @@ both sides in full.
 | `1`…`9` before the plan, `alt+1`…`alt+9` during steps, click | pick one of the answers the agent offered |
 | `E` | edit the comment under the cursor |
 | `D` `D` | delete the comment under the cursor (not yet published) |
-| `t` | bigger / smaller chat at the bottom |
-| `T` | chat on the right (default, `view.chat_bottom: true` to start at the bottom) or at the bottom |
 | `ctrl+y` / `ctrl+e`, wheel | scroll the chat |
-| drag a `│` or the chat's top line | resize the plan, the right-hand chat or the bottom chat |
+| drag a `│` | resize the plan or the chat on the right (in a narrow terminal the chat sits under the code) |
 | `P` | finish: first press previews the result, second writes it to `/tmp/guided-review/<id>/`, hands it to the agent and closes the viewer; the agent asks you in its chat and then publishes it to the MR |
 | `?` | ask the agent about the line or selection (answer only, no comment); `enter` alone asks it to explain the code |
 | `>` | next step, instantly: the agent prepares every step with the plan; on a step with ⚑ the first press reminds of the question |

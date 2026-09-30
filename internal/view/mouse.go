@@ -81,8 +81,6 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.planW = msg.X + 1
 		case "chat":
 			m.sideW = m.width - msg.X
-		case "bottom":
-			m.chatH = m.height - msg.Y - 2
 		}
 		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
@@ -117,7 +115,7 @@ func (m *model) overChat(x, y int) bool {
 	if cw := m.chatWidth(); cw > 0 {
 		return x >= m.width-cw
 	}
-	return m.bigChat && y >= m.height-len(m.bottomLines())
+	return y >= m.height-len(m.bottomLines())
 }
 
 func (m *model) separatorAt(x, y int) string {
@@ -130,8 +128,6 @@ func (m *model) separatorAt(x, y int) string {
 		return "plan"
 	case y < top && m.chatWidth() > 0 && x == m.width-m.chatWidth():
 		return "chat"
-	case y == top && m.chatWidth() == 0 && len(bottom) > 1:
-		return "bottom"
 	}
 	return ""
 }
