@@ -733,7 +733,7 @@ func (m *model) sidebar(h, w int) []sideEntry {
 		n := dimStyle.Render(fmt.Sprint(len(m.flow)))
 		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FLOW"), n))})
 		wrapped := func(lead, text string, style lipgloss.Style) {
-			for i, l := range strings.Split(ansi.Wrap(text, max(iw-len(lead), 8), ""), "\n") {
+			for i, l := range strings.Split(ansi.Wrap(text, max(iw-len(lead), 8), "."), "\n") {
 				if i > 0 {
 					lead = strings.Repeat(" ", len(lead))
 				}
