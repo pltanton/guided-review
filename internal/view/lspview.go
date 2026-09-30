@@ -59,6 +59,9 @@ type popup struct {
 	target int
 	loc    lspLoc
 	files  map[string][]string
+	cursor int
+	col    int
+	gKey   bool
 }
 
 type lspManager struct {
@@ -160,7 +163,10 @@ func (m *model) defaultLSP(kind, file string, line, col int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, lspTimeout)
 		defer cancel()
-		abs := filepath.Join(root, file)
+		abs := file
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(root, file)
+		}
 		c, lang, err := mgr.client(ctx, abs)
 		if err != nil {
 			return lspMsg{kind: kind, err: err}
@@ -179,11 +185,14 @@ func (m *model) defaultLSP(kind, file string, line, col int) tea.Cmd {
 		case "hover":
 			h, err := c.Hover(ctx, abs, line-1, char)
 			return lspMsg{kind: kind, hover: h, err: err}
-		case "definition":
-			locs, err := c.Definition(ctx, abs, line-1, char)
+		case "references":
+			locs, err := c.References(ctx, abs, line-1, char)
+			return lspMsg{kind: kind, locs: toLocs(root, locs), err: err}
+		case "callers":
+			locs, err := c.IncomingCalls(ctx, abs, line-1, char)
 			return lspMsg{kind: kind, locs: toLocs(root, locs), err: err}
 		default:
-			locs, err := c.References(ctx, abs, line-1, char)
+			locs, err := c.Locate(ctx, kind, abs, line-1, char)
 			return lspMsg{kind: kind, locs: toLocs(root, locs), err: err}
 		}
 	}
@@ -325,43 +334,35 @@ func (m *model) handleLSP(msg lspMsg) {
 		m.err = msg.err
 		return
 	}
-	switch msg.kind {
-	case "hover":
-		if strings.TrimSpace(msg.hover) == "" {
-			m.status = "nothing to show here"
-			return
-		}
+	name := lspNames[msg.kind]
+	empty := len(msg.locs) == 0
+	if msg.kind == "hover" {
+		empty = strings.TrimSpace(msg.hover) == ""
+	}
+	if empty {
+		m.status = "no " + name + " found"
+		return
+	}
+	if m.popup != nil {
+		m.popupStack = append(m.popupStack, m.popup)
+	}
+	switch {
+	case msg.kind == "hover":
 		w := max(m.mainWidth()-6, 20)
 		m.popup = &popup{
 			kind:  "hover",
 			title: "hover",
 			lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n"),
 		}
-	case "definition":
-		switch len(msg.locs) {
-		case 0:
-			m.status = "no definition found"
-		case 1:
-			m.openPeek(msg.locs[0])
-		default:
-			m.popup = &popup{
-				kind:  "definition",
-				title: fmt.Sprintf("definitions · %d", len(msg.locs)),
-				items: msg.locs,
-			}
-		}
+	case len(msg.locs) == 1 && msg.kind != "references" && msg.kind != "callers":
+		m.openPeek(msg.locs[0])
 	default:
-		if len(msg.locs) == 0 {
-			m.status = "no references found"
-			return
-		}
 		m.popup = &popup{
-			kind:  "references",
-			title: fmt.Sprintf("references · %d", len(msg.locs)),
+			kind:  msg.kind,
+			title: fmt.Sprintf("%s · %d", name, len(msg.locs)),
 			items: msg.locs,
 		}
 	}
-	m.popupStack = nil
 }
 
 func (m *model) peek(path string) []string {
@@ -378,6 +379,7 @@ func (m *model) openPeek(loc lspLoc) {
 		title:  fmt.Sprintf("%s:%d", loc.Path, loc.Line),
 		lines:  m.peek(loc.Path),
 		target: target,
+		cursor: target,
 		top:    max(target-3, 0),
 		loc:    loc,
 	}
@@ -415,7 +417,12 @@ func codeLines(lines []string, top, target, rows int) []string {
 
 func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 	p := m.popup
-	isList := p.kind == "references" || p.kind == "definition"
+	isList := p.items != nil
+	if p.kind == "peek" {
+		if cmd, handled := m.peekKey(p, msg.String()); handled {
+			return cmd
+		}
+	}
 	switch msg.String() {
 	case "j", "down":
 		if isList {
@@ -462,10 +469,10 @@ func (m *model) popupLines(width, height int) []string {
 	border := dimStyle.Render("│ ")
 	hint := "esc close"
 	switch p.kind {
-	case "references", "definition":
+	case "references", "definition", "implementation", "typeDefinition", "callers":
 		hint = "j/k select · enter peek · e editor · esc close"
 	case "peek":
-		hint = "j/k scroll · e editor · esc back"
+		hint = "j/k w/b move · gd gr gi gy gc K · e editor · esc back"
 	case "detail":
 		hint = "j/k or wheel scroll · esc close"
 	}
@@ -506,7 +513,12 @@ func (m *model) popupLines(width, height int) []string {
 			}
 		}
 	case "peek":
-		for _, l := range codeLines(p.lines, p.top, p.target, rows) {
+		p.top = max(0, min(p.top, p.cursor), p.cursor-rows+1)
+		for i, l := range codeLines(p.lines, p.top, p.target, rows) {
+			if p.top+i == p.cursor {
+				from, to := wordBounds(ansi.Strip(p.lines[p.cursor]), p.col)
+				l = paint(fit(underline(l, peekGutter+from, peekGutter+to), width-2), cursorTone)
+			}
 			out = append(out, border+l)
 		}
 	default:
@@ -558,4 +570,60 @@ func underline(s string, from, to int) string {
 		b.WriteString(off)
 	}
 	return b.String()
+}
+
+const peekGutter = len("1234 | ")
+
+var lspNames = map[string]string{
+	"hover":          "hover",
+	"definition":     "definitions",
+	"references":     "references",
+	"implementation": "implementations",
+	"typeDefinition": "type definitions",
+	"callers":        "callers",
+}
+
+var peekG = map[string]string{
+	"d": "definition", "r": "references", "i": "implementation",
+	"y": "typeDefinition", "c": "callers",
+}
+
+func (m *model) peekKey(p *popup, k string) (tea.Cmd, bool) {
+	plain := ""
+	if p.cursor < len(p.lines) {
+		plain = ansi.Strip(p.lines[p.cursor])
+	}
+	if p.gKey {
+		p.gKey = false
+		if kind, ok := peekG[k]; ok {
+			return m.peekLSP(p, plain, kind), true
+		}
+		return nil, true
+	}
+	switch k {
+	case "j", "down":
+		p.cursor, p.col = min(p.cursor+1, max(len(p.lines)-1, 0)), 0
+	case "k", "up":
+		p.cursor, p.col = max(p.cursor-1, 0), 0
+	case "w":
+		p.col = nextWord(plain, p.col)
+	case "b":
+		p.col = prevWord(plain, p.col)
+	case "g":
+		p.gKey = true
+	case "K":
+		return m.peekLSP(p, plain, "hover"), true
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (m *model) peekLSP(p *popup, plain, kind string) tea.Cmd {
+	if m.lspDo == nil {
+		return nil
+	}
+	p.col = wordStart(plain, p.col)
+	m.lspBusy = kind
+	return m.lspDo(kind, p.loc.Path, p.cursor+1, p.col)
 }

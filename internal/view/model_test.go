@@ -227,7 +227,7 @@ func TestGroupedRunes(t *testing.T) {
 	if m.cursor != 3 {
 		t.Fatalf("grouped jjj: cursor = %d, want 3", m.cursor)
 	}
-	m.Update(key("gchi"))
+	m.Update(key("jchi"))
 	m.Update(key("enter"))
 	if len(*sent) != 1 || (*sent)[0].Text != "hi" {
 		t.Fatalf("grouped compose sent %+v", *sent)
@@ -1539,5 +1539,44 @@ func TestAnswerOptions(t *testing.T) {
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1"), Alt: true})
 	if len(*sentS) != 1 || (*sentS)[0].Text != "да" {
 		t.Fatalf("alt+1 must answer: %+v", *sentS)
+	}
+}
+
+func TestLSPFromPeek(t *testing.T) {
+	m, _ := newTestModel(t)
+	var asked []string
+	m.lspDo = func(kind, file string, line, col int) tea.Cmd {
+		asked = append(asked, fmt.Sprintf("%s %s:%d:%d", kind, file, line, col))
+		return nil
+	}
+	m.peekFile = func(string) []string { return []string{"package b", "func B() { helper() }"} }
+	m.openPeek(lspLoc{Path: "b.go", Line: 1})
+	for _, k := range []string{"j", "w", "w", "g", "i"} {
+		m.Update(key(k))
+	}
+	if len(asked) != 1 || asked[0] != "implementation b.go:2:11" {
+		t.Fatalf("gi in the peek must ask about the word under its cursor: %q", asked)
+	}
+	first := m.popup
+	m.handleLSP(lspMsg{kind: "definition", locs: []lspLoc{{Path: "c.go", Line: 7}}})
+	if m.popup == first || m.popup.loc.Path != "c.go" || len(m.popupStack) != 1 {
+		t.Fatalf("a result from the peek opens on top of it: stack %d, %+v", len(m.popupStack), m.popup)
+	}
+	m.Update(key("esc"))
+	if m.popup != first {
+		t.Fatal("esc must go back to the previous peek")
+	}
+	for _, k := range []string{"esc"} {
+		m.Update(key(k))
+	}
+	m.seek(func(l line) bool { return l.Kind == RowCode })
+	for _, seq := range [][]string{{"g", "y"}, {"g", "c"}} {
+		for _, k := range seq {
+			m.Update(key(k))
+		}
+	}
+	if len(asked) != 3 || !strings.HasPrefix(asked[1], "typeDefinition ") ||
+		!strings.HasPrefix(asked[2], "callers ") {
+		t.Fatalf("gy and gc must ask the server: %q", asked)
 	}
 }

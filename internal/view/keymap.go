@@ -113,6 +113,12 @@ func DefaultActions() []Action {
 			run: func(m *model) tea.Cmd { return m.lspRequest("definition") }},
 		{Name: "references", Group: lsp, Desc: "list references", Keys: k("g r"),
 			run: func(m *model) tea.Cmd { return m.lspRequest("references") }},
+		{Name: "implementation", Group: lsp, Desc: "go to implementations", Keys: k("g i"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("implementation") }},
+		{Name: "type-definition", Group: lsp, Desc: "go to the type's definition", Keys: k("g y"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("typeDefinition") }},
+		{Name: "callers", Group: lsp, Desc: "who calls this (incoming calls)", Keys: k("g c"),
+			run: func(m *model) tea.Cmd { return m.lspRequest("callers") }},
 		{Name: "hover", Group: lsp, Desc: "type and docs", Keys: k("K"),
 			run: func(m *model) tea.Cmd { return m.lspRequest("hover") }},
 

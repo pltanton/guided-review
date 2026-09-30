@@ -91,7 +91,7 @@ func TestClient(t *testing.T) {
 	if err := c.DidOpen("/repo/a.go", "go", "package a\n"); err != nil {
 		t.Fatal(err)
 	}
-	defs, err := c.Definition(ctx, "/repo/a.go", 2, 3)
+	defs, err := c.Locate(ctx, "definition", "/repo/a.go", 2, 3)
 	if err != nil || len(defs) != 1 || defs[0].Path != "/repo/b.go" || defs[0].Line != 9 ||
 		defs[0].Char != 5 {
 		t.Fatalf("Definition = %+v, %v", defs, err)

@@ -201,8 +201,13 @@ func (c *Client) Initialize(ctx context.Context, root string) error {
 		"rootUri":   uri,
 		"capabilities": map[string]any{
 			"textDocument": map[string]any{
-				"hover":      map[string]any{"contentFormat": []string{"plaintext", "markdown"}},
-				"definition": map[string]any{"linkSupport": true},
+				"hover": map[string]any{
+					"contentFormat": []string{"plaintext", "markdown"},
+				},
+				"definition":     map[string]any{"linkSupport": true},
+				"implementation": map[string]any{"linkSupport": true},
+				"typeDefinition": map[string]any{"linkSupport": true},
+				"callHierarchy":  map[string]any{},
 			},
 			"workspace": map[string]any{"configuration": true, "workspaceFolders": true},
 		},
@@ -286,12 +291,55 @@ func parseLocations(raw json.RawMessage) ([]Location, error) {
 	return out, nil
 }
 
-func (c *Client) Definition(ctx context.Context, path string, line, char int) ([]Location, error) {
-	raw, err := c.call(ctx, "textDocument/definition", position(path, line, char))
+func (c *Client) Locate(
+	ctx context.Context,
+	method, path string,
+	line, char int,
+) ([]Location, error) {
+	raw, err := c.call(ctx, "textDocument/"+method, position(path, line, char))
 	if err != nil {
 		return nil, err
 	}
 	return parseLocations(raw)
+}
+
+func (c *Client) IncomingCalls(
+	ctx context.Context,
+	path string,
+	line, char int,
+) ([]Location, error) {
+	raw, err := c.call(ctx, "textDocument/prepareCallHierarchy", position(path, line, char))
+	if err != nil {
+		return nil, err
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
+		return nil, nil
+	}
+	raw, err = c.call(ctx, "callHierarchy/incomingCalls", map[string]any{"item": items[0]})
+	if err != nil {
+		return nil, err
+	}
+	var calls []struct {
+		From struct {
+			URI            string   `json:"uri"`
+			SelectionRange lspRange `json:"selectionRange"`
+		} `json:"from"`
+		FromRanges []lspRange `json:"fromRanges"`
+	}
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		return nil, err
+	}
+	var out []Location
+	for _, call := range calls {
+		rng := call.From.SelectionRange
+		if len(call.FromRanges) > 0 {
+			rng = call.FromRanges[0]
+		}
+		loc := rawLocation{URI: call.From.URI, Range: &rng}
+		out = append(out, loc.location())
+	}
+	return out, nil
 }
 
 func (c *Client) References(ctx context.Context, path string, line, char int) ([]Location, error) {

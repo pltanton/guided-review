@@ -39,7 +39,7 @@ func TestGopls(t *testing.T) {
 	if err := c.DidOpen(a, "go", string(data)); err != nil {
 		t.Fatal(err)
 	}
-	defs, err := c.Definition(ctx, a, 3, 8)
+	defs, err := c.Locate(ctx, "definition", a, 3, 8)
 	if err != nil || len(defs) != 1 || filepath.Base(defs[0].Path) != "b.go" || defs[0].Line != 3 {
 		t.Fatalf("Definition = %+v, %v", defs, err)
 	}
@@ -55,6 +55,10 @@ func TestGopls(t *testing.T) {
 		t.Fatalf("Hover = %q, %v", hover, err)
 	}
 	t.Logf("hover: %q", hover)
+	callers, err := c.IncomingCalls(ctx, b, 3, 6)
+	if err != nil || len(callers) != 1 || filepath.Base(callers[0].Path) != "a.go" || callers[0].Line != 3 {
+		t.Fatalf("IncomingCalls = %+v, %v", callers, err)
+	}
 }
 
 func TestStartReportsServerStderr(t *testing.T) {
