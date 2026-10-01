@@ -3,6 +3,7 @@ package gitx
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"slices"
@@ -48,8 +49,14 @@ func (r Repo) Commit(ctx context.Context, rev string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+var ErrNoMergeBase = errors.New("no common ancestor")
+
 func (r Repo) MergeBase(ctx context.Context, a, b string) (string, error) {
 	out, err := r.Run(ctx, "merge-base", a, b)
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", fmt.Errorf("%s and %s: %w", a, b, ErrNoMergeBase)
+	}
 	return strings.TrimSpace(out), err
 }
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -155,6 +156,8 @@ func resolveTarget(
 	arg, base string,
 ) (target, error) {
 	switch {
+	case base != "" && (github.IsPRURL(arg) || gitlab.IsMRURL(arg) || strings.Contains(arg, "..")):
+		return target{}, errors.New("--base goes with a branch, not with an MR URL or a range")
 	case github.IsPRURL(arg):
 		return githubTarget(ctx, e, repo, arg)
 	case gitlab.IsMRURL(arg):
@@ -191,23 +194,7 @@ func resolveTarget(
 			},
 		}, nil
 	case strings.Contains(arg, ".."):
-		a, b, _ := strings.Cut(arg, "..")
-		baseSHA, err := repo.Commit(ctx, a)
-		if err != nil {
-			return target{}, err
-		}
-		headSHA, err := repo.Commit(ctx, b)
-		if err != nil {
-			return target{}, err
-		}
-		id := short(baseSHA) + "-" + short(headSHA)
-		return target{
-			id:     id,
-			source: arg,
-			base:   baseSHA,
-			head:   headSHA,
-			branch: repo.BranchName(ctx, b),
-		}, nil
+		return rangeTarget(ctx, repo, arg)
 	}
 	rev := arg
 	if rev == "" {
@@ -232,6 +219,35 @@ func resolveTarget(
 		id = short(headSHA)
 	}
 	return target{id: id, source: rev, base: baseSHA, head: headSHA, branch: branch}, nil
+}
+
+func rangeTarget(ctx context.Context, repo gitx.Repo, arg string) (target, error) {
+	a, b, ok := strings.Cut(arg, "...")
+	if !ok {
+		a, b, _ = strings.Cut(arg, "..")
+	}
+	tip, err := repo.Commit(ctx, cmp.Or(a, "HEAD"))
+	if err != nil {
+		return target{}, err
+	}
+	headSHA, err := repo.Commit(ctx, cmp.Or(b, "HEAD"))
+	if err != nil {
+		return target{}, err
+	}
+	baseSHA, err := repo.MergeBase(ctx, tip, headSHA)
+	switch {
+	case errors.Is(err, gitx.ErrNoMergeBase):
+		baseSHA = tip
+	case err != nil:
+		return target{}, err
+	}
+	return target{
+		id:     short(tip) + "-" + short(headSHA),
+		source: arg,
+		base:   baseSHA,
+		head:   headSHA,
+		branch: repo.BranchName(ctx, cmp.Or(b, "HEAD")),
+	}, nil
 }
 
 func defaultBase(ctx context.Context, repo gitx.Repo) (string, error) {

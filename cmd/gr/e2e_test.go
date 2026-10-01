@@ -192,6 +192,33 @@ steps:
 	}
 }
 
+func TestInitRange(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Git("checkout", "-q", "main")
+	h.repo.Write("upstream.go", "package api\n")
+	h.repo.Commit("upstream")
+	h.repo.Git("checkout", "-q", "feature")
+	for _, arg := range []string{"main..feature", "main...feature", "main.."} {
+		out := h.mustRun("", "init", "--force", arg)
+		assertContains(t, out, "\n  api/transfer.go  [modified]  4-6\n")
+		if strings.Contains(out, "upstream.go") {
+			t.Fatalf("%s: commits on main are not the author's:\n%s", arg, out)
+		}
+	}
+
+	empty := h.repo.Git("hash-object", "-t", "tree", "-w", os.DevNull)
+	root := h.repo.Git("commit-tree", empty, "-m", "unrelated root")
+	out := h.mustRun("", "init", root+"..HEAD")
+	assertContains(t, out, "\n  api/transfer.go  [added]  1-8\n", "\n  wire.go  [added]  1-3\n")
+
+	for _, arg := range []string{"main..feature", "https://h/g/p/-/merge_requests/7"} {
+		if _, err := h.run("", "init", "--base", "main", arg); err == nil ||
+			!strings.Contains(err.Error(), "--base goes with a branch") {
+			t.Fatalf("--base with %s must fail, got %v", arg, err)
+		}
+	}
+}
+
 func TestInitOtherBranchUsesWorktree(t *testing.T) {
 	h := newHarness(t)
 	feature := h.repo.Git("rev-parse", "feature")

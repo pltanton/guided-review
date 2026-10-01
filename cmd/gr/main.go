@@ -17,6 +17,8 @@ const usage = `usage: gr <command> [args]
 
 review
   init [--base REV] [--id ID] [--force] [--self] [MR-URL | PR-URL | BRANCH | BASE..HEAD]
+                       BASE..HEAD = BASE...HEAD: HEAD since it forked from BASE, or
+                       against BASE itself when they share no history; --base: BRANCH only
   status [--gate]
   hunks
   plan set [-f FILE]...
