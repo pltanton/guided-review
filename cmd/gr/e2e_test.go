@@ -953,7 +953,7 @@ func TestGitHubPR(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := github.ReviewComment{Path: "api/transfer.go", Line: 6, Side: "RIGHT", StartLine: 4,
-		StartSide: "RIGHT", Body: "**major** zero is negative too\n\n```suggestion\n\tif a <= 0 {\n```"}
+		StartSide: "RIGHT", Body: "**major** zero is negative too\n\n```suggestion\n\tif a <= 0 {\n```\n\n<!-- gr:comment 1 -->"}
 	if req.Event != "REQUEST_CHANGES" || req.CommitID != head || len(req.Comments) != 1 ||
 		req.Comments[0] != want || !strings.Contains(req.Body, "Guided review: changes requested") {
 		t.Fatalf("review request: %s", data)

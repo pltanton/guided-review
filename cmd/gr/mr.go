@@ -279,6 +279,7 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRu
 		if c.Suggestion != "" {
 			body += fmt.Sprintf("\n\n```suggestion\n%s\n```", c.Suggestion)
 		}
+		body += "\n\n" + state.CommentMarker(c.ID)
 		start, end, _ := state.ParseLines(c.Lines)
 		if c.SHA != r.HeadSHA || !inPRDiff(mrFiles, c.File, end) {
 			note := fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)
@@ -439,6 +440,7 @@ func commentDraft(
 	if c.Suggestion != "" {
 		body += fmt.Sprintf("\n\n```suggestion:-%d+0\n%s\n```", end-start, c.Suggestion)
 	}
+	body += "\n\n" + state.CommentMarker(c.ID)
 	where := fmt.Sprintf("%s:%d", c.File, end)
 	i := slices.IndexFunc(mrFiles, func(f diff.File) bool { return f.Path == c.File })
 	if c.SHA != r.HeadSHA || i < 0 {

@@ -455,9 +455,10 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 			r.Discussions = append(r.Discussions, state.Discussion{
 				ID: d.ID, Author: d.Author, Body: d.Body, Replies: d.Replies, File: d.File,
 				Line: d.Line, OldLine: d.OldLine, Resolved: d.Resolved, Resolvable: d.Resolvable,
-				Notes: notes(d.Notes), ReplyTo: d.ReplyTo,
+				Notes: notes(d.Notes), ReplyTo: d.ReplyTo, Comment: marked(d.Notes),
 			})
 		}
+		r.LinkComments()
 		return err
 	}
 	if r.MR.Me == "" {
@@ -469,9 +470,10 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 		r.Discussions = append(r.Discussions, state.Discussion{
 			ID: d.ID, Author: d.Author, Body: d.Body, Replies: d.Replies, File: d.File,
 			Line: d.Line, OldLine: d.OldLine, Resolved: d.Resolved, Resolvable: d.Resolvable,
-			Notes: notes(d.Notes),
+			Notes: notes(d.Notes), Comment: marked(d.Notes),
 		})
 	}
+	r.LinkComments()
 	return err
 }
 
@@ -479,8 +481,16 @@ func notes[N ~struct{ Author, Body string }](in []N) []state.Note {
 	out := make([]state.Note, len(in))
 	for i, n := range in {
 		out[i] = state.Note(n)
+		out[i].Body = state.WithoutMarker(out[i].Body)
 	}
 	return out
+}
+
+func marked[N ~struct{ Author, Body string }](in []N) int {
+	if len(in) == 0 {
+		return 0
+	}
+	return state.MarkedComment(state.Note(in[0]).Body)
 }
 
 func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (target, error) {

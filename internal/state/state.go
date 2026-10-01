@@ -114,6 +114,7 @@ type Discussion struct {
 	Resolvable bool   `yaml:"resolvable,omitempty"`
 	Notes      []Note `yaml:"notes,omitempty"`
 	ReplyTo    int64  `yaml:"reply_to,omitempty"`
+	Comment    int    `yaml:"comment,omitempty"`
 }
 
 type Note struct {
@@ -217,6 +218,7 @@ type Comment struct {
 	Round      int      `yaml:"round,omitempty"`
 	Resolved   bool     `yaml:"resolved,omitempty"`
 	Published  bool     `yaml:"published,omitempty"`
+	ThreadID   string   `yaml:"thread_id,omitempty"`
 }
 
 func (r *Review) CodeDir(repoDir string) string {
