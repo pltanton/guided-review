@@ -99,3 +99,68 @@ func TestDiffAlgorithm(t *testing.T) {
 		t.Fatal("unknown algorithm must fail")
 	}
 }
+
+func TestIsAncestor(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("a.txt", "one\n")
+	first := tr.Commit("first")
+	tr.Write("a.txt", "two\n")
+	second := tr.Commit("second")
+	tr.Git("checkout", "-q", "-b", "side", first)
+	tr.Write("b.txt", "side\n")
+	side := tr.Commit("side")
+	repo := gitx.Repo{Dir: tr.Dir}
+	tests := []struct {
+		ancestor, rev string
+		want          bool
+	}{
+		{first, second, true},
+		{first, first, true},
+		{second, first, false},
+		{second, side, false},
+		{"0000000000000000000000000000000000000000", second, false},
+	}
+	for _, tt := range tests {
+		if got := repo.IsAncestor(ctx, tt.ancestor, tt.rev); got != tt.want {
+			t.Errorf("IsAncestor(%.7s, %.7s) = %v, want %v", tt.ancestor, tt.rev, got, tt.want)
+		}
+	}
+}
+
+func TestBranchName(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("a.txt", "one\n")
+	sha := tr.Commit("first")
+	tr.Git("branch", "feature/x")
+	tr.Git("tag", "v1.0")
+	repo := gitx.Repo{Dir: tr.Dir}
+	for rev, want := range map[string]string{
+		"main":      "main",
+		"feature/x": "feature/x",
+		"v1.0":      "v1.0",
+		"HEAD":      "main",
+		sha:         "",
+		sha[:8]:     "",
+	} {
+		if got := repo.BranchName(ctx, rev); got != want {
+			t.Errorf("BranchName(%q) = %q, want %q", rev, got, want)
+		}
+	}
+}
+
+func TestChangesRename(t *testing.T) {
+	ctx := context.Background()
+	tr := testrepo.New(t)
+	tr.Write("old name.txt", strings.Repeat("same line\n", 10))
+	base := tr.Commit("base")
+	tr.Git("rm", "-q", "old name.txt")
+	tr.Write("новое\tимя.txt", strings.Repeat("same line\n", 10))
+	head := tr.Commit("head")
+	got, err := gitx.Repo{Dir: tr.Dir}.Changes(ctx, base, head)
+	want := gitx.Change{Status: 'R', OldPath: "old name.txt", Path: "новое\tимя.txt"}
+	if err != nil || len(got) != 1 || got[0] != want {
+		t.Fatalf("Changes = %+v, %v; want %+v", got, err, want)
+	}
+}
