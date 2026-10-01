@@ -21,7 +21,12 @@ type Action struct {
 	run   func(*model) tea.Cmd
 }
 
-var groups = []string{"navigate", "diff", "lsp", "review", "view"}
+const finishGroup = "finish preview"
+
+var (
+	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
+	previewActions = []string{"finish", "edit-comment", "delete-comment", "message"}
+)
 
 func DefaultActions() []Action {
 	do := func(f func(*model)) func(*model) tea.Cmd {
@@ -183,6 +188,13 @@ func DefaultActions() []Action {
 			Keys: k("ctrl+c"), run: do((*model).interrupt)},
 		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q"),
 			run: func(*model) tea.Cmd { return tea.Quit }},
+
+		{Name: "verdict", Group: finishGroup, Desc: "verdict: approve → changes → blocked",
+			Keys: k("v"), run: do((*model).cycleVerdict)},
+		{Name: "approve", Group: finishGroup, Desc: "approve the MR on publishing, or not",
+			Keys: k("a"), run: do((*model).toggleApprove)},
+		{Name: "severity", Group: finishGroup, Desc: "next severity of the selected comment",
+			Keys: k("s"), run: do(func(m *model) { m.cycleSeverity(m.previewSelected()) })},
 	}
 }
 
@@ -211,11 +223,15 @@ func (m *model) focusAgent() {
 type keymap struct {
 	actions  []Action
 	byKey    map[string]int
+	preview  map[string]int
 	prefixes map[string]bool
 }
 
 func newKeymap(overrides map[string][]string) (*keymap, error) {
-	km := &keymap{actions: DefaultActions(), byKey: map[string]int{}, prefixes: map[string]bool{}}
+	km := &keymap{
+		actions: DefaultActions(), byKey: map[string]int{}, preview: map[string]int{},
+		prefixes: map[string]bool{},
+	}
 	var unknown []string
 	for name, keys := range overrides {
 		i := slices.IndexFunc(km.actions, func(a Action) bool { return a.Name == name })
@@ -226,16 +242,25 @@ func newKeymap(overrides map[string][]string) (*keymap, error) {
 		km.actions[i].Keys = keys
 	}
 	var conflicts []string
+	bind := func(byKey map[string]int, i int, k string) bool {
+		if j, taken := byKey[k]; taken {
+			conflicts = append(
+				conflicts,
+				fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, km.actions[i].Name),
+			)
+			return false
+		}
+		byKey[k] = i
+		return true
+	}
 	for i, a := range km.actions {
 		for _, k := range a.Keys {
-			if j, taken := km.byKey[k]; taken {
-				conflicts = append(
-					conflicts,
-					fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, a.Name),
-				)
+			if a.Group == finishGroup || slices.Contains(previewActions, a.Name) {
+				bind(km.preview, i, k)
+			}
+			if a.Group == finishGroup || !bind(km.byKey, i, k) {
 				continue
 			}
-			km.byKey[k] = i
 			if first, _, seq := strings.Cut(k, " "); seq {
 				km.prefixes[first] = true
 			}
@@ -262,6 +287,11 @@ func (km *keymap) key(name string) string {
 		}
 	}
 	return ""
+}
+
+func (km *keymap) previewKey(name, k string) bool {
+	i, ok := km.preview[k]
+	return ok && km.actions[i].Name == name
 }
 
 func (m *model) keys() *keymap {

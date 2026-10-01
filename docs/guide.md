@@ -66,7 +66,8 @@ definitions, references, implementations, callers, and a call flow for the step.
 
 `gr` never writes to GitLab or GitHub. At the end it writes inline comments and a
 summary (verdict, decisions, what was skipped and why) to `/tmp/guided-review/<id>/`.
-You review and edit it, then the agent posts it: GitLab draft notes in one batch or one
+You review and edit it (in the preview `v` cycles the verdict and `a` turns approve on
+or off), then the agent posts it: GitLab draft notes in one batch or one
 GitHub review. A `guided-review-notify` skill, if present, then tells the author.
 
 </details>
