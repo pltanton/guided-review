@@ -532,6 +532,13 @@ func TestCommentEdit(t *testing.T) {
 
 func mrHarness(t *testing.T) (*harness, *[]string) {
 	h := newHarness(t)
+	calls := h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.mustRun(goodPlan, "plan", "set")
+	return h, calls
+}
+
+func (h *harness) stubGitLab() *[]string {
 	base := h.repo.Git("rev-parse", "main")
 	head := h.repo.Git("rev-parse", "HEAD")
 	var calls []string
@@ -548,9 +555,44 @@ func mrHarness(t *testing.T) (*harness, *[]string) {
 			"source_branch":"feature","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
 			base, base, head), nil
 	}
-	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
-	h.mustRun(goodPlan, "plan", "set")
-	return h, &calls
+	return &calls
+}
+
+func (h *harness) stubGitHub() {
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	h.gh = func(_ context.Context, args ...string) ([]byte, error) {
+		switch {
+		case args[len(args)-1] == "user":
+			return []byte(`{"login":"me"}`), nil
+		case slices.Contains(args, "graphql"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]},
+				"comments":{"nodes":[]}}}}}`), nil
+		}
+		return fmt.Appendf(nil, `{"title":"T","html_url":"https://github.com/o/r/pull/7",
+			"head":{"ref":"feature","sha":%q},"base":{"sha":%q}}`, head, base), nil
+	}
+}
+
+func fileHarness(t *testing.T, path, before, after string) *harness {
+	tr := testrepo.New(t)
+	tr.Write(path, before)
+	tr.Commit("base")
+	tr.Git("checkout", "-q", "-b", "feature")
+	tr.Write(path, after)
+	tr.Commit("change")
+	return &harness{t: t, repo: tr, cache: t.TempDir()}
+}
+
+func (h *harness) reviewWhole(path string, comments ...[]string) {
+	h.t.Helper()
+	h.mustRun("steps:\n  - {id: s1, title: all, kind: logic, hunks: [{file: "+path+"}]}\n",
+		"plan", "set")
+	for _, c := range comments {
+		h.mustRun("", append([]string{"comment", "add", "--file", path}, c...)...)
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes")
 }
 
 func TestExport(t *testing.T) {
@@ -1113,5 +1155,73 @@ func TestInitNeedsTheCurrentUser(t *testing.T) {
 	if _, err := h.run("", "discussions"); err == nil ||
 		!strings.Contains(err.Error(), "glab auth login") {
 		t.Fatalf("a failed user lookup must surface with its hint, got %v", err)
+	}
+}
+
+func TestPositionsFollowTheServerDiff(t *testing.T) {
+	h := fileHarness(t, "flow.go", "return nil\ny\n}\n}\n", "}\n}\ny\n")
+	h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.reviewWhole("flow.go",
+		[]string{"--lines", "3", "--severity", "nit", "y moved down"},
+		[]string{"--lines", "1", "--severity", "nit", "brace"})
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	for name, want := range map[string]gitlabPosition{
+		"drafts/01.json": {NewLine: 3},
+		"drafts/02.json": {NewLine: 1, OldLine: 3},
+	} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var note struct{ Position gitlabPosition }
+		if err := json.Unmarshal(data, &note); err != nil {
+			t.Fatal(err)
+		}
+		if note.Position != want {
+			t.Fatalf("%s: position %+v, want %+v as in a myers diff", name, note.Position, want)
+		}
+	}
+}
+
+type gitlabPosition struct {
+	NewLine int `json:"new_line"`
+	OldLine int `json:"old_line"`
+}
+
+func TestGitHubCommentsStayInOneHunk(t *testing.T) {
+	var before, after strings.Builder
+	for i := 1; i <= 20; i++ {
+		fmt.Fprintf(&before, "l%d\n", i)
+		if i == 3 || i == 15 {
+			fmt.Fprintf(&after, "L%d\n", i)
+		} else {
+			fmt.Fprintf(&after, "l%d\n", i)
+		}
+	}
+	h := fileHarness(t, "g.go", before.String(), after.String())
+	h.stubGitHub()
+	h.mustRun("", "init", "https://github.com/o/r/pull/7")
+	h.reviewWhole("g.go",
+		[]string{"--lines", "3-15", "--severity", "minor", "--suggestion", "x", "two hunks"},
+		[]string{"--lines", "1-3", "--severity", "nit", "--suggestion", "y", "one hunk"},
+		[]string{"--lines", "9", "--severity", "nit", "outside"})
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	data, err := os.ReadFile(filepath.Join(dir, "review-request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req github.Review
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatal(err)
+	}
+	want := []github.ReviewComment{
+		{Path: "g.go", Line: 15, Side: "RIGHT",
+			Body: "`g.go:3-15` **minor** two hunks\n\n<!-- gr:comment 1 -->"},
+		{Path: "g.go", Line: 3, Side: "RIGHT", StartLine: 1, StartSide: "RIGHT",
+			Body: "**nit** one hunk\n\n```suggestion\ny\n```\n\n<!-- gr:comment 2 -->"},
+	}
+	if !slices.Equal(req.Comments, want) || !strings.Contains(req.Body, "`g.go:9` **nit** outside") {
+		t.Fatalf("review request: %s", data)
 	}
 }

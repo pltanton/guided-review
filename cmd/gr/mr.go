@@ -175,7 +175,7 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 	if r.MR == nil {
 		return exportFixes(e, r, dir, *dryRun)
 	}
-	mrFiles, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
+	mrFiles, err := s.serverDiff(ctx, r.BaseSHA, r.HeadSHA)
 	if err != nil {
 		return err
 	}
@@ -286,15 +286,21 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRu
 		}
 		body += "\n\n" + state.CommentMarker(c.ID)
 		start, end, _ := state.ParseLines(c.Lines)
-		if c.SHA != r.HeadSHA || !inPRDiff(mrFiles, c.File, end) {
+		hunk, ok := prHunk(mrFiles, c.File, end)
+		if c.SHA != r.HeadSHA || !ok {
 			note := fmt.Sprintf("`%s:%s` %s", c.File, c.Lines, body)
 			general = append(general, note)
 			fmt.Fprintf(&md, "--- #%d %s:%d (general note)\n%s\n\n", c.ID, c.File, end, note)
 			continue
 		}
 		rc := github.ReviewComment{Path: c.File, Line: end, Side: "RIGHT", Body: body}
-		if start < end && inPRDiff(mrFiles, c.File, start) {
+		switch {
+		case start < end && start >= hunk.from:
 			rc.StartLine, rc.StartSide = start, "RIGHT"
+		case start < end:
+			rc.Body = fmt.Sprintf("`%s:%s` **%s** %s\n\n%s",
+				c.File, c.Lines, c.Severity, c.Body, state.CommentMarker(c.ID))
+			body = rc.Body
 		}
 		req.Comments = append(req.Comments, rc)
 		fmt.Fprintf(&md, "--- #%d %s:%d\n%s\n\n", c.ID, c.File, end, body)
@@ -329,16 +335,40 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRu
 	return writeExport(e, dir, out)
 }
 
-// GitHub accepts review comments only on lines of the PR diff, which carries three lines
-// of context around each change.
-func inPRDiff(files []diff.File, path string, line int) bool {
+type lineSpan struct{ from, to int }
+
+// GitHub accepts review comments only on lines its PR diff shows: changes and three lines
+// of context around them, in one hunk per comment.
+const prContext = 3
+
+func prHunk(files []diff.File, path string, line int) (lineSpan, bool) {
 	i := slices.IndexFunc(files, func(f diff.File) bool { return f.Path == path })
 	if i < 0 {
-		return false
+		return lineSpan{}, false
 	}
-	return slices.ContainsFunc(files[i].Hunks, func(h diff.Hunk) bool {
-		return line >= h.NewStart-3 && line <= h.NewEnd()+3
-	})
+	for _, h := range prHunks(files[i]) {
+		if line >= h.from && line <= h.to {
+			return h, true
+		}
+	}
+	return lineSpan{}, false
+}
+
+func prHunks(f diff.File) []lineSpan {
+	var out []lineSpan
+	for _, h := range f.Hunks {
+		from, to := h.NewStart, h.NewStart+h.NewLines-1
+		if h.NewLines == 0 {
+			from, to = h.NewStart+1, h.NewStart
+		}
+		span := lineSpan{max(from-prContext, 1), to + prContext}
+		if n := len(out); n > 0 && span.from <= out[n-1].to+1 {
+			out[n-1].to = span.to
+			continue
+		}
+		out = append(out, span)
+	}
+	return out
 }
 
 const modeSelf = "self"
