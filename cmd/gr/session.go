@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -50,6 +51,20 @@ func loadReview(ctx context.Context, dir string) (session, *state.Review, error)
 	}
 	r, err := s.store.LoadCurrent()
 	return s, r, err
+}
+
+func (s session) exportDir(id string) string {
+	return filepath.Join(s.store.Dir, "exports", id)
+}
+
+func (s session) exported(id string) string {
+	for _, name := range []string{"fixes.json", "review.json"} {
+		path := filepath.Join(s.exportDir(id), name)
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	return ""
 }
 
 func (s session) diff(ctx context.Context, base, head string) ([]diff.File, error) {
@@ -120,6 +135,9 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 func printStep(e env, r *state.Review, st *state.Step) {
 	pos := r.StepIndex(st.ID) + 1
 	e.printf("%s %d/%d [%s] %s · %s\n", st.ID, pos, len(r.Steps), st.Status, st.Kind, st.Title)
+	if st.FromRound > 0 {
+		e.printf("carried: not reviewed in round %d\n", st.FromRound)
+	}
 	if st.Note != "" {
 		e.printf("note: %s\n", st.Note)
 	}

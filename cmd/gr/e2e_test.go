@@ -52,13 +52,12 @@ func (h *harness) run(stdin string, args ...string) (string, error) {
 	err := run(
 		context.Background(),
 		env{
-			dir:       h.repo.Dir,
-			cacheDir:  h.cache,
-			exportDir: filepath.Join(h.cache, "export"),
-			stdin:     strings.NewReader(stdin),
-			stdout:    &out,
-			glab:      h.glab,
-			gh:        h.gh,
+			dir:      h.repo.Dir,
+			cacheDir: h.cache,
+			stdin:    strings.NewReader(stdin),
+			stdout:   &out,
+			glab:     h.glab,
+			gh:       h.gh,
 		},
 		args,
 	)
@@ -72,6 +71,15 @@ func (h *harness) mustRun(stdin string, args ...string) string {
 		h.t.Fatalf("gr %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return out
+}
+
+func (h *harness) exportDir(id string) string {
+	h.t.Helper()
+	dir := strings.TrimSpace(h.mustRun("", "export", "--dir"))
+	if want := filepath.Join(h.repo.Dir, ".git", "guided-review", "exports", id); dir != want {
+		h.t.Fatalf("export dir %q, want %q", dir, want)
+	}
+	return dir
 }
 
 func assertContains(t *testing.T, out string, wants ...string) {
@@ -325,6 +333,7 @@ func TestReReviewFixup(t *testing.T) {
 		"return an error",
 	)
 	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
 
 	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
 	h.repo.Commit("fixup")
@@ -364,6 +373,8 @@ func TestReReviewRebase(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("", "init")
 	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
 
 	h.repo.Git("checkout", "-q", "main")
 	h.repo.Write("other.go", "package api\n")
@@ -554,7 +565,7 @@ func TestExport(t *testing.T) {
 	assertContains(t, out, "api/transfer.go:6", "**major** return an error instead",
 		"```suggestion:-0+0", "**Guided review: changes requested**", "zero is a silent reject",
 		"Comments: 1 major, 1 nit, inline.")
-	dir := filepath.Join(h.cache, "export", "mr-7")
+	dir := h.exportDir("mr-7")
 	if _, err := os.Stat(dir); err == nil {
 		t.Fatal("dry run must not write the export")
 	}
@@ -638,7 +649,7 @@ func TestSelfReview(t *testing.T) {
 
 	assertContains(t, h.mustRun("", "export", "--dry-run"),
 		"--- #1 api/transfer.go:4", "**minor** zero is negative too", "```suggestion", "--- summary")
-	dir := filepath.Join(h.cache, "export", "self-feature")
+	dir := h.exportDir("self-feature")
 	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
 		t.Fatalf("export printed %q, want %q", out, dir)
 	}
@@ -660,6 +671,137 @@ func TestSelfReview(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "review.json")); err == nil {
 		t.Fatal("a self review must not produce GitLab drafts")
+	}
+}
+
+func TestLocalReviewFinishes(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+		"--severity", "minor", "zero is negative too")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	if _, err := h.run("", "prepare", "--verdict", "approve", "--approve"); err == nil {
+		t.Fatal("--approve without an MR must fail")
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+	dir := h.exportDir("feature")
+	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
+		t.Fatalf("export printed %q, want %q", out, dir)
+	}
+	for _, name := range []string{"fixes.json", "review.md"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Dir(dir))
+	if len(entries) != 1 {
+		t.Fatalf("exports must hold only the finished dir, got %v", entries)
+	}
+	assertContains(t, h.mustRun("", "status"), "export: "+filepath.Join(dir, "fixes.json"))
+	assertContains(t, h.mustRun("", "list"), "export: "+filepath.Join(dir, "fixes.json"))
+	if _, err := h.run("", "mark-published"); err == nil {
+		t.Fatal("a local review has nothing to mark published")
+	}
+
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	assertContains(t, h.mustRun("", "init"), "round 2")
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("a new round must drop the old export: %v", err)
+	}
+}
+
+func TestNewSelfRoundDropsOldExport(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+
+	h.mustRun("", "init", "--self")
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("a new self session must drop the old export: %v", err)
+	}
+	if _, err := h.run("", "export"); err == nil {
+		t.Fatal("a new self session starts unprepared")
+	}
+}
+
+func TestPartialReviewCarriesTheRest(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+		"--severity", "minor", "zero is negative too")
+	h.mustRun("", "step", "next")
+	if _, err := h.run("", "prepare", "--verdict", "changes"); err == nil ||
+		!strings.Contains(err.Error(), "--partial") {
+		t.Fatalf("prepare with s2 pending must point at --partial, got %v", err)
+	}
+	h.mustRun("", "prepare", "--verdict", "changes", "--partial")
+	assertContains(t, h.mustRun("", "export", "--dry-run"),
+		"Not reviewed yet, comes in the next round: s2 Guard follow-up.")
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	data, err := os.ReadFile(filepath.Join(dir, "fixes.json"))
+	if err != nil || !strings.Contains(string(data), `"unreviewed": [`+"\n"+`    "s2 Guard follow-up"`) {
+		t.Fatalf("fixes.json must list the unreviewed steps: %s %v", data, err)
+	}
+
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	out := h.mustRun("", "init", "--self")
+	assertContains(t, out, "round 2: fixups since", "carried, not reviewed in an earlier round: r1-s2",
+		"wire.go  [added]  1-4")
+	if strings.Contains(out, "api/transfer.go  [") {
+		t.Fatalf("carried files are not part of the round plan:\n%s", out)
+	}
+	assertContains(t, h.mustRun("", "status"), "carried, not reviewed in an earlier round: r1-s2")
+
+	out = h.mustRun("steps:\n  - id: n1\n    title: fixup\n    kind: logic\n    hunks: [{file: wire.go}]\n",
+		"plan", "set")
+	assertContains(t, out, "plan accepted: 2 steps, the last 1 carried from earlier rounds")
+	h.mustRun("", "step", "next")
+	out = h.mustRun("", "step", "show")
+	assertContains(t, out, "r1-s2 2/2 [pending] logic · Guard follow-up",
+		"carried: not reviewed in round 1", "hunk: api/transfer.go 7-8")
+	if _, err := h.run("", "status", "--gate"); err == nil {
+		t.Fatal("a carried step is part of the gate")
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	if out := h.mustRun("", "export", "--dry-run"); strings.Contains(out, "Not reviewed yet") {
+		t.Fatalf("everything is reviewed now:\n%s", out)
+	}
+}
+
+func TestResumeShowsModeDomainAndOpenComments(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Write(".review.yaml", "domain: finance\n")
+	h.repo.Commit("domain")
+	assertContains(t, h.mustRun("", "init", "--self"), "domain: finance", "mode: self")
+	h.mustRun(strings.Replace(goodPlan, "[wire.go]", "[wire.go, .review.yaml]", 1),
+		"plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "major", "return an error")
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	h.mustRun("", "init", "--self")
+
+	for _, args := range [][]string{{"init", "--self"}, {"status"}} {
+		out := h.mustRun("", args...)
+		assertContains(t, out, "domain: finance", "mode: self", "round 2: fixups since",
+			"open comments from earlier rounds: 1", "#1 major api/transfer.go:5  return an error")
+	}
+	h.mustRun("steps:\n  - id: r1\n    title: fixup\n    kind: logic\n    hunks: [{file: wire.go}]\n",
+		"plan", "set")
+	h.mustRun("", "comment", "add", "--file", "wire.go", "--lines", "4",
+		"--severity", "nit", "new in round 2")
+	if out := h.mustRun("", "status"); strings.Contains(out, "new in round 2") {
+		t.Fatalf("a comment of this round is not from an earlier one:\n%s", out)
 	}
 }
 

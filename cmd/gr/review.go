@@ -28,15 +28,10 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	e.printf("review %s  %s..%s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA))
-	if r.MR != nil {
-		e.printf("%s %s\n", r.MR.Label(), r.MR.Title)
+	printHeader(e, s, r)
+	if path := s.exported(r.ID); path != "" {
+		e.printf("export: %s\n", path)
 	}
-	e.printf("code: %s\n", r.CodeDir(s.repo.Dir))
-	if r.Round > 1 {
-		e.printf("round %d\n", r.Round)
-	}
-	printDiscussions(e, r, false)
 	if len(r.Steps) == 0 {
 		e.println("no plan yet: pipe a plan to gr plan set")
 		if *gate {
@@ -152,7 +147,11 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
-	e.printf("plan accepted: %d steps\n\n", len(r.Steps))
+	e.printf("plan accepted: %d steps", len(r.Steps))
+	if len(r.Carried) > 0 {
+		e.printf(", the last %d carried from earlier rounds", len(r.Carried))
+	}
+	e.printf("\n\n")
 	printStep(e, r, r.Step(r.Current))
 	return nil
 }
@@ -426,6 +425,9 @@ func cmdList(ctx context.Context, e env, _ []string) error {
 		}
 		cov := plan.CoverageOf(r)
 		e.printf("%s %s  %d/%d steps  %s\n", marker, id, cov.Done+cov.Skipped, cov.Total, title)
+		if path := s.exported(id); path != "" {
+			e.printf("    export: %s\n", path)
+		}
 	}
 	return nil
 }

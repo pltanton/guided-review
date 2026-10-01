@@ -47,6 +47,8 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	decisions := fs.String("decisions", "", "decisions taken during the review and why (markdown)")
 	decisionsFile := fs.String("decisions-file", "", "read decisions from a file (- for stdin)")
 	approve := fs.Bool("approve", false, "the agent also approves the MR when publishing")
+	partial := fs.Bool("partial", false, "allow pending steps: they are listed as not reviewed "+
+		"yet and carried into the next round")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -64,14 +66,14 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	switch _, ok := verdicts[*verdict]; {
 	case !ok:
 		return errors.New("--verdict must be approve, changes or blocked")
-	case r.MR == nil && r.Mode != modeSelf:
-		return errors.New("not a merge request review: nothing to publish to")
+	case r.MR == nil && *approve:
+		return errors.New("--approve needs a merge request: a local review has nothing to approve")
 	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
 	}
-	if pending := plan.Gate(r); len(pending) > 0 {
-		return fmt.Errorf("gate not passed, pending: %s (review or skip them first)",
-			strings.Join(pending, " "))
+	if pending := plan.Gate(r); len(pending) > 0 && !*partial {
+		return fmt.Errorf("gate not passed, pending: %s (review or skip them first, "+
+			"or --partial to send what is reviewed so far)", strings.Join(pending, " "))
 	}
 	if ids := undecidedThreads(r); len(ids) > 0 {
 		return fmt.Errorf("answered threads without the reviewer's decision: %s "+
@@ -148,6 +150,7 @@ func threadActions(r *state.Review, md *strings.Builder) []threadAction {
 func cmdExport(ctx context.Context, e env, args []string) error {
 	fs := e.flags("export")
 	dryRun := fs.Bool("dry-run", false, "print review.md and write nothing")
+	onlyDir := fs.Bool("dir", false, "print the export directory and write nothing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -155,19 +158,24 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
+	dir := s.exportDir(r.ID)
+	if *onlyDir {
+		e.println(dir)
+		return nil
+	}
 	p := r.Publish
 	if p == nil {
 		return errors.New("nothing prepared: run gr prepare first")
 	}
-	if r.Mode == modeSelf {
-		return exportSelf(e, r, *dryRun)
+	if r.MR == nil {
+		return exportFixes(e, r, dir, *dryRun)
 	}
 	mrFiles, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
 	if err != nil {
 		return err
 	}
 	if r.MR.Provider == state.ProviderGitHub {
-		return exportGitHub(e, r, mrFiles, *dryRun)
+		return exportGitHub(e, r, mrFiles, dir, *dryRun)
 	}
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
 	x := export{
@@ -199,29 +207,18 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 		e.printf("%s", md.String())
 		return nil
 	}
-	dir := filepath.Join(e.exportDir, r.ID)
-	if err := os.RemoveAll(dir); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Join(dir, "drafts"), 0o755); err != nil {
-		return err
-	}
+	out := exportFiles{"review.md": []byte(md.String())}
 	for i, n := range notes {
 		name := fmt.Sprintf("drafts/%02d.json", i+1)
-		if err := writeJSON(filepath.Join(dir, name), n); err != nil {
+		if err := out.json(name, n); err != nil {
 			return err
 		}
 		x.Drafts = append(x.Drafts, name)
 	}
-	if err := writeJSON(filepath.Join(dir, "review.json"), x); err != nil {
+	if err := out.json("review.json", x); err != nil {
 		return err
 	}
-	mdPath := filepath.Join(dir, "review.md")
-	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
-		return err
-	}
-	e.println(dir)
-	return nil
+	return writeExport(e, dir, out)
 }
 
 func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
@@ -229,7 +226,10 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 	if err != nil {
 		return err
 	}
-	data, err := os.ReadFile(filepath.Join(e.exportDir, r.ID, "review.json"))
+	if r.MR == nil {
+		return errors.New("a local review is not published: its result is fixes.json")
+	}
+	data, err := os.ReadFile(filepath.Join(s.exportDir(r.ID), "review.json"))
 	if err != nil {
 		return fmt.Errorf("no export to mark: %w", err)
 	}
@@ -260,7 +260,7 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 	return nil
 }
 
-func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) error {
+func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRun bool) error {
 	p := r.Publish
 	ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
 	x := export{
@@ -313,25 +313,14 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dryRun bool) erro
 		e.printf("%s", md.String())
 		return nil
 	}
-	dir := filepath.Join(e.exportDir, r.ID)
-	if err := os.RemoveAll(dir); err != nil {
+	out := exportFiles{"review.md": []byte(md.String())}
+	if err := out.json(x.Request, req); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := out.json("review.json", x); err != nil {
 		return err
 	}
-	if err := writeJSON(filepath.Join(dir, x.Request), req); err != nil {
-		return err
-	}
-	if err := writeJSON(filepath.Join(dir, "review.json"), x); err != nil {
-		return err
-	}
-	mdPath := filepath.Join(dir, "review.md")
-	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
-		return err
-	}
-	e.println(dir)
-	return nil
+	return writeExport(e, dir, out)
 }
 
 // GitHub accepts review comments only on lines of the PR diff, which carries three lines
@@ -357,13 +346,19 @@ type fix struct {
 	Suggestion string `json:"suggestion,omitempty"`
 }
 
-func exportSelf(e env, r *state.Review, dryRun bool) error {
+func exportFixes(e env, r *state.Review, dir string, dryRun bool) error {
 	p := r.Publish
 	x := struct {
-		Verdict   string `json:"verdict"`
-		Decisions string `json:"decisions"`
-		Fixes     []fix  `json:"fixes"`
+		Verdict    string   `json:"verdict"`
+		Decisions  string   `json:"decisions"`
+		Fixes      []fix    `json:"fixes"`
+		Unreviewed []string `json:"unreviewed,omitempty"`
 	}{Verdict: p.Verdict, Decisions: p.Decisions}
+	for _, st := range r.Steps {
+		if st.Status == state.StatusPending {
+			x.Unreviewed = append(x.Unreviewed, st.ID+" "+st.Title)
+		}
+	}
 	var md strings.Builder
 	for _, c := range r.Comments {
 		if c.Resolved {
@@ -384,30 +379,54 @@ func exportSelf(e env, r *state.Review, dryRun bool) error {
 		e.printf("%s", md.String())
 		return nil
 	}
-	dir := filepath.Join(e.exportDir, r.ID)
-	if err := os.RemoveAll(dir); err != nil {
+	out := exportFiles{"review.md": []byte(md.String())}
+	if err := out.json("fixes.json", x); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	if err := writeJSON(filepath.Join(dir, "fixes.json"), x); err != nil {
-		return err
-	}
-	mdPath := filepath.Join(dir, "review.md")
-	if err := os.WriteFile(mdPath, []byte(md.String()), 0o644); err != nil {
-		return err
-	}
-	e.println(dir)
-	return nil
+	return writeExport(e, dir, out)
 }
 
-func writeJSON(path string, v any) error {
+type exportFiles map[string][]byte
+
+func (f exportFiles) json(name string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	f[name] = append(data, '\n')
+	return nil
+}
+
+func writeExport(e env, dir string, files exportFiles) error {
+	parent := filepath.Dir(dir)
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.MkdirTemp(parent, "."+filepath.Base(dir)+"-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(tmp) }()
+	if err := os.Chmod(tmp, 0o755); err != nil {
+		return err
+	}
+	for name, data := range files {
+		path := filepath.Join(tmp, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(path, data, 0o644); err != nil {
+			return err
+		}
+	}
+	if err := os.RemoveAll(dir); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, dir); err != nil {
+		return err
+	}
+	e.println(dir)
+	return nil
 }
 
 func commentDraft(
@@ -479,9 +498,11 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	if len(resolved) > 0 {
 		w("Resolved since the last round: %s.\n", strings.Join(resolved, ", "))
 	}
-	var skipped []string
+	var skipped, pending []string
 	for _, st := range r.Steps {
 		switch st.Status {
+		case state.StatusPending:
+			pending = append(pending, st.ID+" "+st.Title)
 		case state.StatusSkipped:
 			skipped = append(skipped, fmt.Sprintf("%s (%s)", st.Title, st.SkipReason))
 		case state.StatusStale:
@@ -490,6 +511,9 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	}
 	if len(skipped) > 0 {
 		w("Not reviewed: %s.\n", strings.Join(skipped, "; "))
+	}
+	if len(pending) > 0 {
+		w("Not reviewed yet, comes in the next round: %s.\n", strings.Join(pending, "; "))
 	}
 	return b.String()
 }

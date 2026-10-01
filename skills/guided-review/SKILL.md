@@ -155,9 +155,10 @@ steps:
 ## Parallel planning
 
 1. Write the route yourself: `summary` and `boilerplate` to
-   `/tmp/guided-review/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
+   `/tmp/gr-plan/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
    `kind`, `chapter`, `hunks`, `depends_on`, nothing else — to
-   `/tmp/guided-review/<id>/chapter-N.yaml` as a top-level `steps:` list.
+   `/tmp/gr-plan/<id>/chapter-N.yaml` as a top-level `steps:` list. These are scratch
+   files for you and the subagents only; gr reads them just through `gr plan set -f`.
 2. In one message start one general-purpose subagent per chapter, so they run at once.
    Give each: the code path, base and head, the task in two lines, its chapter file, and
    the path of this skill's `references/` directory. Its job: read `style.md`,
@@ -244,6 +245,14 @@ before leaving a step. You only hear about what needs you.
    `gr comment resolve ID` when it is addressed; otherwise keep it open. `gr say` a
    summary: resolved, still open, new questions.
 3. Then plan and walk only the round diff as usual.
+4. "carried, not reviewed in an earlier round: r1-s7 …" lists steps the last round left
+   pending (a `--partial` finish, or stale after a blocker). gr appends them after your
+   plan with their ids, titles, messages and hotspots; `gr step show` marks them
+   "carried". Do not plan them again, and do not reuse their ids. A file the round
+   touched loses its line ranges and notes there and is shown whole, so read it fresh
+   when the human reaches that step. With carried steps, files changed in the round show
+   their whole patch against the base, as after a rebase. If the round diff itself is
+   empty, `echo 'steps: []' | gr plan set` starts the carried steps.
 
 ## Your threads on the MR (`gr init` printed "your threads: …")
 
@@ -279,8 +288,6 @@ stranger would. Do not look for or ask about how it was written.
   as a subagent, reply with the export dir as your final answer; in a window, just end
   your turn (the author's agent closes it). No publishing, no notifying.
 
-
-
 `gr init` and `gr status` list unresolved discussions of other reviewers by their first
 line; `gr discussions` refreshes them from the MR and prints them in full. The viewer
 marks the ones on lines. Mention them in intake, and on a step that touches a discussed
@@ -288,8 +295,10 @@ line, say whether the code answers it.
 
 ## Wrap-up
 
-1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them or
-   skip each with a reason.
+1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them,
+   skip each with a reason, or send what is reviewed so far — then add `--partial` to
+   `gr prepare` in step 3: the result lists the rest as not reviewed yet, and the next
+   round brings those steps back.
 2. `gr say` the verdict in one line — approve / changes requested / blocked — then
    blockers and majors, one line each, the nit count, and the coverage line.
 3. Prepare the result. Write the decisions taken during the review and why (what was
@@ -297,8 +306,9 @@ line, say whether the code answers it.
    lines, then:
    `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
    (add `--approve` only if they asked to approve). The viewer now shows `finish · P`:
-   `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/`, sends you
-   `[finished] sN: <dir>` and closes the viewer, returning the human to your pane.
+   `P` previews the result, `P` again writes it to the review's export dir
+   (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
+   returning the human to your pane.
    `gr say` «готово: P во вьювере» and `gr wait`. While the human reads the result they
    can message you from it — `re #N …` about one comment (`gr comment edit N`), or about
    the summary or decisions (run `gr prepare` again with the new text); the viewer
@@ -306,50 +316,69 @@ line, say whether the code answers it.
    instead, run `gr export` yourself: it prints the same dir.
    From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
    `gr say` / `gr wait` — and ending your turn with a question is fine.
-4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
+4. A local branch without an MR (`gr init` without a URL, not self mode): there is
+   nothing to publish. The dir holds `fixes.json` (`verdict`, `decisions`, `fixes` with
+   `id`, `severity`, `file`, `lines`, `body`, `suggestion`) and `review.md`. Tell them the
+   counts and ask «применить сейчас / оставить». Apply now: every fix was agreed during
+   the review, `suggestion` is the exact replacement, lines refer to the reviewed commit
+   (find the spot by content if the file changed); report one line per fix and run the
+   tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
+   the review is open), so any agent in this repo can pick it up later. Then step 7.
+5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or not — and ask «публикую?».
-   Only on a clear yes, by provider:
+   Only on a clear yes, run the block for the provider as one Bash call: shell variables
+   do not survive between calls. Each block posts the review, then replies to and
+   resolves your threads (`threads` in `review.json`), and runs `gr mark-published` only
+   if everything went out.
 
-   **GitHub** — one request carries the summary, the verdict and every comment:
+   **GitHub** — one request carries the summary, the verdict and every comment; a thread
+   reply goes to its first comment, a resolve takes the thread's node id:
    ```bash
-   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
-   gh api --hostname $host -X POST "$api" --input "$dir/review-request.json"
-   gr mark-published
+   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
+   ok=1
+   gh api --hostname "$host" -X POST "$api" --input "$dir/review-request.json" >/dev/null || ok=0
+   while [ $ok = 1 ] && read -r t; do
+     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
+     if [ -n "$reply" ]; then gh api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
+     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
+       gh api --hostname "$host" graphql -f id="$(jq -r .id <<<"$t")" \
+         -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' >/dev/null || ok=0
+     fi
+   done < <(jq -c '.threads[]?' "$dir/review.json")
+   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
    ```
    GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set `"event": "COMMENT"`
    in `review-request.json` and post again.
 
-   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last:
+   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last; a
+   thread reply goes to `reply_api`, a resolve to the discussion's `api`:
    ```bash
-   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
-   glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
-   for f in $(jq -r '.drafts[]' $dir/review.json); do
-     glab api --hostname $host -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" || break
+   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
+   glab api --hostname "$host" "$api/draft_notes" | jq length   # must be 0; otherwise stop and ask
+   ok=1
+   for f in $(jq -r '.drafts[]' "$dir/review.json"); do
+     glab api --hostname "$host" -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" >/dev/null || { ok=0; break; }
    done
-   glab api --hostname $host -X POST "$api/draft_notes/bulk_publish"
-   # only if review.json has "approve": true
-   glab api --hostname $host -X POST "$api/approve"
-   gr mark-published
+   [ $ok = 1 ] && { glab api --hostname "$host" -X POST "$api/draft_notes/bulk_publish" >/dev/null || ok=0; }
+   if [ $ok = 1 ] && [ "$(jq -r .approve "$dir/review.json")" = true ]; then
+     glab api --hostname "$host" -X POST "$api/approve" >/dev/null || ok=0
+   fi
+   while [ $ok = 1 ] && read -r t; do
+     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
+     if [ -n "$reply" ]; then glab api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
+     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
+       glab api --hostname "$host" -X PUT "$(jq -r .api <<<"$t")" -f resolved=true >/dev/null || ok=0
+     fi
+   done < <(jq -c '.threads[]?' "$dir/review.json")
+   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
    ```
-   If a GitLab POST fails, stop: say the error and that the drafts created so far sit
-   unpublished on the MR; do not retry blindly. After success give the link.
-
-   **Threads** — `review.json` `threads` holds each decision, before `gr mark-published`:
-   ```bash
-   jq -c '.threads[]?' $dir/review.json | while read -r t; do
-     id=$(jq -r .id <<<"$t"); reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
-     # GitLab: glab api --hostname $host …; GitHub: gh api --hostname $host …
-     [ -n "$reply" ] && glab api --hostname $host -X POST "$ra" -f body="$reply"
-     # GitLab resolve:
-     [ "$(jq -r .resolve <<<"$t")" = true ] && glab api --hostname $host -X PUT "$(jq -r .api <<<"$t")" -f resolved=true
-     # GitHub resolve (id is the review thread node id):
-     # gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id="$id"
-   done
-   ```
-5. Tell the author. If a `guided-review-notify` skill is available, follow it with the
+   If a block stops, say the error and what already went out (on GitLab, drafts created
+   before a failed POST sit unpublished on the MR); do not retry blindly, and do not run
+   `gr mark-published` by hand. After success give the link.
+6. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
    human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
-6. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
+7. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

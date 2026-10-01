@@ -28,8 +28,10 @@ review
   discussions
   thread list | assess ID --propose resolve|open [--reply T] TEXT|-
   thread decide ID --verdict resolve|open|none [--reply T]   your MR threads (viewer: R)
-  prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--approve]
-  export [--dry-run]   write the result to /tmp/guided-review/<id> for the agent to publish
+  prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F]
+          [--approve] [--partial]
+  export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
+                       and print that dir (--dir: only print it)
   mark-published       after the agent posted the export to the MR
   done
   list
@@ -74,13 +76,12 @@ func init() {
 }
 
 type env struct {
-	dir       string
-	cacheDir  string
-	stdin     io.Reader
-	stdout    io.Writer
-	glab      gitlab.Runner
-	gh        github.Runner
-	exportDir string
+	dir      string
+	cacheDir string
+	stdin    io.Reader
+	stdout   io.Writer
+	glab     gitlab.Runner
+	gh       github.Runner
 }
 
 func (e env) printf(format string, a ...any) {
@@ -119,7 +120,6 @@ func start(ctx context.Context) error {
 	e := env{
 		dir: dir, cacheDir: cache, stdin: os.Stdin, stdout: os.Stdout,
 		glab: gitlab.Glab, gh: github.Gh,
-		exportDir: "/tmp/guided-review",
 	}
 	return run(ctx, e, os.Args[1:])
 }

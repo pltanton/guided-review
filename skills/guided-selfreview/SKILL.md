@@ -13,7 +13,9 @@ through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
 
 1. `gr` reviews commits (default branch → HEAD). If `git status` shows changes, ask
    whether to commit them (a WIP commit is fine); never stash or commit silently.
-2. `gr init --self` in the repository. Note the id it prints (`review self-<branch>`).
+2. `gr init --self` in the repository. Note the id it prints (`review self-<branch>`)
+   and the export dir from `gr export --dir`: the reviewer's result lands there. Each
+   `gr init --self` clears it, so what appears there is from this session only.
 3. Write the reviewer's prompt:
    ```
    Guided review, self mode. Use the guided-review skill.
@@ -27,20 +29,22 @@ through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
      starts without your context. Tell the human in one line that the reviewer is
      running as a subagent and its viewer opens in a `review-<id>` window; they talk to
      it there until they press `P`. You are told when it finishes — do not poll.
-   - **Codex or no subagents:** write the prompt to `/tmp/guided-review/<id>.prompt`, then
+   - **Codex or no subagents:** write the prompt to `/tmp/gr-selfreview-<id>.prompt` (a
+     scratch file, gr does not read it), then
      ```bash
-     tmux new-window -P -F '#{window_id}' -n selfreview -c "$PWD" "codex \"\$(cat /tmp/guided-review/<id>.prompt)\""
+     tmux new-window -P -F '#{window_id}' -n selfreview -c "$PWD" "codex \"\$(cat /tmp/gr-selfreview-<id>.prompt)\""
      ```
      and wait, with the Bash tool timeout at 600000 ms, repeating until the file appears:
      ```bash
-     timeout 590 sh -c 'until [ -f /tmp/guided-review/<id>/fixes.json ]; do sleep 5; done'
+     timeout 590 sh -c 'until [ -f <export dir>/fixes.json ]; do sleep 5; done'
      ```
-     then `tmux kill-window -t <window id>`.
+     then `tmux kill-window -t <window id>`. gr writes the export dir whole and only
+     then moves it into place, so once `fixes.json` exists it is complete.
 5. When the reviewer is done: `gr done`.
 
 ## Apply
 
-`/tmp/guided-review/<id>/fixes.json` has `verdict`, `decisions` and `fixes` (`id`,
+`<export dir>/fixes.json` has `verdict`, `decisions` and `fixes` (`id`,
 `severity`, `file`, `lines`, `body`, `suggestion`); `review.md` next to it is the same for
 reading.
 
@@ -50,5 +54,8 @@ reading.
   not defend the original code.
 - Lines refer to the reviewed commit; if the file changed since, find the spot by content.
 - Report one line per fix: done, or not done and why. Run the tests.
-- Offer another round: after a commit, `gr init --self` shows only what changed and starts
-  by checking these fixes. Same flow from step 3.
+- `unreviewed` in `fixes.json` lists steps the human left for later (a partial finish).
+  Then, after the fixes, offer «досмотреть остаток»: commit, `gr init --self` (the new
+  round starts with these fixes and carries the unreviewed steps), same flow from step 3.
+- Otherwise offer another round: after a commit, `gr init --self` shows only what changed
+  and starts by checking these fixes. Same flow from step 3.
