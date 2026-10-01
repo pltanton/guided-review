@@ -307,7 +307,7 @@ line, say whether the code answers it.
    accepted as is, what was left for later, why steps were skipped) as a few bullet
    lines, then:
    `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
-   (add `--approve` only if they asked to approve). The viewer now shows `finish · P`:
+   (add `--approve` only if they asked to approve; it goes only with `--verdict approve`). The viewer now shows `finish · P`:
    `P` previews the result, `P` again writes it to the review's export dir
    (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
    returning the human to your pane.

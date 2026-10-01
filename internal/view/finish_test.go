@@ -21,8 +21,8 @@ func finishModel(t *testing.T, mr bool) (*model, *[][]string) {
 	var ran [][]string
 	m.runGr = func(args ...string) (string, error) {
 		ran = append(ran, args)
-		if args[0] == "prepare" && args[2] == "approve" {
-			return "approve with your threads still open: d1", errors.New("exit status 1")
+		if args[0] == "prepare" && args[2] != "approve" && slices.Contains(args, "--approve") {
+			return "--approve only goes with --verdict approve", errors.New("exit status 1")
 		}
 		return "--- #4 a.go:3\n**nit** rename\n", nil
 	}
@@ -50,14 +50,20 @@ func TestPreviewVerdictAndApprove(t *testing.T) {
 		t.Fatalf("v moves changes → blocked through gr prepare: %q", got)
 	}
 	m.Update(key("a"))
-	want = append(want, "--approve")
-	if got := lastPrepare(*ran); !slices.Equal(got, want) || !m.review.Publish.Approve {
-		t.Fatalf("a turns approve on with the same verdict: %q", got)
+	if v := ansi.Strip(m.View()); m.review.Publish.Approve ||
+		!strings.Contains(v, "--approve only goes with --verdict approve") {
+		t.Fatalf("prepare's refusal shows in the preview and nothing changes:\n%s", v)
 	}
 	m.Update(key("v"))
-	if v := ansi.Strip(m.View()); m.review.Publish.Verdict != "blocked" ||
-		!strings.Contains(v, "approve with your threads still open") {
-		t.Fatalf("prepare's refusal shows in the preview and nothing changes:\n%s", v)
+	m.Update(key("a"))
+	want = []string{"prepare", "--verdict", "approve", "--decisions", "kept the cache", "--approve"}
+	if got := lastPrepare(*ran); !slices.Equal(got, want) || !m.review.Publish.Approve {
+		t.Fatalf("a turns approve on with the approve verdict: %q", got)
+	}
+	m.Update(key("v"))
+	want = []string{"prepare", "--verdict", "changes", "--decisions", "kept the cache"}
+	if got := lastPrepare(*ran); !slices.Equal(got, want) || m.review.Publish.Approve {
+		t.Fatalf("leaving the approve verdict turns approve off: %q", got)
 	}
 	if m.preview == "" || m.visual {
 		t.Fatal("v stays in the preview, it does not select lines")

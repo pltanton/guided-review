@@ -560,6 +560,12 @@ func TestExport(t *testing.T) {
 	h.mustRun("", "step", "next")
 	h.mustRun("", "step", "next")
 	*calls = nil
+	for _, v := range []string{"changes", "blocked"} {
+		if _, err := h.run("", "prepare", "--verdict", v, "--approve"); err == nil ||
+			!strings.Contains(err.Error(), "--approve only goes with --verdict approve") {
+			t.Fatalf("--approve with %s must be refused, got %v", v, err)
+		}
+	}
 	h.mustRun("", prepare...)
 
 	out := h.mustRun("", "export", "--dry-run")
