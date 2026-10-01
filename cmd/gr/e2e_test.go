@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -268,6 +269,9 @@ func TestReviewLoop(t *testing.T) {
 
 	out = h.mustRun("", "step", "goto", "s2")
 	assertContains(t, out, "s2 2/2 [stale]")
+
+	out = h.mustRun("", "comment", "resolve", "1")
+	assertContains(t, out, "comment #1 resolved", "back to pending: s2")
 }
 
 func TestStepSkip(t *testing.T) {
@@ -281,6 +285,64 @@ func TestStepSkip(t *testing.T) {
 	assertContains(t, out, "s2 2/2 [pending]")
 	out = h.mustRun("", "step", "show", "s1")
 	assertContains(t, out, "[skipped]", "skipped: trivial")
+}
+
+func TestStateAndExportArePrivate(t *testing.T) {
+	h := newHarness(t)
+	store := filepath.Join(h.repo.Dir, ".git", "guided-review")
+	if err := os.MkdirAll(filepath.Join(store, "exports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	h.mustRun("", "export")
+	err := filepath.WalkDir(store, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		fi, err := d.Info()
+		if err != nil {
+			return err
+		}
+		want := fs.FileMode(0o600)
+		if d.IsDir() {
+			want = 0o700
+		}
+		if fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, want %v", path, fi.Mode().Perm(), want)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestParallelCommentsAllKept(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	const n = 12
+	errs := make(chan error, n)
+	for i := range n {
+		go func() {
+			_, err := h.run("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+				"--severity", "nit", fmt.Sprintf("remark %d", i))
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil || len(r.Comments) != n {
+		t.Fatalf("got %d comments, want %d (%v)", len(r.Comments), n, err)
+	}
 }
 
 func TestNotesAndResolve(t *testing.T) {
@@ -871,6 +933,11 @@ func TestNoteDetail(t *testing.T) {
 	if _, err := h.run("", "note", "detail", "--line", "4", "x"); err == nil {
 		t.Fatal("a detail without --file must fail")
 	}
+	_, err := h.run("", "note", "detail", "--file", "api/transfer.go", "--line", "4", "x")
+	if err == nil {
+		t.Fatal("a detail without its note must fail")
+	}
+	h.mustRun("", "note", "add", "--file", "api/transfer.go", "--lines", "3-4", "guard")
 	h.mustRun("first", "note", "detail", "--file", "api/transfer.go", "--line", "4", "-")
 	out := h.mustRun("the guard\n```go\nif a < 0 {\n```\n", "note", "detail",
 		"--file", "api/transfer.go", "--line", "4", "-")
@@ -881,8 +948,8 @@ func TestNoteDetail(t *testing.T) {
 	}
 	st := r.Step("s1")
 	if text, ok := st.Detail("api/transfer.go", 4); !ok || !strings.HasPrefix(text, "the guard") ||
-		len(st.Details) != 1 {
-		t.Fatalf("detail must be replaced, got %q (%d)", text, len(r.Step("s1").Details))
+		!strings.HasPrefix(st.Annotations[0].Detail, "the guard") {
+		t.Fatalf("detail must be replaced in the note, got %q, %+v", text, st.Annotations)
 	}
 }
 
@@ -1033,12 +1100,11 @@ func TestGitHubPR(t *testing.T) {
 
 func (h *harness) edit(apply func(*state.Review)) {
 	h.t.Helper()
-	s, r, err := loadReview(context.Background(), h.repo.Dir)
+	_, _, err := updateReview(context.Background(), h.repo.Dir, func(_ session, r *state.Review) error {
+		apply(r)
+		return nil
+	})
 	if err != nil {
-		h.t.Fatal(err)
-	}
-	apply(r)
-	if err := s.store.Save(r); err != nil {
 		h.t.Fatal(err)
 	}
 }

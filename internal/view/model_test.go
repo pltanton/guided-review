@@ -1439,8 +1439,8 @@ func TestNoteDetails(t *testing.T) {
 	if n := len(*sent); n != 1 || (*sent)[0] != want {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
-	m.step.Details = []state.Detail{{File: note.File, Line: note.Line,
-		Text: "x is the **fee**.\n```go\nx := fee(a)\n```"}}
+	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+		Text: note.Text, Detail: "x is the **fee**.\n```go\nx := fee(a)\n```"}}
 	m.refreshDetail()
 	body := ansi.Strip(strings.Join(m.popup.lines, "\n"))
 	if !strings.Contains(body, "x is the fee.") || !strings.Contains(body, "x := fee(a)") {
@@ -1497,7 +1497,9 @@ func TestDetailPopupUX(t *testing.T) {
 	m.clamp()
 	m.Update(key("i"))
 	detail := strings.Repeat("detail line\n", 30)
-	m.step.Details = []state.Detail{{File: "a.go", Line: 59, Text: detail}}
+	m.step.Annotations = []state.Annotation{
+		{File: "a.go", Line: 59, Kind: "note", Text: "late note", Detail: detail},
+	}
 	m.refreshDetail()
 	v := ansi.Strip(m.View())
 	if !strings.Contains(v, "late note") || strings.Contains(v, "e editor") {
@@ -1837,8 +1839,8 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	m.peekFile = func(string) []string { return numbered(20) }
 	m.seek(func(l line) bool { return l.Kind == RowNote })
 	note := m.current()
-	m.step.Details = []state.Detail{{File: note.File, Line: note.Line,
-		Text: "claim races in a.go:7 and (a.go:7), not in missing.go:3."}}
+	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+		Text: note.Text, Detail: "claim races in a.go:7 and (a.go:7), not in missing.go:3."}}
 	m.Update(key("i"))
 	if got := m.popup.refs; len(got) != 1 || got[0] != (lspLoc{Path: "a.go", Line: 7}) {
 		t.Fatalf("refs = %+v, want only a.go:7", got)

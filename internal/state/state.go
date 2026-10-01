@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Tier string
@@ -172,7 +174,6 @@ type Step struct {
 	Hotspots    []Hotspot    `yaml:"hotspots,omitempty"`
 	DependsOn   []string     `yaml:"depends_on,omitempty"`
 	Annotations []Annotation `yaml:"annotations,omitempty"`
-	Details     []Detail     `yaml:"details,omitempty"`
 	Note        string       `yaml:"note,omitempty"`
 	Message     string       `yaml:"message,omitempty"`
 	WhyBig      string       `yaml:"why_big,omitempty"`
@@ -294,13 +295,58 @@ func ParseLines(s string) (start, end int, err error) {
 	return start, end, nil
 }
 
+func (s *Step) UnmarshalYAML(n *yaml.Node) error {
+	type plain Step
+	var old struct {
+		plain   `yaml:",inline"`
+		Details []Detail `yaml:"details"`
+	}
+	if err := n.Decode(&old); err != nil {
+		return err
+	}
+	*s = Step(old.plain)
+	for _, d := range old.Details {
+		s.SetDetail(d.File, d.Line, d.Text)
+	}
+	return nil
+}
+
 func (s *Step) Detail(file string, line int) (string, bool) {
-	for _, d := range s.Details {
-		if (d.File == file || d.File == "") && d.Line == line {
-			return d.Text, true
-		}
+	if d := s.detailAt(file, line); d != nil && *d != "" {
+		return *d, true
 	}
 	return "", false
+}
+
+func (s *Step) SetDetail(file string, line int, text string) bool {
+	d := s.detailAt(file, line)
+	if d != nil {
+		*d = text
+	}
+	return d != nil
+}
+
+func (s *Step) detailAt(file string, line int) *string {
+	var slots []*string
+	for i, a := range s.Annotations {
+		if a.File == file && max(a.To, a.Line) == line {
+			slots = append(slots, &s.Annotations[i].Detail)
+		}
+	}
+	for i, h := range s.Hotspots {
+		if f, _ := s.HotspotFile(h); f == file && h.Line == line && line > 0 {
+			slots = append(slots, &s.Hotspots[i].Detail)
+		}
+	}
+	for _, d := range slots {
+		if *d != "" {
+			return d
+		}
+	}
+	if len(slots) == 0 {
+		return nil
+	}
+	return slots[0]
 }
 
 func (s *Step) HotspotFile(h Hotspot) (file string, sure bool) {

@@ -24,17 +24,13 @@ var verdicts = map[string]string{
 }
 
 func cmdDiscussions(ctx context.Context, e env, _ []string) error {
-	s, r, err := loadReview(ctx, e.dir)
+	_, r, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		if r.MR == nil {
+			return errors.New("not a merge request review")
+		}
+		return syncDiscussions(ctx, e, r)
+	})
 	if err != nil {
-		return err
-	}
-	if r.MR == nil {
-		return errors.New("not a merge request review")
-	}
-	if err := syncDiscussions(ctx, e, r); err != nil {
-		return err
-	}
-	if err := s.store.Save(r); err != nil {
 		return err
 	}
 	printDiscussions(e, r, true)
@@ -88,8 +84,11 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 		return fmt.Errorf("approve with your threads still open: %s "+
 			"(resolve them or use --verdict changes)", strings.Join(ids, " "))
 	}
-	r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
-	if err := s.store.Save(r); err != nil {
+	err = s.store.Update(r.ID, func(r *state.Review) error {
+		r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	e.println("prepared: the human reviews it and presses P in the viewer to finish")
@@ -242,23 +241,26 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 	if err := json.Unmarshal(data, &x); err != nil {
 		return err
 	}
-	for i := range r.Comments {
-		if slices.Contains(x.Comments, r.Comments[i].ID) {
-			r.Comments[i].Published = true
+	err = s.store.Update(r.ID, func(r *state.Review) error {
+		for i := range r.Comments {
+			if slices.Contains(x.Comments, r.Comments[i].ID) {
+				r.Comments[i].Published = true
+			}
 		}
-	}
-	if x.Summary {
-		r.SummaryRound = max(r.Round, 1)
-	}
-	for _, a := range x.Threads {
-		if d := r.Discussion(a.ID); d != nil {
-			t := r.ThreadState(*d)
-			t.Published = true
-			r.SetThread(t)
+		if x.Summary {
+			r.SummaryRound = max(r.Round, 1)
 		}
-	}
-	r.Publish = nil
-	if err := s.store.Save(r); err != nil {
+		for _, a := range x.Threads {
+			if d := r.Discussion(a.ID); d != nil {
+				t := r.ThreadState(*d)
+				t.Published = true
+				r.SetThread(t)
+			}
+		}
+		r.Publish = nil
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	e.printf("marked %d comments and %d threads published\n", len(x.Comments), len(x.Threads))
@@ -435,7 +437,7 @@ func (f exportFiles) json(name string, v any) error {
 
 func writeExport(e env, dir string, files exportFiles) error {
 	parent := filepath.Dir(dir)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.MkdirTemp(parent, "."+filepath.Base(dir)+"-")
@@ -443,15 +445,12 @@ func writeExport(e env, dir string, files exportFiles) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := os.Chmod(tmp, 0o755); err != nil {
-		return err
-	}
 	for name, data := range files {
 		path := filepath.Join(tmp, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			return err
 		}
 	}

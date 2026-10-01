@@ -17,43 +17,48 @@ func cmdThread(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
 		args = []string{"list"}
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
 	if args[0] == "list" {
+		_, r, err := loadReview(ctx, e.dir)
+		if err != nil {
+			return err
+		}
 		printThreads(e, r)
 		return nil
 	}
 	if len(args) < 2 || args[0] != "assess" {
 		return errors.New(threadUsage)
 	}
-	d := r.Discussion(args[1])
-	if d == nil {
-		return fmt.Errorf("no thread %q: run gr discussions to refresh", args[1])
-	}
-	fs := e.flags("thread assess")
-	propose := fs.String("propose", "", "resolve|open: what the agent suggests")
-	reply := fs.String("reply", "", "text to post in the thread")
-	if err := fs.Parse(args[2:]); err != nil {
-		return err
-	}
-	t := r.ThreadState(*d)
-	text := strings.Join(fs.Args(), " ")
-	if text == "-" {
-		data, err := readInput(e, "-")
-		if err != nil {
+	var d *state.Discussion
+	var t state.Thread
+	_, _, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		d = r.Discussion(args[1])
+		if d == nil {
+			return fmt.Errorf("no thread %q: run gr discussions to refresh", args[1])
+		}
+		fs := e.flags("thread assess")
+		propose := fs.String("propose", "", "resolve|open: what the agent suggests")
+		reply := fs.String("reply", "", "text to post in the thread")
+		if err := fs.Parse(args[2:]); err != nil {
 			return err
 		}
-		text = string(data)
-	}
-	if *propose != state.VerdictResolve && *propose != state.VerdictOpen {
-		return errors.New("--propose must be resolve or open")
-	}
-	t.Assessment, t.Proposed = strings.TrimSpace(text), *propose
-	t.ProposedReply = strings.TrimSpace(*reply)
-	r.SetThread(t)
-	if err := s.store.Save(r); err != nil {
+		t = r.ThreadState(*d)
+		text := strings.Join(fs.Args(), " ")
+		if text == "-" {
+			data, err := readInput(e, "-")
+			if err != nil {
+				return err
+			}
+			text = string(data)
+		}
+		if *propose != state.VerdictResolve && *propose != state.VerdictOpen {
+			return errors.New("--propose must be resolve or open")
+		}
+		t.Assessment, t.Proposed = strings.TrimSpace(text), *propose
+		t.ProposedReply = strings.TrimSpace(*reply)
+		r.SetThread(t)
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	e.printf("thread %s: %s\n", d.ID, threadStatus(t))

@@ -75,6 +75,8 @@ func DefaultActions() []Action {
 		{Name: "prev-file", Group: nav, Desc: "previous file", Keys: k("{"), run: jump(-1, file)},
 		{Name: "files", Group: nav, Desc: "focus the files panel", Keys: k("f"),
 			run: do((*model).focusFilesPanel)},
+		{Name: "steps", Group: nav, Desc: "focus the plan panel: fold chapters, preview steps",
+			Keys: k("ctrl+p"), run: do((*model).focusPlanPanel)},
 		{
 			Name:  "prev-step",
 			Group: nav,
@@ -291,6 +293,13 @@ func (km *keymap) key(name string) string {
 	return ""
 }
 
+func (km *keymap) name(k string) string {
+	if i, ok := km.byKey[k]; ok {
+		return km.actions[i].Name
+	}
+	return ""
+}
+
 func (km *keymap) previewKey(name, k string) bool {
 	i, ok := km.preview[k]
 	return ok && km.actions[i].Name == name
@@ -347,7 +356,7 @@ func (m *model) focusFilesPanel() {
 	if len(files) == 0 {
 		return
 	}
-	m.showPlan, m.focusFiles = true, true
+	m.showPlan, m.focusFiles, m.focusPlan = true, true, false
 	m.fileCursor = max(0, slices.Index(files, m.current().File))
 	m.relist()
 }

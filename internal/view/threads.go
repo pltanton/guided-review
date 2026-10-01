@@ -238,13 +238,9 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *model) decideThread(id, verdict, reply string) {
-	r, err := m.store.LoadCurrent()
-	if err == nil {
-		err = r.Decide(id, verdict, reply, time.Now())
-	}
-	if err == nil {
-		err = m.store.Save(r)
-	}
+	err := m.store.UpdateCurrent(func(r *state.Review) error {
+		return r.Decide(id, verdict, reply, time.Now())
+	})
 	if err != nil {
 		m.err = err
 		return

@@ -19,8 +19,11 @@ func fixture() (*state.Review, []diff.File) {
 	}}
 	files := []diff.File{
 		{
-			Path:  "api/a.go",
-			Hunks: []diff.Hunk{{NewStart: 10, NewLines: 5}, {NewStart: 40, NewLines: 0}},
+			Path: "api/a.go",
+			Hunks: []diff.Hunk{
+				{NewStart: 10, NewLines: 5},
+				{OldStart: 38, OldLines: 2, NewStart: 40, NewLines: 0},
+			},
 		},
 		{Path: "wire.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 3}}},
 		{Path: "a.pb.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 100}}},
@@ -33,7 +36,7 @@ func validPlan() plan.Plan {
 	return plan.Plan{
 		Summary:     "task → solution",
 		Boilerplate: []string{"wire.go"},
-		Steps: []state.Step{
+		Steps: []plan.Step{
 			{
 				ID:    "s1",
 				Title: "contract",
@@ -67,9 +70,28 @@ func TestValidate(t *testing.T) {
 		},
 		{"uncovered file", func(p *plan.Plan) { p.Boilerplate = nil }, "not covered: wire.go:1-3"},
 		{
-			"deleted file needs whole-file step",
-			func(p *plan.Plan) { p.Steps[0].Hunks[1].Lines = "1-4" },
-			"not covered: gone.go:0(del)",
+			"deleted file is covered by its old lines",
+			func(p *plan.Plan) { p.Steps[0].Hunks[1].Lines = "1-3" },
+			"not covered: gone.go:4",
+		},
+		{
+			"part of a hunk is not covered",
+			func(p *plan.Plan) { p.Steps[0].Hunks[0].Lines = "1-11" },
+			"not covered: api/a.go:12-14",
+		},
+		{
+			"two steps cover one hunk together",
+			func(p *plan.Plan) {
+				p.Steps[0].Hunks[0].Lines = "10-12"
+				rest := state.StepHunk{File: "api/a.go", Lines: "13-14"}
+				p.Steps[1].Hunks = append(p.Steps[1].Hunks, rest)
+			},
+			"",
+		},
+		{
+			"removed lines are covered where they were",
+			func(p *plan.Plan) { p.Steps[1].Hunks[0].Lines = "42-45" },
+			"not covered: api/a.go:40(del)",
 		},
 		{
 			"duplicate id",
@@ -161,13 +183,20 @@ func TestParseRejectsUnknownFields(t *testing.T) {
 	if _, err := plan.Parse([]byte("steps:\n  - id: s1\n    titel: typo\n")); err == nil {
 		t.Fatal("want error for unknown field")
 	}
+	for _, field := range []string{
+		"status: done", "announced: true", "skip_reason: x", "may_change: true",
+		"details: [{file: x.go, line: 0}]", "from_round: 1",
+	} {
+		if _, err := plan.Parse([]byte("steps:\n  - id: s1\n    " + field + "\n")); err == nil {
+			t.Errorf("%s: a runtime field must not pass in a plan", field)
+		}
+	}
 }
 
 func TestApply(t *testing.T) {
 	r, _ := fixture()
 	r.Comments = []state.Comment{{ID: 1}}
 	p := validPlan()
-	p.Steps[0].Status = state.StatusDone
 	plan.Apply(r, p)
 	if r.Current != "s1" || r.Summary != p.Summary || len(r.Steps) != 2 {
 		t.Fatalf("Apply: %+v", r)
@@ -194,18 +223,18 @@ func TestStepSizeLimit(t *testing.T) {
 	}
 	r := &state.Review{Files: []state.File{{Path: "big.go", Tier: state.TierCore}}}
 	files := []diff.File{{Path: "big.go", Hunks: []diff.Hunk{big}}}
-	step := func(lines, why string) state.Step {
-		return state.Step{ID: "s1", Title: "t", Hunks: []state.StepHunk{{File: "big.go", Lines: lines}},
+	step := func(lines, why string) plan.Step {
+		return plan.Step{ID: "s1", Title: "t", Hunks: []state.StepHunk{{File: "big.go", Lines: lines}},
 			WhyBig: why}
 	}
 	tests := []struct {
 		name    string
-		steps   []state.Step
+		steps   []plan.Step
 		wantErr bool
 	}{
-		{"whole file", []state.Step{step("", "")}, true},
-		{"why_big given", []state.Step{step("", "one generated-like table")}, false},
-		{"split by range", []state.Step{step("1-250", ""), {ID: "s2", Title: "t",
+		{"whole file", []plan.Step{step("", "")}, true},
+		{"why_big given", []plan.Step{step("", "one generated-like table")}, false},
+		{"split by range", []plan.Step{step("1-250", ""), {ID: "s2", Title: "t",
 			Hunks: []state.StepHunk{{File: "big.go", Lines: "251-400"}}}}, false},
 	}
 	for _, tt := range tests {
