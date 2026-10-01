@@ -1,6 +1,4 @@
-<img src="docs/logo.svg" width="72" alt="" align="left">
-
-# guided-review
+# <img src="docs/logo.svg" height="30" alt=""> guided-review
 
 **Review agent-sized merge requests without skimming.**
 
