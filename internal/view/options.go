@@ -22,20 +22,54 @@ func (m *model) answerOptions() []string {
 	return last.Options
 }
 
-func (m *model) optionPills() (line string, spans [][2]int) {
-	x := 0
+type pillSpan struct{ row, from, to int }
+
+func (m *model) optionPills(w int) (lines []string, spans []pillSpan) {
+	var pills []string
+	total := -1
 	for i, o := range m.answerOptions() {
-		pill := keyStyle.Render(fmt.Sprintf(" %d", i+1)) + buttonStyle.Render(" "+o+" ")
-		w := ansi.StringWidth(pill)
-		spans = append(spans, [2]int{x, x + w})
-		line += pill + " "
-		x += w + 1
+		k := fmt.Sprint(i + 1)
+		if m.step != nil {
+			k = "alt+" + k
+		}
+		pill := keyStyle.Render(" "+k) + buttonStyle.Render(" "+o+" ")
+		pills = append(pills, pill)
+		total += ansi.StringWidth(pill) + 1
 	}
-	hint := "· " + m.keys().key("message") + " own answer"
-	if m.step != nil {
-		hint = "· alt+number " + hint
+	if total <= w {
+		line, x := "", 0
+		for _, p := range pills {
+			pw := ansi.StringWidth(p)
+			spans = append(spans, pillSpan{0, x, x + pw})
+			line += p + " "
+			x += pw + 1
+		}
+		lines = []string{line}
+	} else {
+		for i, p := range pills {
+			lines = append(lines, p)
+			spans = append(spans, pillSpan{i, 0, ansi.StringWidth(p)})
+		}
 	}
-	return line + dimStyle.Render(hint), spans
+	return append(lines, dimStyle.Render(m.keys().key("message")+" own answer")), spans
+}
+
+func (m *model) pillsAt() (x, y, w int, ok bool) {
+	if len(m.answerOptions()) == 0 || m.composing {
+		return 0, 0, 0, false
+	}
+	block := func(w int) int { lines, _ := m.optionPills(w); return len(lines) }
+	switch {
+	case m.step == nil:
+		w = min(max(m.width-2, 20), intakeWidth)
+		return m.inputRowX(), m.height - 1 - block(w), w, m.err == nil
+	case m.chatWidth() > 0:
+		w = m.chatWidth() - 2
+		return m.width - m.chatWidth() + 2, m.height - len(m.bottomLines()) - block(w), w, true
+	case len(m.chatLines(m.width, false)) == 0:
+		return 0, 0, 0, false
+	}
+	return 0, m.height - 1 - block(m.width), m.width, true
 }
 
 func (m *model) answer(i int) {
@@ -52,10 +86,14 @@ func (m *model) optionKey(k string) (int, bool) {
 	return int(digit[0] - '1'), len(m.answerOptions()) > 0
 }
 
-func (m *model) optionAt(x int) int {
-	_, spans := m.optionPills()
+func (m *model) optionAt(x, y int) int {
+	x0, y0, w, ok := m.pillsAt()
+	if !ok {
+		return -1
+	}
+	_, spans := m.optionPills(w)
 	for i, sp := range spans {
-		if x >= sp[0] && x < sp[1] {
+		if y == y0+sp.row && x-x0 >= sp.from && x-x0 < sp.to {
 			return i
 		}
 	}

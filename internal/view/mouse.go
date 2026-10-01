@@ -33,10 +33,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if m.resizing = m.separatorAt(msg.X, msg.Y); m.resizing != "" {
 			return nil
 		}
+		if i := m.optionAt(msg.X, msg.Y); i >= 0 {
+			m.answer(i)
+			return nil
+		}
 		if m.onChatInput(msg.X, msg.Y) {
-			if i := m.optionAt(msg.X - m.inputRowX()); i >= 0 && !m.composing {
-				m.answer(i)
-			} else if !m.composing {
+			if !m.composing {
 				m.startCompose(inbox.KindMessage)
 			}
 			return nil
@@ -145,13 +147,18 @@ func (m *model) separatorAt(x, y int) string {
 
 func (m *model) onChatInput(x, y int) bool {
 	bodyH := m.height - len(m.bottomLines())
+	_, top, _, pills := m.pillsAt()
 	switch {
+	case pills && m.chatWidth() > 0:
+		return x > m.width-m.chatWidth() && y >= top-1 && y < bodyH
+	case pills:
+		return y >= top && y < m.height-1
 	case m.step == nil:
 		return y == m.height-2
 	case m.chatWidth() > 0:
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
-	return len(m.answerOptions()) > 0 && y == m.height-2
+	return false
 }
 
 func (m *model) inputRowX() int {
