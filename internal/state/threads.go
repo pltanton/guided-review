@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func (r *Review) MyThreads() []Discussion {
@@ -134,4 +135,34 @@ func (r *Review) LinkComments() {
 			c.ThreadID = d.ID
 		}
 	}
+}
+
+func (t Thread) Decided() bool {
+	return t.Verdict != "" && t.DecidedBy == DecidedByViewer && !t.DecidedAt.IsZero()
+}
+
+func (r *Review) Decide(id, verdict, reply string, now time.Time) error {
+	d := r.Discussion(id)
+	if d == nil {
+		return fmt.Errorf("no thread %q", id)
+	}
+	t := r.ThreadState(*d)
+	if i := slices.IndexFunc(r.Comments, func(c Comment) bool { return c.ID == t.Resolves }); i >= 0 {
+		r.Comments[i].Resolved = false
+	}
+	t.Resolves = 0
+	switch verdict {
+	case VerdictResolve, VerdictOpen:
+		t.Verdict, t.Reply = verdict, strings.TrimSpace(reply)
+		t.DecidedAt, t.DecidedBy = now, DecidedByViewer
+	case VerdictNone:
+		t.Verdict, t.Reply, t.DecidedAt, t.DecidedBy = "", "", time.Time{}, ""
+	default:
+		return fmt.Errorf("verdict %q: want resolve, open or none", verdict)
+	}
+	if c := r.CommentFor(*d); c != nil && verdict == VerdictResolve && !c.Resolved {
+		c.Resolved, t.Resolves = true, c.ID
+	}
+	r.SetThread(t)
+	return nil
 }

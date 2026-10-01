@@ -123,19 +123,24 @@ type Note struct {
 }
 
 const (
-	VerdictResolve = "resolve"
-	VerdictOpen    = "open"
+	VerdictResolve  = "resolve"
+	VerdictOpen     = "open"
+	VerdictNone     = "none"
+	DecidedByViewer = "viewer"
 )
 
 type Thread struct {
-	ID            string `yaml:"id"`
-	Notes         int    `yaml:"notes"`
-	Assessment    string `yaml:"assessment,omitempty"`
-	Proposed      string `yaml:"proposed,omitempty"`
-	ProposedReply string `yaml:"proposed_reply,omitempty"`
-	Verdict       string `yaml:"verdict,omitempty"`
-	Reply         string `yaml:"reply,omitempty"`
-	Published     bool   `yaml:"published,omitempty"`
+	ID            string    `yaml:"id"`
+	Notes         int       `yaml:"notes"`
+	Assessment    string    `yaml:"assessment,omitempty"`
+	Proposed      string    `yaml:"proposed,omitempty"`
+	ProposedReply string    `yaml:"proposed_reply,omitempty"`
+	Verdict       string    `yaml:"verdict,omitempty"`
+	Reply         string    `yaml:"reply,omitempty"`
+	DecidedAt     time.Time `yaml:"decided_at,omitempty"`
+	DecidedBy     string    `yaml:"decided_by,omitempty"`
+	Resolves      int       `yaml:"resolves,omitempty"`
+	Published     bool      `yaml:"published,omitempty"`
 }
 
 type MR struct {

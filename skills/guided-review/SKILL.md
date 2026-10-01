@@ -265,12 +265,14 @@ human decides each one; you prepare the decision. Before planning:
    wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
    author asked something; keep it to the style of a review comment.
 2. `gr say` one line per answered thread (`d1 a.go:5: не исправлено, предлагаю оставить`)
-   and ask them to press `R` to decide. Never run `gr thread decide` yourself.
+   and ask them to press `R` to decide. Decisions are the human's: the viewer records
+   them itself and there is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
    if your view changed, assess it again.
 
-`gr prepare` refuses while an answered thread has no decision, and refuses `approve` while
-any of your threads stays open. A decided resolve also resolves the matching gr comment.
+`gr prepare` refuses while an answered thread has no decision from the viewer, and refuses
+`approve` while any of your threads stays open. A decided resolve also resolves the matching
+gr comment; undoing the decision (`u`) takes that back.
 
 ## Self mode (`gr init` printed "mode: self")
 

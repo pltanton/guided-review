@@ -117,7 +117,7 @@ func threadActions(r *state.Review, md *strings.Builder) []threadAction {
 	var out []threadAction
 	for _, d := range r.MyThreads() {
 		t := r.ThreadState(d)
-		if t.Verdict == "" {
+		if !t.Decided() {
 			continue
 		}
 		a := threadAction{ID: d.ID, Reply: t.Reply, Resolve: t.Verdict == state.VerdictResolve}

@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/inbox"
@@ -969,6 +970,27 @@ func TestGitHubPR(t *testing.T) {
 	}
 }
 
+func (h *harness) edit(apply func(*state.Review)) {
+	h.t.Helper()
+	s, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	apply(r)
+	if err := s.store.Save(r); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *harness) decide(id, verdict, reply string) {
+	h.t.Helper()
+	h.edit(func(r *state.Review) {
+		if err := r.Decide(id, verdict, reply, time.Now()); err != nil {
+			h.t.Fatal(err)
+		}
+	})
+}
+
 func TestThreads(t *testing.T) {
 	h := newHarness(t)
 	base := h.repo.Git("rev-parse", "main")
@@ -1010,7 +1032,16 @@ func TestThreads(t *testing.T) {
 	h.mustRun("", "thread", "assess", "d1", "--propose", "open", "--reply", "callers can't tell",
 		"the", "reply", "does", "not", "address", "it")
 	assertContains(t, h.mustRun("", "thread", "list"), "agent (open): the reply does not address it")
-	h.mustRun("", "thread", "decide", "d1", "--verdict", "open", "--reply", "callers can't tell")
+	if _, err := h.run("", "thread", "decide", "d1", "--verdict", "resolve"); err == nil {
+		t.Fatal("only the viewer decides a thread: gr thread decide must not exist")
+	}
+	h.edit(func(r *state.Review) {
+		r.SetThread(state.Thread{ID: "d1", Notes: 2, Verdict: state.VerdictResolve})
+	})
+	if _, err := h.run("", changes...); err == nil || !strings.Contains(err.Error(), "d1") {
+		t.Fatalf("a verdict the viewer did not write is no decision, got %v", err)
+	}
+	h.decide("d1", state.VerdictOpen, "callers can't tell")
 	approve := []string{"prepare", "--verdict", "approve"}
 	if _, err := h.run("", approve...); err == nil || !strings.Contains(err.Error(), "still open") {
 		t.Fatalf("approve with open threads must fail, got %v", err)

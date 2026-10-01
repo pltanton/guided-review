@@ -10,8 +10,8 @@ import (
 )
 
 const threadUsage = "usage: gr thread list | " +
-	"gr thread assess ID --propose resolve|open [--reply TEXT] TEXT...|- | " +
-	"gr thread decide ID --verdict resolve|open|none [--reply TEXT]"
+	"gr thread assess ID --propose resolve|open [--reply TEXT] TEXT...|- " +
+	"(the reviewer decides with R in the viewer)"
 
 func cmdThread(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
@@ -25,48 +25,33 @@ func cmdThread(ctx context.Context, e env, args []string) error {
 		printThreads(e, r)
 		return nil
 	}
-	if len(args) < 2 || args[0] != "assess" && args[0] != "decide" {
+	if len(args) < 2 || args[0] != "assess" {
 		return errors.New(threadUsage)
 	}
 	d := r.Discussion(args[1])
 	if d == nil {
 		return fmt.Errorf("no thread %q: run gr discussions to refresh", args[1])
 	}
-	fs := e.flags("thread " + args[0])
+	fs := e.flags("thread assess")
 	propose := fs.String("propose", "", "resolve|open: what the agent suggests")
-	verdict := fs.String("verdict", "", "resolve|open|none: the reviewer's decision")
 	reply := fs.String("reply", "", "text to post in the thread")
 	if err := fs.Parse(args[2:]); err != nil {
 		return err
 	}
 	t := r.ThreadState(*d)
-	if args[0] == "assess" {
-		text := strings.Join(fs.Args(), " ")
-		if text == "-" {
-			data, err := readInput(e, "-")
-			if err != nil {
-				return err
-			}
-			text = string(data)
+	text := strings.Join(fs.Args(), " ")
+	if text == "-" {
+		data, err := readInput(e, "-")
+		if err != nil {
+			return err
 		}
-		if *propose != state.VerdictResolve && *propose != state.VerdictOpen {
-			return errors.New("--propose must be resolve or open")
-		}
-		t.Assessment, t.Proposed = strings.TrimSpace(text), *propose
-		t.ProposedReply = strings.TrimSpace(*reply)
-	} else {
-		switch *verdict {
-		case state.VerdictResolve, state.VerdictOpen:
-			t.Verdict, t.Reply = *verdict, strings.TrimSpace(*reply)
-		case "none":
-			t.Verdict, t.Reply = "", ""
-		default:
-			return errors.New("--verdict must be resolve, open or none")
-		}
-		if c := r.CommentFor(*d); c != nil {
-			c.Resolved = t.Verdict == state.VerdictResolve
-		}
+		text = string(data)
 	}
+	if *propose != state.VerdictResolve && *propose != state.VerdictOpen {
+		return errors.New("--propose must be resolve or open")
+	}
+	t.Assessment, t.Proposed = strings.TrimSpace(text), *propose
+	t.ProposedReply = strings.TrimSpace(*reply)
 	r.SetThread(t)
 	if err := s.store.Save(r); err != nil {
 		return err
@@ -77,7 +62,7 @@ func cmdThread(ctx context.Context, e env, args []string) error {
 
 func threadStatus(t state.Thread) string {
 	switch {
-	case t.Verdict != "":
+	case t.Decided():
 		return "decided " + t.Verdict
 	case t.Proposed != "":
 		return "agent proposes " + t.Proposed
@@ -122,7 +107,7 @@ func printThreads(e env, r *state.Review) {
 func undecidedThreads(r *state.Review) []string {
 	var ids []string
 	for _, d := range r.MyThreads() {
-		if r.Answered(d) && r.ThreadState(d).Verdict == "" {
+		if r.Answered(d) && !r.ThreadState(d).Decided() {
 			ids = append(ids, d.ID)
 		}
 	}
@@ -132,7 +117,7 @@ func undecidedThreads(r *state.Review) []string {
 func openThreads(r *state.Review) []string {
 	var ids []string
 	for _, d := range r.MyThreads() {
-		if r.ThreadState(d).Verdict != state.VerdictResolve {
+		if t := r.ThreadState(d); !t.Decided() || t.Verdict != state.VerdictResolve {
 			ids = append(ids, d.ID)
 		}
 	}

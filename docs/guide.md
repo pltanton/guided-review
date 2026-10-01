@@ -85,7 +85,8 @@ away or leaves for later (`gr list` shows where it is).
 
 Run the same command after the author pushes: you see only what changed. Your open
 threads come first with the author's replies. The agent checks each reply against the
-new code and suggests resolve or keep open with a reply; you decide. Approve is refused
+new code and suggests resolve or keep open with a reply; you decide with `R` in the
+viewer, and only there: the agent has no command to decide for you. Approve is refused
 while any of your threads stays open.
 
 On a large change you can finish early: `gr prepare --partial` sends what you reviewed

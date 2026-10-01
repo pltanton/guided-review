@@ -27,7 +27,7 @@ review
   note detail --file F --line N [--step ID] TEXT... | -   details behind a note (viewer: i)
   discussions
   thread list | assess ID --propose resolve|open [--reply T] TEXT|-
-  thread decide ID --verdict resolve|open|none [--reply T]   your MR threads (viewer: R)
+                       your MR threads; the reviewer decides them in the viewer (R)
   prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F]
           [--approve] [--partial]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>

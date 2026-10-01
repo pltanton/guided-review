@@ -1871,10 +1871,26 @@ func TestThreadsScreen(t *testing.T) {
 	}
 	m.review.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
 		Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
-	var calls [][]string
+	m.review.Comments = []state.Comment{{ID: 3, File: "a.go", Severity: state.SeverityNit,
+		Body: "spacing", Published: true, ThreadID: "d2"}}
+	m.store = state.Store{Dir: t.TempDir(), Key: "k"}
+	if err := m.store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
 	m.runGr = func(args ...string) (string, error) {
-		calls = append(calls, args)
+		t.Fatalf("a thread decision must not go through gr: %q", args)
 		return "", nil
+	}
+	saved := func() *state.Review {
+		t.Helper()
+		r, err := m.store.LoadCurrent()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
 	}
 	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "replies 1 · R") {
 		t.Fatalf("footer must offer the answered thread: %q", ansi.Strip(f))
@@ -1889,8 +1905,20 @@ func TestThreadsScreen(t *testing.T) {
 		}
 	}
 	m.Update(key("a"))
+	if th := saved().ThreadState(m.review.Discussions[0]); !th.Decided() ||
+		th.Verdict != state.VerdictOpen || th.Reply != "please return an error" ||
+		th.DecidedBy != state.DecidedByViewer {
+		t.Fatalf("a takes the agent's proposal into the state: %+v", th)
+	}
 	m.Update(key("j"))
 	m.Update(key("r"))
+	if r := saved(); !r.ThreadState(r.Discussions[1]).Decided() || !r.Comments[0].Resolved {
+		t.Fatalf("r resolves d2 and its comment: %+v %+v", r.Threads, r.Comments)
+	}
+	m.Update(key("u"))
+	if r := saved(); r.ThreadState(r.Discussions[1]).Decided() || r.Comments[0].Resolved {
+		t.Fatalf("u takes back the decision and its resolve: %+v %+v", r.Threads, r.Comments)
+	}
 	m.Update(key("k"))
 	m.Update(key("o"))
 	if string(m.input) != "please return an error" {
@@ -1902,14 +1930,6 @@ func TestThreadsScreen(t *testing.T) {
 		m.Update(key(string(r)))
 	}
 	m.Update(key("enter"))
-	want := [][]string{
-		{"thread", "decide", "d1", "--verdict", "open", "--reply", "please return an error"},
-		{"thread", "decide", "d2", "--verdict", "resolve"},
-		{"thread", "decide", "d1", "--verdict", "open", "--reply", "please return an error"},
-	}
-	if !reflect.DeepEqual(calls, want) {
-		t.Fatalf("calls = %q\nwant %q", calls, want)
-	}
 	if n := len(*sent); n != 1 || (*sent)[0].Text != "re thread d1: why?" {
 		t.Fatalf("c must ask the agent about the thread: %+v", *sent)
 	}
