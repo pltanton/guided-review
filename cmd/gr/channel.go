@@ -89,12 +89,11 @@ func cmdProgress(ctx context.Context, e env, args []string) error {
 }
 
 func update(ctx context.Context, e env, apply func(*state.Review)) error {
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
-	apply(r)
-	return s.store.Save(r)
+	_, _, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		apply(r)
+		return nil
+	})
+	return err
 }
 
 // cmdIdle runs as a Claude Code Stop hook in every session, so outside a review it

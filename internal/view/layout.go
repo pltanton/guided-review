@@ -123,6 +123,8 @@ func (m *model) footer() (string, []span) {
 func (m *model) cursorHint() string {
 	k, cur := m.keys(), m.current()
 	switch {
+	case m.focusPlan || m.focusFiles:
+		return m.panelHint()
 	case cur.Kind == RowNote && cur.Ref > 0:
 		del := k.key("delete-comment")
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
@@ -699,21 +701,23 @@ func fit(s string, w int) string {
 	return s
 }
 
+type sideZone int
+
+const (
+	zoneNone sideZone = iota
+	zonePlan
+	zoneFiles
+)
+
 type sideEntry struct {
-	text string
-	step string
-	file string
+	text    string
+	step    string
+	file    string
+	chapter string
+	zone    sideZone
 }
 
-func (m *model) planRows(h int) int {
-	chapters := 0
-	for i, st := range m.review.Steps {
-		if st.Chapter != "" && (i == 0 || m.review.Steps[i-1].Chapter != st.Chapter) {
-			chapters++
-		}
-	}
-	return min(len(m.review.Steps)+chapters+len(m.extraSteps())+1, max(h/2, 2))
-}
+type rowFunc func(left, right string) string
 
 func (m *model) sidebar(h, w int) []sideEntry {
 	iw := max(w-3, 8)
@@ -726,146 +730,231 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	selected := func(line string) string {
 		return paint(fit(accentTone.fg().Render("▌")+line, w-2), cursorTone)
 	}
+	header := func(label string, focused bool, top, shown, n int, count string) string {
+		title := labelStyle.Render(label)
+		if focused {
+			title = cursorStyle.Render(label)
+		}
+		more := ""
+		if top > 0 {
+			more += fmt.Sprintf("↑%d ", top)
+		}
+		if rest := n - top - shown; rest > 0 {
+			more += fmt.Sprintf("↓%d ", rest)
+		}
+		return plain(row(title, dimStyle.Render(more+count)))
+	}
 
-	reviewed, idW := 0, 0
+	items := m.planItems()
+	if m.focusPlan {
+		m.planCursor = max(0, min(m.planCursor, len(items)-1))
+	}
+	plan := m.planEntries(items, row, plain, selected)
+	files, fileAt := m.fileEntries(row, plain, selected)
+
+	filesNeed := 0
+	if len(files) > 0 {
+		filesNeed = len(files) + 2
+	}
+	planH := min(1+len(plan), max(h-filesNeed, h/2, 2))
+	filesH := min(filesNeed, h-planH)
+	if filesH < 3 {
+		filesH = 0
+	}
+
+	at := m.planAnchor(items)
+	if m.focusPlan {
+		at = m.planCursor
+	}
+	rows := max(planH-1, 0)
+	key := fmt.Sprint(rows, " ", plan[at].step, "#", plan[at].chapter)
+	top := scrollWindow(&m.planTop, &m.planFollow, key, m.focusPlan, at, rows, len(plan))
+	reviewed := 0
 	for _, st := range m.review.Steps {
 		if st.Status != state.StatusPending {
 			reviewed++
 		}
-		idW = max(idW, len(st.ID))
 	}
-	title := labelStyle.Render("PLAN")
+	label := "PLAN"
 	if m.review.Round > 1 {
-		title += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
+		label += fmt.Sprintf(" · round %d", m.review.Round)
 	}
 	count := fmt.Sprintf("%d/%d", reviewed, len(m.review.Steps))
-	out := []sideEntry{{text: plain(row(title, dimStyle.Render(count)))}}
-
-	rows := m.planRows(h)
-	offset := max(0, m.review.StepIndex(m.review.Current)-(rows-2))
-	chapter := ""
-	for _, st := range m.review.Steps[offset:] {
-		if st.Chapter != "" && st.Chapter != chapter && len(out) < rows-1 {
-			head := chapterStyle.Render(strings.ToUpper(st.Chapter))
-			out = append(out, sideEntry{text: plain(row(head, ""))})
-		}
-		chapter = st.Chapter
-		if len(out) >= rows {
-			break
-		}
-		glyph, glyphStyle, style := st.Status.Glyph(), dimStyle, dimStyle
-		switch st.Status {
-		case state.StatusPending:
-			glyph, style = "○", textTone.fg()
-		case state.StatusDone:
-			glyphStyle = addStyle
-		case state.StatusStale:
-			glyphStyle = hotStyle
-		}
-		current := st.ID == m.review.Current
-		if current {
-			glyph, glyphStyle, style = "▶", cursorStyle, boldStyle
-		}
-		if m.viewStep != "" && m.step != nil && st.ID == m.step.ID {
-			glyph, glyphStyle, style = "◆", hotStyle, hotStyle
-		}
-		left := glyphStyle.Render(glyph) + " " + dimStyle.Render(fmt.Sprintf("%-*s", idW, st.ID)) +
-			" " + style.Render(st.Title)
-		flag := ""
-		if len(st.Hotspots) > 0 {
-			flag = hotStyle.Render("⚑")
-		}
-		line := plain(row(left, flag))
-		if current {
-			line = selected(row(left, flag))
-		}
-		out = append(out, sideEntry{text: line, step: st.ID})
-	}
-	for _, st := range m.extraSteps() {
-		if len(out) >= rows {
-			break
-		}
-		glyph, style := "◇", dimStyle
-		if m.step != nil && st.ID == m.step.ID {
-			glyph, style = "◆", hotStyle
-		}
-		n := dimStyle.Render(fmt.Sprint(len(st.Hunks)))
-		line := plain(row(style.Render(glyph+" "+st.Title), n))
-		out = append(out, sideEntry{text: line, step: st.ID})
-	}
-	for len(out) < rows {
-		out = append(out, sideEntry{})
+	shown := min(rows, len(plan)-top)
+	title := header(label, m.focusPlan, top, shown, len(plan), count)
+	out := append([]sideEntry{{text: title, zone: zonePlan}}, plan[top:top+shown]...)
+	for len(out) < planH {
+		out = append(out, sideEntry{zone: zonePlan})
 	}
 
-	files := m.stepFiles()
-	if len(files) > 0 {
-		n := dimStyle.Render(fmt.Sprint(len(files)))
-		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FILES"), n))})
-		current := m.current().File
-		prevDir := ""
-		for i, f := range files {
-			dir, base := path.Dir(f), path.Base(f)
-			indent := ""
-			if dir != "." {
-				if dir != prevDir {
-					out = append(out, sideEntry{text: plain(row(dimStyle.Render(dir+"/"), ""))})
-				}
-				indent = "  "
-			}
-			prevDir = dir
-			stat := ""
-			if rf := m.review.File(f); rf != nil {
-				stat = addStyle.Render(fmt.Sprintf("+%d", rf.Added)) + " " +
-					delStyle.Render(fmt.Sprintf("−%d", rf.Deleted))
-			}
-			here := m.focusFiles && i == m.fileCursor || !m.focusFiles && f == current
-			name := textTone.fg().Render(indent + base)
-			line := plain(row(name, stat))
-			if here {
-				line = selected(row(boldStyle.Render(indent+base), stat))
-			}
-			out = append(out, sideEntry{text: line, file: f})
-		}
+	if filesH > 0 {
+		rows := filesH - 2
+		key := fmt.Sprint(rows, " ", files[fileAt].file)
+		top := scrollWindow(&m.fileTop, &m.fileFollow, key, m.focusFiles, fileAt, rows, len(files))
+		shown := min(rows, len(files)-top)
+		title := header("FILES", m.focusFiles, top, shown, len(files), fmt.Sprint(len(m.stepFiles())))
+		out = append(out, sideEntry{}, sideEntry{text: title, zone: zoneFiles})
+		out = append(out, files[top:top+shown]...)
 	}
-	if len(m.flow) > 0 {
-		n := dimStyle.Render(fmt.Sprint(len(m.flow)))
-		out = append(out, sideEntry{}, sideEntry{text: plain(row(labelStyle.Render("FLOW"), n))})
-		calls := func(arrow string, names []string) {
-			var seen []string
-			for _, n := range names {
-				n, _, _ = strings.Cut(n, "(")
-				if slices.Contains(seen, n) {
-					continue
-				}
-				seen = append(seen, n)
-				if len(seen) > maxFlowCalls {
-					continue
-				}
-				cls, method := "", n
-				if i := strings.LastIndex(n, "."); i > 0 {
-					cls, method = n[:i], n[i+1:]
-				}
-				text := dimStyle.Render("  "+arrow+" ") + textTone.fg().Render(method)
-				if cls != "" {
-					text += faintTone.fg().Render(" · " + cls)
-				}
-				out = append(out, sideEntry{text: plain(row(text, ""))})
-			}
-			if extra := len(seen) - maxFlowCalls; extra > 0 {
-				more := dimStyle.Render(fmt.Sprintf("    +%d more", extra))
-				out = append(out, sideEntry{text: plain(row(more, ""))})
-			}
-		}
-		for _, f := range m.flow {
-			out = append(out, sideEntry{text: plain(row(boldStyle.Render(f.name), ""))})
-			calls("←", f.in)
-			calls("→", f.out)
-		}
-	}
+	out = append(out, m.flowEntries(row, plain)...)
 	for len(out) < h {
 		out = append(out, sideEntry{})
 	}
 	return out[:h]
+}
+
+func (m *model) planEntries(
+	items []planItem, row rowFunc, plain, selected func(string) string,
+) []sideEntry {
+	idW := 0
+	for _, st := range m.review.Steps {
+		idW = max(idW, len(st.ID))
+	}
+	viewed := ""
+	if m.viewStep != "" && m.step != nil {
+		viewed = m.step.ID
+	}
+	out := make([]sideEntry, 0, len(items))
+	for i, it := range items {
+		cursor := m.focusPlan && i == m.planCursor
+		st := it.st
+		switch {
+		case it.head:
+			glyph := "▸"
+			if it.open {
+				glyph = "▾"
+			}
+			stat := dimStyle.Render(fmt.Sprintf("%d/%d", it.done, it.total))
+			if it.hot > 0 {
+				stat += " " + hotStyle.Render(fmt.Sprintf("⚑%d", it.hot))
+			}
+			left := chapterStyle.Render(glyph + " " + strings.ToUpper(it.chapter))
+			line := plain(row(left, stat))
+			if cursor || !m.focusPlan && it.current && !it.open {
+				line = selected(row(left, stat))
+			}
+			out = append(out, sideEntry{text: line, chapter: it.chapter, zone: zonePlan})
+		case it.extra:
+			glyph, style := "◇", dimStyle
+			if m.step != nil && st.ID == m.step.ID {
+				glyph, style = "◆", hotStyle
+			}
+			n := dimStyle.Render(fmt.Sprint(len(st.Hunks)))
+			left := style.Render(glyph + " " + st.Title)
+			line := plain(row(left, n))
+			if cursor {
+				line = selected(row(left, n))
+			}
+			out = append(out, sideEntry{text: line, step: st.ID, zone: zonePlan})
+		default:
+			glyph, glyphStyle, style := st.Status.Glyph(), dimStyle, dimStyle
+			switch st.Status {
+			case state.StatusPending:
+				glyph, style = "○", textTone.fg()
+			case state.StatusDone:
+				glyphStyle = addStyle
+			case state.StatusStale:
+				glyphStyle = hotStyle
+			}
+			current := st.ID == m.review.Current
+			if current {
+				glyph, glyphStyle, style = "▶", cursorStyle, boldStyle
+			}
+			if st.ID == viewed {
+				glyph, glyphStyle, style = "◆", hotStyle, hotStyle
+			}
+			indent := ""
+			if it.chapter != "" {
+				indent = " "
+			}
+			left := indent + glyphStyle.Render(glyph) + " " +
+				dimStyle.Render(fmt.Sprintf("%-*s", idW, st.ID)) + " " + style.Render(st.Title)
+			flag := ""
+			if len(st.Hotspots) > 0 {
+				flag = hotStyle.Render("⚑")
+			}
+			line := plain(row(left, flag))
+			if cursor || !m.focusPlan && current {
+				line = selected(row(left, flag))
+			}
+			out = append(out, sideEntry{text: line, step: st.ID, zone: zonePlan})
+		}
+	}
+	return out
+}
+
+func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([]sideEntry, int) {
+	files := m.stepFiles()
+	if m.focusFiles {
+		m.fileCursor = max(0, min(m.fileCursor, len(files)-1))
+	}
+	current := m.current().File
+	var out []sideEntry
+	at, prevDir := 0, ""
+	for i, f := range files {
+		dir, base := path.Dir(f), path.Base(f)
+		indent := ""
+		if dir != "." {
+			if dir != prevDir {
+				text := plain(row(dimStyle.Render(dir+"/"), ""))
+				out = append(out, sideEntry{text: text, zone: zoneFiles})
+			}
+			indent = "  "
+		}
+		prevDir = dir
+		stat := ""
+		if rf := m.review.File(f); rf != nil {
+			stat = addStyle.Render(fmt.Sprintf("+%d", rf.Added)) + " " +
+				delStyle.Render(fmt.Sprintf("−%d", rf.Deleted))
+		}
+		line := plain(row(textTone.fg().Render(indent+base), stat))
+		if m.focusFiles && i == m.fileCursor || !m.focusFiles && f == current {
+			line = selected(row(boldStyle.Render(indent+base), stat))
+			at = len(out)
+		}
+		out = append(out, sideEntry{text: line, file: f, zone: zoneFiles})
+	}
+	return out, at
+}
+
+func (m *model) flowEntries(row rowFunc, plain func(string) string) []sideEntry {
+	if len(m.flow) == 0 {
+		return nil
+	}
+	n := dimStyle.Render(fmt.Sprint(len(m.flow)))
+	out := []sideEntry{{}, {text: plain(row(labelStyle.Render("FLOW"), n))}}
+	calls := func(arrow string, names []string) {
+		var seen []string
+		for _, n := range names {
+			n, _, _ = strings.Cut(n, "(")
+			if slices.Contains(seen, n) {
+				continue
+			}
+			seen = append(seen, n)
+			if len(seen) > maxFlowCalls {
+				continue
+			}
+			cls, method := "", n
+			if i := strings.LastIndex(n, "."); i > 0 {
+				cls, method = n[:i], n[i+1:]
+			}
+			text := dimStyle.Render("  "+arrow+" ") + textTone.fg().Render(method)
+			if cls != "" {
+				text += faintTone.fg().Render(" · " + cls)
+			}
+			out = append(out, sideEntry{text: plain(row(text, ""))})
+		}
+		if extra := len(seen) - maxFlowCalls; extra > 0 {
+			more := dimStyle.Render(fmt.Sprintf("    +%d more", extra))
+			out = append(out, sideEntry{text: plain(row(more, ""))})
+		}
+	}
+	for _, f := range m.flow {
+		out = append(out, sideEntry{text: plain(row(boldStyle.Render(f.name), ""))})
+		calls("←", f.in)
+		calls("→", f.out)
+	}
+	return out
 }
 
 func renderUnified(r Row) string {

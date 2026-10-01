@@ -23,9 +23,10 @@ func TestCarry(t *testing.T) {
 			Hunks: []state.StepHunk{
 				{File: "b.go", Lines: "10-20"}, {File: "b.go", Lines: "30-40"}, {File: "gone.go"},
 			},
-			Hotspots:    []state.Hotspot{{Cat: "money", Q: "?", File: "b.go", Line: 12}},
+			Hotspots: []state.Hotspot{
+				{Cat: "money", Q: "?", File: "b.go", Line: 12, Detail: "z"},
+			},
 			Annotations: []state.Annotation{{File: "b.go", Line: 12, Kind: "note", Text: "y"}},
-			Details:     []state.Detail{{File: "b.go", Line: 12, Text: "z"}},
 		},
 		{ID: "r1-s9", FromRound: 1, Status: state.StatusPending,
 			Hunks: []state.StepHunk{{File: "old.go", Lines: "1-2"}}},
@@ -53,7 +54,7 @@ func TestCarry(t *testing.T) {
 		t.Fatalf("an unchanged file keeps its lines and notes: %+v", s2)
 	}
 	if !slices.Equal(s3.Hunks, []state.StepHunk{{File: "b.go"}}) || len(s3.Annotations) != 0 ||
-		len(s3.Details) != 0 || s3.Hotspots[0].Line != 0 || s3.Hotspots[0].Q != "?" ||
+		s3.Hotspots[0].Detail != "" || s3.Hotspots[0].Line != 0 || s3.Hotspots[0].Q != "?" ||
 		!slices.Equal(s3.DependsOn, []string{"r2-s2"}) {
 		t.Fatalf("a changed file becomes one whole-file hunk without line anchors: %+v", s3)
 	}
@@ -71,7 +72,7 @@ func TestValidateWithCarried(t *testing.T) {
 		!strings.Contains(errs[0].Error(), "not covered: wire.go") {
 		t.Fatalf("round files still need a step, got %v", errs)
 	}
-	p := plan.Plan{Steps: []state.Step{{ID: "r1-s1", Title: "x", Kind: "logic",
+	p := plan.Plan{Steps: []plan.Step{{ID: "r1-s1", Title: "x", Kind: "logic",
 		Hunks: []state.StepHunk{{File: "wire.go"}}}}}
 	if errs := plan.Validate(p, r, files); len(errs) != 1 ||
 		!strings.Contains(errs[0].Error(), "carried") {

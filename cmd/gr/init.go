@@ -138,7 +138,7 @@ func backupState(s session, id string) (string, error) {
 		return "", err
 	}
 	broken := path + ".broken-" + time.Now().Format("20060102-150405")
-	return broken, os.WriteFile(broken, data, 0o644)
+	return broken, os.WriteFile(broken, data, 0o600)
 }
 
 func readableComments(path string) []state.Comment {

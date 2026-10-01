@@ -39,12 +39,10 @@ func Carry(steps []state.Step, round int, since, full []diff.File) []state.Step 
 		st.Hunks = hunks
 		st.Annotations = slices.DeleteFunc(slices.Clone(st.Annotations),
 			func(a state.Annotation) bool { return changed[a.File] != "" })
-		st.Details = slices.DeleteFunc(slices.Clone(st.Details),
-			func(d state.Detail) bool { return changed[d.File] != "" })
 		st.Hotspots = slices.Clone(st.Hotspots)
 		for i, h := range st.Hotspots {
 			if path, ok := changed[h.File]; ok {
-				st.Hotspots[i].File, st.Hotspots[i].Line = path, 0
+				st.Hotspots[i].File, st.Hotspots[i].Line, st.Hotspots[i].Detail = path, 0, ""
 			}
 		}
 		if st.FromRound == 0 {
