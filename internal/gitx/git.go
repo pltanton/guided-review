@@ -203,6 +203,9 @@ func looksLikeSHA(s string) bool {
 }
 
 func (r Repo) WorktreeAdd(ctx context.Context, path, sha string) error {
+	if _, err := r.Run(ctx, "worktree", "prune"); err != nil {
+		return err
+	}
 	_, err := r.Run(ctx, "worktree", "add", "--detach", path, sha)
 	return err
 }

@@ -72,7 +72,11 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		}
 		old, exists = &state.Review{Comments: readableComments(broken)}, true
 	}
-	worktree, err := ensureWorktree(ctx, e, s.repo, t)
+	var prevWorktree string
+	if exists {
+		prevWorktree = old.Worktree
+	}
+	worktree, err := ensureWorktree(ctx, e, s, t, prevWorktree)
 	if err != nil {
 		return err
 	}
@@ -259,22 +263,26 @@ func defaultBase(ctx context.Context, repo gitx.Repo) (string, error) {
 	return "", errors.New("cannot find the default branch: pass --base")
 }
 
-func ensureWorktree(ctx context.Context, e env, repo gitx.Repo, t target) (string, error) {
-	head, err := repo.Commit(ctx, "HEAD")
-	if err != nil || head == t.head {
-		return "", err
+func ensureWorktree(ctx context.Context, e env, s session, t target, prev string) (string, error) {
+	path := prev
+	if _, err := os.Stat(path); err != nil {
+		head, err := s.repo.Commit(ctx, "HEAD")
+		if err != nil || head == t.head {
+			return "", err
+		}
+		name := fmt.Sprintf("%s-%s-%s", filepath.Base(s.repo.Dir), s.store.Key, t.id)
+		path = filepath.Join(e.cacheDir, "guided-review", name)
 	}
-	path := filepath.Join(e.cacheDir, "guided-review", filepath.Base(repo.Dir)+"-"+t.id)
 	if _, err := os.Stat(path); err != nil {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", err
 		}
-		return path, repo.WorktreeAdd(ctx, path, t.head)
+		return path, s.repo.WorktreeAdd(ctx, path, t.head)
 	}
 	if cur, err := (gitx.Repo{Dir: path}).Commit(ctx, "HEAD"); err == nil && cur == t.head {
 		return path, nil
 	}
-	return path, repo.WorktreeCheckout(ctx, path, t.head)
+	return path, s.repo.WorktreeCheckout(ctx, path, t.head)
 }
 
 func newReview(ctx context.Context, s session, t target) (*state.Review, []diff.File, error) {

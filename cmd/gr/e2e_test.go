@@ -219,12 +219,50 @@ func TestInitRange(t *testing.T) {
 	}
 }
 
+func (h *harness) worktreePath(id string) string {
+	h.t.Helper()
+	s, err := openSession(context.Background(), h.repo.Dir)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return filepath.Join(h.cache, "guided-review", filepath.Base(h.repo.Dir)+"-"+s.store.Key+"-"+id)
+}
+
+func TestWorktreeStaysAcrossRounds(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Git("checkout", "-q", "main")
+	h.mustRun("", "init", "feature")
+	h.mustRun(goodPlan, "plan", "set")
+	wt := h.worktreePath("feature")
+
+	h.repo.Git("checkout", "-q", "feature")
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	head := h.repo.Commit("fixup")
+	out := h.mustRun("", "init")
+	assertContains(t, out, "round 2", "code: "+wt)
+	if got := h.repo.Git("-C", wt, "rev-parse", "HEAD"); got != head {
+		t.Fatalf("worktree HEAD = %s, want %s", got, head)
+	}
+	if n := strings.Count(h.repo.Git("worktree", "list"), "\n") + 1; n != 2 {
+		t.Fatalf("git worktree list has %d entries", n)
+	}
+	h.mustRun("", "done")
+	if _, err := os.Stat(wt); !os.IsNotExist(err) {
+		t.Fatalf("worktree not removed: %v", err)
+	}
+}
+
+func TestFreshInitOnHeadUsesCheckout(t *testing.T) {
+	h := newHarness(t)
+	assertContains(t, h.mustRun("", "init"), "code: "+h.repo.Dir+"\n")
+}
+
 func TestInitOtherBranchUsesWorktree(t *testing.T) {
 	h := newHarness(t)
 	feature := h.repo.Git("rev-parse", "feature")
 	h.repo.Git("checkout", "-q", "main")
 	out := h.mustRun("", "init", "feature")
-	wt := filepath.Join(h.cache, "guided-review", filepath.Base(h.repo.Dir)+"-feature")
+	wt := h.worktreePath("feature")
 	assertContains(t, out, "review feature", "code: "+wt)
 	if got := h.repo.Git("-C", wt, "rev-parse", "HEAD"); got != feature {
 		t.Fatalf("worktree HEAD = %s, want %s", got, feature)
