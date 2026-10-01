@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"gopkg.in/yaml.v3"
 )
@@ -64,6 +65,58 @@ func (s Store) Load(id string) (*Review, error) {
 }
 
 func (s Store) Save(r *Review) error {
+	if err := os.MkdirAll(s.ReviewDir(r.ID), 0o755); err != nil {
+		return err
+	}
+	unlock, err := s.lock(r.ID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	return s.save(r)
+}
+
+func (s Store) Update(id string, apply func(*Review) error) error {
+	unlock, err := s.lock(id)
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("review %s: %w", id, ErrNoReview)
+	}
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	r, err := s.Load(id)
+	if err != nil {
+		return err
+	}
+	if err := apply(r); err != nil {
+		return err
+	}
+	return s.save(r)
+}
+
+func (s Store) UpdateCurrent(apply func(*Review) error) error {
+	id, err := s.Current()
+	if err != nil {
+		return err
+	}
+	return s.Update(id, apply)
+}
+
+// flock is held per open file, not per process: Update calls save, not Save, or waits on itself.
+func (s Store) lock(id string) (unlock func(), err error) {
+	f, err := os.OpenFile(filepath.Join(s.ReviewDir(id), "lock"), os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return func() { _ = f.Close() }, nil
+}
+
+func (s Store) save(r *Review) error {
 	data, err := yaml.Marshal(r)
 	if err != nil {
 		return err
@@ -123,9 +176,23 @@ func writeAtomic(path string, data []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	defer func() { _ = os.Remove(f.Name()) }()
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Chmod(0o644)
+	}
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), path)
 }

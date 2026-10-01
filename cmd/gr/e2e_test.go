@@ -281,6 +281,30 @@ func TestStepSkip(t *testing.T) {
 	assertContains(t, out, "[skipped]", "skipped: trivial")
 }
 
+func TestParallelCommentsAllKept(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	const n = 12
+	errs := make(chan error, n)
+	for i := range n {
+		go func() {
+			_, err := h.run("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+				"--severity", "nit", fmt.Sprintf("remark %d", i))
+			errs <- err
+		}()
+	}
+	for range n {
+		if err := <-errs; err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, r, err := loadReview(context.Background(), h.repo.Dir)
+	if err != nil || len(r.Comments) != n {
+		t.Fatalf("got %d comments, want %d (%v)", len(r.Comments), n, err)
+	}
+}
+
 func TestNotesAndResolve(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("", "init")

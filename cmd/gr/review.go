@@ -16,7 +16,10 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-var errGate = errors.New("gate not passed")
+var (
+	errGate   = errors.New("gate not passed")
+	errNoPlan = errors.New("no plan yet: pipe a plan to gr plan set")
+)
 
 func cmdStatus(ctx context.Context, e env, args []string) error {
 	fs := e.flags("status")
@@ -127,25 +130,24 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 		p.Boilerplate = append(p.Boilerplate, part.Boilerplate...)
 		p.Steps = append(p.Steps, part.Steps...)
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
-	files, err := s.reviewDiff(ctx, r)
-	if err != nil {
-		return err
-	}
-	if errs := plan.Validate(p, r, files); len(errs) > 0 {
-		msgs := make([]string, len(errs))
-		for i, err := range errs {
-			msgs[i] = err.Error()
+	_, r, err := updateReview(ctx, e.dir, func(s session, r *state.Review) error {
+		files, err := s.reviewDiff(ctx, r)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("plan rejected:\n  - %s", strings.Join(msgs, "\n  - "))
-	}
-	plan.Apply(r, p)
-	r.Progress = nil
-	announce(r, r.Step(r.Current))
-	if err := s.store.Save(r); err != nil {
+		if errs := plan.Validate(p, r, files); len(errs) > 0 {
+			msgs := make([]string, len(errs))
+			for i, err := range errs {
+				msgs[i] = err.Error()
+			}
+			return fmt.Errorf("plan rejected:\n  - %s", strings.Join(msgs, "\n  - "))
+		}
+		plan.Apply(r, p)
+		r.Progress = nil
+		announce(r, r.Step(r.Current))
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	e.printf("plan accepted: %d steps", len(r.Steps))
@@ -171,48 +173,57 @@ func cmdStep(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
 		args = []string{"show"}
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
-	if len(r.Steps) == 0 {
-		return errors.New("no plan yet: pipe a plan to gr plan set")
-	}
-	var st *state.Step
-	switch args[0] {
-	case "show":
+	if args[0] == "show" {
+		_, r, err := loadReview(ctx, e.dir)
+		if err != nil {
+			return err
+		}
+		if len(r.Steps) == 0 {
+			return errNoPlan
+		}
 		id := r.Current
 		if len(args) > 1 {
 			id = args[1]
 		}
-		if st = r.Step(id); st == nil {
+		st := r.Step(id)
+		if st == nil {
 			return fmt.Errorf("no step %q", id)
 		}
 		printStep(e, r, st)
 		return nil
-	case "next":
-		st, err = plan.Next(r)
-	case "skip":
-		fs := e.flags("step skip")
-		reason := fs.String("reason", "", "why the step is skipped (required)")
-		if err := fs.Parse(args[1:]); err != nil {
+	}
+	var st *state.Step
+	_, r, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		if len(r.Steps) == 0 {
+			return errNoPlan
+		}
+		var err error
+		switch args[0] {
+		case "next":
+			st, err = plan.Next(r)
+		case "skip":
+			fs := e.flags("step skip")
+			reason := fs.String("reason", "", "why the step is skipped (required)")
+			if err := fs.Parse(args[1:]); err != nil {
+				return err
+			}
+			st, err = plan.Skip(r, *reason)
+		case "goto":
+			if len(args) < 2 {
+				return errors.New("usage: gr step goto ID")
+			}
+			err = plan.Goto(r, args[1])
+			st = r.Step(r.Current)
+		default:
+			return fmt.Errorf("unknown step command %q", args[0])
+		}
+		if err != nil && !errors.Is(err, plan.ErrDone) {
 			return err
 		}
-		st, err = plan.Skip(r, *reason)
-	case "goto":
-		if len(args) < 2 {
-			return errors.New("usage: gr step goto ID")
-		}
-		err = plan.Goto(r, args[1])
-		st = r.Step(r.Current)
-	default:
-		return fmt.Errorf("unknown step command %q", args[0])
-	}
-	if err != nil && !errors.Is(err, plan.ErrDone) {
-		return err
-	}
-	announce(r, st)
-	if err := s.store.Save(r); err != nil {
+		announce(r, st)
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	if st == nil {
@@ -227,14 +238,11 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
 		return errors.New("usage: gr comment add|list|edit|resolve|delete")
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
-	var msg string
-	var imp plan.Impact
-	switch args[0] {
-	case "list":
+	if args[0] == "list" {
+		_, r, err := loadReview(ctx, e.dir)
+		if err != nil {
+			return err
+		}
 		for _, c := range r.Comments {
 			status := ""
 			if c.Resolved {
@@ -255,74 +263,82 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			}
 		}
 		return nil
-	case "edit", "resolve", "delete":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: gr comment %s ID", args[0])
-		}
-		id, err := parseID(args[1])
-		if err != nil {
-			return err
-		}
-		if args[0] == "delete" {
-			if imp, err = plan.DeleteComment(r, id); err != nil {
+	}
+	var msg string
+	_, _, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		var imp plan.Impact
+		var err error
+		switch args[0] {
+		case "edit", "resolve", "delete":
+			if len(args) < 2 {
+				return fmt.Errorf("usage: gr comment %s ID", args[0])
+			}
+			id, err := parseID(args[1])
+			if err != nil {
 				return err
 			}
-			msg = fmt.Sprintf("comment #%d deleted", id)
-			break
-		}
-		if args[0] == "resolve" {
-			if imp, err = plan.ResolveComment(r, id); err != nil {
+			if args[0] == "delete" {
+				if imp, err = plan.DeleteComment(r, id); err != nil {
+					return err
+				}
+				msg = fmt.Sprintf("comment #%d deleted", id)
+				break
+			}
+			if args[0] == "resolve" {
+				if imp, err = plan.ResolveComment(r, id); err != nil {
+					return err
+				}
+				msg = fmt.Sprintf("comment #%d resolved", id)
+				break
+			}
+			fs := e.flags("comment edit")
+			severity := fs.String("severity", "", "new severity (default: keep)")
+			if err := fs.Parse(args[2:]); err != nil {
 				return err
 			}
-			msg = fmt.Sprintf("comment #%d resolved", id)
-			break
+			body := strings.Join(fs.Args(), " ")
+			if imp, err = plan.EditComment(r, id, body, state.Severity(*severity)); err != nil {
+				return err
+			}
+			msg = fmt.Sprintf("comment #%d updated", id)
+		case "add":
+			fs := e.flags("comment add")
+			file := fs.String("file", "", "file path as in the diff")
+			lines := fs.String("lines", "", "new-file lines, N or N-M")
+			severity := fs.String("severity", "", "blocker|major|minor|nit")
+			step := fs.String("step", "", "step id (default: current)")
+			suggestion := fs.String("suggestion", "", "replacement text for the lines")
+			if err := fs.Parse(args[1:]); err != nil {
+				return err
+			}
+			var c state.Comment
+			c, imp, err = plan.AddComment(r, state.Comment{
+				Step:       *step,
+				File:       *file,
+				Lines:      *lines,
+				Severity:   state.Severity(*severity),
+				Body:       strings.Join(fs.Args(), " "),
+				Suggestion: *suggestion,
+			})
+			if err != nil {
+				return err
+			}
+			msg = fmt.Sprintf("comment #%d %s %s:%s", c.ID, c.Severity, c.File, c.Lines)
+		default:
+			return fmt.Errorf("unknown comment command %q", args[0])
 		}
-		fs := e.flags("comment edit")
-		severity := fs.String("severity", "", "new severity (default: keep)")
-		if err := fs.Parse(args[2:]); err != nil {
-			return err
+		if len(imp.Stale) > 0 {
+			msg += "\nstale (depend on a blocked step): " + strings.Join(imp.Stale, " ")
 		}
-		body := strings.Join(fs.Args(), " ")
-		if imp, err = plan.EditComment(r, id, body, state.Severity(*severity)); err != nil {
-			return err
+		if len(imp.MayChange) > 0 {
+			msg += "\nmay change: " + strings.Join(imp.MayChange, " ")
 		}
-		msg = fmt.Sprintf("comment #%d updated", id)
-	case "add":
-		fs := e.flags("comment add")
-		file := fs.String("file", "", "file path as in the diff")
-		lines := fs.String("lines", "", "new-file lines, N or N-M")
-		severity := fs.String("severity", "", "blocker|major|minor|nit")
-		step := fs.String("step", "", "step id (default: current)")
-		suggestion := fs.String("suggestion", "", "replacement text for the lines")
-		if err := fs.Parse(args[1:]); err != nil {
-			return err
+		if len(imp.Restored) > 0 {
+			msg += "\nback to pending: " + strings.Join(imp.Restored, " ")
 		}
-		var c state.Comment
-		c, imp, err = plan.AddComment(r, state.Comment{
-			Step:       *step,
-			File:       *file,
-			Lines:      *lines,
-			Severity:   state.Severity(*severity),
-			Body:       strings.Join(fs.Args(), " "),
-			Suggestion: *suggestion,
-		})
-		if err != nil {
-			return err
-		}
-		msg = fmt.Sprintf("comment #%d %s %s:%s", c.ID, c.Severity, c.File, c.Lines)
-	default:
-		return fmt.Errorf("unknown comment command %q", args[0])
-	}
-	if len(imp.Stale) > 0 {
-		msg += "\nstale (depend on a blocked step): " + strings.Join(imp.Stale, " ")
-	}
-	if len(imp.MayChange) > 0 {
-		msg += "\nmay change: " + strings.Join(imp.MayChange, " ")
-	}
-	if len(imp.Restored) > 0 {
-		msg += "\nback to pending: " + strings.Join(imp.Restored, " ")
-	}
-	if err := s.store.Save(r); err != nil {
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	e.println(msg)
@@ -343,10 +359,6 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
-	s, r, err := loadReview(ctx, e.dir)
-	if err != nil {
-		return err
-	}
 	text := strings.Join(fs.Args(), " ")
 	if args[0] == "detail" {
 		if text == "-" {
@@ -357,10 +369,10 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 			text = string(data)
 		}
 		d := state.Detail{File: *file, Line: *line, Text: strings.TrimSpace(text)}
-		if err := plan.SetDetail(r, *step, d); err != nil {
-			return err
-		}
-		if err := s.store.Save(r); err != nil {
+		_, r, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+			return plan.SetDetail(r, *step, d)
+		})
+		if err != nil {
 			return err
 		}
 		e.printf("detail %s %s:%d\n", cmp.Or(*step, r.Current), d.File, d.Line)
@@ -368,14 +380,15 @@ func cmdNote(ctx context.Context, e env, args []string) error {
 	}
 	a := state.Annotation{File: *file, Line: *line, Kind: *kind, Text: text}
 	if *lines != "" {
+		var err error
 		if a.Line, a.To, err = state.ParseLines(*lines); err != nil {
 			return err
 		}
 	}
-	if err := plan.AddNote(r, *step, a); err != nil {
-		return err
-	}
-	if err := s.store.Save(r); err != nil {
+	_, r, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		return plan.AddNote(r, *step, a)
+	})
+	if err != nil {
 		return err
 	}
 	e.printf("note %s %s:%d\n", cmp.Or(*step, r.Current), a.File, a.Line)
@@ -391,8 +404,11 @@ func cmdDone(ctx context.Context, e env, _ []string) error {
 		if err := s.repo.WorktreeRemove(ctx, r.Worktree); err != nil {
 			return err
 		}
-		r.Worktree = ""
-		if err := s.store.Save(r); err != nil {
+		err := s.store.Update(r.ID, func(r *state.Review) error {
+			r.Worktree = ""
+			return nil
+		})
+		if err != nil {
 			return err
 		}
 	}

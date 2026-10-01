@@ -53,6 +53,23 @@ func loadReview(ctx context.Context, dir string) (session, *state.Review, error)
 	return s, r, err
 }
 
+func updateReview(
+	ctx context.Context,
+	dir string,
+	apply func(session, *state.Review) error,
+) (session, *state.Review, error) {
+	s, err := openSession(ctx, dir)
+	if err != nil {
+		return session{}, nil, err
+	}
+	var updated *state.Review
+	err = s.store.UpdateCurrent(func(r *state.Review) error {
+		updated = r
+		return apply(s, r)
+	})
+	return s, updated, err
+}
+
 func (s session) exportDir(id string) string {
 	return filepath.Join(s.store.Dir, "exports", id)
 }
