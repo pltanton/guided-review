@@ -38,11 +38,7 @@ func (s *gitSource) FileDiff(path string) (diff.File, error) {
 
 func (s *gitSource) fileDiff(path string) (diff.File, error) {
 	if s.diffs == nil {
-		raw, err := s.repo.DiffWith(s.ctx, s.algo, s.base, s.head)
-		if err != nil {
-			return diff.File{}, err
-		}
-		files, err := diff.Parse(raw)
+		files, err := s.repo.Files(s.ctx, s.algo, s.base, s.head)
 		if err != nil {
 			return diff.File{}, err
 		}

@@ -69,11 +69,7 @@ func (s session) exported(id string) string {
 
 func (s session) diff(ctx context.Context, base, head string) ([]diff.File, error) {
 	algo := cmp.Or(s.cfg.Diff, gitx.DefaultDiffAlgorithm)
-	raw, err := s.repo.DiffWith(ctx, algo, base, head)
-	if err != nil {
-		return nil, err
-	}
-	return diff.Parse(raw)
+	return s.repo.Files(ctx, algo, base, head)
 }
 
 func (s session) reviewDiff(ctx context.Context, r *state.Review) ([]diff.File, error) {

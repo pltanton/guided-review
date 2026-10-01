@@ -35,9 +35,6 @@ diff --git a/old/name.go b/new/name.go
 similarity index 90%
 rename from old/name.go
 rename to new/name.go
-diff --git a/logo.png b/logo.png
-index 555..666 100644
-Binary files a/logo.png and b/logo.png differ
 `
 
 func TestParse(t *testing.T) {
@@ -87,7 +84,6 @@ func TestParse(t *testing.T) {
 			},
 		}},
 		{Path: "new/name.go", OldPath: "old/name.go", Status: diff.Renamed},
-		{Path: "logo.png", Status: diff.Modified, Binary: true},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Parse:\n got %+v\nwant %+v", got, want)

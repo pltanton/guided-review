@@ -91,10 +91,16 @@ func Parse(s string) ([]File, error) {
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			flushFile()
-			cur = &File{Path: headerPath(line), Status: Modified}
+			cur = &File{Status: Modified}
 		case cur == nil:
 		case hunk != nil && (strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-")):
 			hunk.Lines = append(hunk.Lines, Line{Kind: line[0], Text: line[1:]})
+		case strings.HasPrefix(line, "--- ") && cur.Path == "":
+			cur.Path = patchPath(line[4:], "a/")
+		case strings.HasPrefix(line, "+++ "):
+			if p := patchPath(line[4:], "b/"); p != "" {
+				cur.Path = p
+			}
 		case strings.HasPrefix(line, "@@"):
 			flushHunk()
 			h, err := parseHunkHeader(line)
@@ -107,10 +113,10 @@ func Parse(s string) ([]File, error) {
 		case strings.HasPrefix(line, "deleted file mode"):
 			cur.Status = Deleted
 		case strings.HasPrefix(line, "rename from "):
-			cur.OldPath = strings.TrimPrefix(line, "rename from ")
+			cur.OldPath = unquote(strings.TrimPrefix(line, "rename from "))
 			cur.Status = Renamed
 		case strings.HasPrefix(line, "rename to "):
-			cur.Path = strings.TrimPrefix(line, "rename to ")
+			cur.Path = unquote(strings.TrimPrefix(line, "rename to "))
 		case strings.HasPrefix(line, "Binary files "):
 			cur.Binary = true
 		}
@@ -119,12 +125,19 @@ func Parse(s string) ([]File, error) {
 	return files, nil
 }
 
-func headerPath(line string) string {
-	rest := strings.TrimPrefix(line, "diff --git ")
-	if i := strings.LastIndex(rest, " b/"); i >= 0 {
-		return rest[i+3:]
+func patchPath(s, prefix string) string {
+	s = strings.TrimSuffix(s, "\t")
+	if s == "/dev/null" {
+		return ""
 	}
-	return rest
+	return strings.TrimPrefix(unquote(s), prefix)
+}
+
+func unquote(s string) string {
+	if u, err := strconv.Unquote(s); err == nil && strings.HasPrefix(s, `"`) {
+		return u
+	}
+	return s
 }
 
 func parseHunkHeader(line string) (Hunk, error) {

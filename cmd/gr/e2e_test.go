@@ -18,14 +18,24 @@ import (
 )
 
 type harness struct {
-	t     *testing.T
-	repo  *testrepo.Repo
-	cache string
-	glab  func(context.Context, ...string) ([]byte, error)
-	gh    func(context.Context, ...string) ([]byte, error)
+	t         *testing.T
+	repo      *testrepo.Repo
+	cache     string
+	gitconfig string
+	glab      func(context.Context, ...string) ([]byte, error)
+	gh        func(context.Context, ...string) ([]byte, error)
 }
 
 func newHarness(t *testing.T) *harness {
+	home := t.TempDir()
+	gitconfig := filepath.Join(home, ".gitconfig")
+	if err := os.WriteFile(gitconfig, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitconfig)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
 	tr := testrepo.New(t)
 	tr.Write(
 		"api/transfer.go",
@@ -43,7 +53,7 @@ func newHarness(t *testing.T) *harness {
 	)
 	tr.Write("wire.go", "package api\n\nvar _ = Transfer\n")
 	tr.Commit("guard")
-	return &harness{t: t, repo: tr, cache: t.TempDir()}
+	return &harness{t: t, repo: tr, cache: t.TempDir(), gitconfig: gitconfig}
 }
 
 func (h *harness) run(stdin string, args ...string) (string, error) {
@@ -109,6 +119,39 @@ func TestInitBranch(t *testing.T) {
 
 	out = h.mustRun("", "hunks")
 	assertContains(t, out, "api/transfer.go  [modified]  4-6")
+}
+
+func TestInitIgnoresUserDiffConfig(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Write("docs/заметки по ревью.md", "one\n")
+	h.repo.Write("x b/y.go", "package y\n")
+	h.repo.Write(`q"uote.txt`, "q\n")
+	h.repo.Commit("odd paths")
+	cfg := "[diff]\n\tnoprefix = true\n\tmnemonicPrefix = true\n\trelative = true\n" +
+		"\texternal = false\n\tinterHunkContext = 10\n[color]\n\tdiff = always\n" +
+		"[core]\n\tquotePath = true\n"
+	if err := os.WriteFile(h.gitconfig, []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := h.mustRun("", "init")
+	assertContains(t, out,
+		"\n  api/transfer.go  [modified]  4-6\n",
+		"\n  docs/заметки по ревью.md  [added]  1\n",
+		"\n  x b/y.go  [added]  1\n",
+		"\n  q\"uote.txt  [added]  1\n",
+	)
+	plan := `steps:
+  - id: s1
+    title: everything
+    kind: logic
+    hunks:
+      - {file: api/transfer.go}
+      - {file: wire.go}
+      - {file: "docs/заметки по ревью.md"}
+      - {file: "x b/y.go"}
+      - {file: "q\"uote.txt"}
+`
+	assertContains(t, h.mustRun(plan, "plan", "set"), "plan accepted: 1 steps")
 }
 
 func TestInitOtherBranchUsesWorktree(t *testing.T) {
