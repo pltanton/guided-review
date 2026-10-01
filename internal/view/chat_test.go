@@ -36,7 +36,7 @@ func TestChatSelectAndCopyKeys(t *testing.T) {
 		t.Fatalf("t focuses the chat and says so:\n%s", v)
 	}
 	m.Update(key("y"))
-	if *copied != "short one" || m.status != "copied 1 lines" {
+	if *copied != "short one" || m.status != "copied 1 line" {
 		t.Fatalf("y copies the message under the cursor: %q %q", *copied, m.status)
 	}
 	m.Update(key("k"))

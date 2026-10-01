@@ -143,7 +143,7 @@ func (m *model) yankChat() {
 	}
 	if m.copyText(strings.Join(out, "\n")) {
 		m.chatVisual = false
-		m.status = fmt.Sprintf("copied %d lines", len(out))
+		m.status = copiedStatus(len(out))
 	}
 }
 
@@ -170,4 +170,11 @@ func (m *model) chatMouse(msg tea.MouseMsg) bool {
 		return true
 	}
 	return false
+}
+
+func copiedStatus(n int) string {
+	if n == 1 {
+		return "copied 1 line"
+	}
+	return fmt.Sprintf("copied %d lines", n)
 }

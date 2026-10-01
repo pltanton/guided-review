@@ -2,6 +2,7 @@ package view
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 )
@@ -50,12 +51,13 @@ func (m *model) codeRows(c Cell, hot bool, w int) (rows []string) {
 	gutter, cont, text := codeParts(c, hot)
 	avail, width := codeAvail(w), ansi.StringWidth(text)
 	if !m.nowrap {
-		for from := 0; from == 0 || from < width; from += avail {
-			lead := cont
-			if from == 0 {
-				lead = gutter
+		spans, indent := wrapSpans(ansi.Strip(text), avail)
+		for i, s := range spans {
+			lead := gutter
+			if i > 0 {
+				lead = cont + strings.Repeat(" ", indent)
 			}
-			rows = append(rows, lead+ansi.Cut(text, from, from+avail))
+			rows = append(rows, lead+ansi.Cut(text, s[0], s[1]))
 		}
 		return rows
 	}
@@ -66,13 +68,46 @@ func (m *model) codeRows(c Cell, hot bool, w int) (rows []string) {
 	return []string{gutter + ansi.Cut(text, m.hscroll, width)}
 }
 
+func wrapSpans(plain string, avail int) (spans [][2]int, indent int) {
+	cols := []int{0}
+	for _, r := range plain {
+		cols = append(cols, cols[len(cols)-1]+ansi.StringWidth(string(r)))
+	}
+	runes := []rune(plain)
+	width := cols[len(cols)-1]
+	for indent < len(runes) && runes[indent] == ' ' {
+		indent++
+	}
+	indent = min(indent, avail/2)
+	for i, room := 0, avail; ; room = avail - indent {
+		end := i
+		for end < len(runes) && cols[end+1]-cols[i] <= room {
+			end++
+		}
+		if end < len(runes) {
+			for b := end; b > i+(end-i)/2; b-- {
+				if runes[b-1] == ' ' {
+					end = b
+					break
+				}
+			}
+			end = max(end, i+1)
+		}
+		spans = append(spans, [2]int{cols[i], cols[end]})
+		if end >= len(runes) || cols[end] >= width {
+			return spans, indent
+		}
+		i = end
+	}
+}
+
 func (m *model) cellHeight(c Cell, w int) int {
 	if m.nowrap || c.Line == 0 && c.Text == "" {
 		return 1
 	}
 	_, _, text := codeParts(c, false)
-	avail := codeAvail(w)
-	return max((ansi.StringWidth(text)+avail-1)/avail, 1)
+	spans, _ := wrapSpans(ansi.Strip(text), codeAvail(w))
+	return len(spans)
 }
 
 func isCode(k RowKind) bool { return k == RowCode || k == RowAdded || k == RowRemoved }

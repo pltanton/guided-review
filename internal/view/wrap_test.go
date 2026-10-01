@@ -136,3 +136,24 @@ func TestWrapKeepsIntralineEmphasis(t *testing.T) {
 		t.Fatalf("wrapping loses no text: %q", got)
 	}
 }
+
+func TestWrapKeepsIndentAndBreaksAfterSpace(t *testing.T) {
+	spans, indent := wrapSpans("    log.Printf(\"one two three four\", a, b)", 20)
+	if indent != 4 {
+		t.Fatalf("indent %d, want 4", indent)
+	}
+	plain := "    log.Printf(\"one two three four\", a, b)"
+	var got []string
+	for _, s := range spans {
+		got = append(got, plain[s[0]:s[1]])
+	}
+	want := []string{"    log.Printf(\"one ", "two three ", "four\", a, b)"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("rows %q, want %q", got, want)
+	}
+	for i, s := range spans[1:] {
+		if s[1]-s[0] > 20-indent {
+			t.Fatalf("row %d is %d wide, over %d", i+1, s[1]-s[0], 20-indent)
+		}
+	}
+}

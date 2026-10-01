@@ -410,7 +410,7 @@ func (m *model) yank() {
 	}
 	if m.copyText(strings.Join(out, "\n")) {
 		m.visual = false
-		m.status = fmt.Sprintf("copied %d lines", len(out))
+		m.status = copiedStatus(len(out))
 	}
 }
 
