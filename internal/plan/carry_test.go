@@ -71,7 +71,7 @@ func TestValidateWithCarried(t *testing.T) {
 		!strings.Contains(errs[0].Error(), "not covered: wire.go") {
 		t.Fatalf("round files still need a step, got %v", errs)
 	}
-	p := plan.Plan{Steps: []state.Step{{ID: "r1-s1", Title: "x", Kind: "logic",
+	p := plan.Plan{Steps: []plan.Step{{ID: "r1-s1", Title: "x", Kind: "logic",
 		Hunks: []state.StepHunk{{File: "wire.go"}}}}}
 	if errs := plan.Validate(p, r, files); len(errs) != 1 ||
 		!strings.Contains(errs[0].Error(), "carried") {

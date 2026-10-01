@@ -13,9 +13,42 @@ import (
 )
 
 type Plan struct {
-	Summary     string       `yaml:"summary"`
-	Boilerplate []string     `yaml:"boilerplate"`
-	Steps       []state.Step `yaml:"steps"`
+	Summary     string   `yaml:"summary"`
+	Boilerplate []string `yaml:"boilerplate"`
+	Steps       []Step   `yaml:"steps"`
+}
+
+type Step struct {
+	ID          string             `yaml:"id"`
+	Title       string             `yaml:"title"`
+	Kind        string             `yaml:"kind"`
+	Chapter     string             `yaml:"chapter,omitempty"`
+	Intro       string             `yaml:"intro,omitempty"`
+	Hunks       []state.StepHunk   `yaml:"hunks"`
+	Hotspots    []state.Hotspot    `yaml:"hotspots,omitempty"`
+	DependsOn   []string           `yaml:"depends_on,omitempty"`
+	Annotations []state.Annotation `yaml:"annotations,omitempty"`
+	Note        string             `yaml:"note,omitempty"`
+	Message     string             `yaml:"message,omitempty"`
+	WhyBig      string             `yaml:"why_big,omitempty"`
+}
+
+func (s Step) toState() state.Step {
+	return state.Step{
+		ID:          s.ID,
+		Title:       s.Title,
+		Kind:        s.Kind,
+		Chapter:     s.Chapter,
+		Intro:       s.Intro,
+		Hunks:       s.Hunks,
+		Hotspots:    s.Hotspots,
+		DependsOn:   s.DependsOn,
+		Annotations: s.Annotations,
+		Note:        s.Note,
+		Message:     s.Message,
+		WhyBig:      s.WhyBig,
+		Status:      state.StatusPending,
+	}
 }
 
 func Parse(data []byte) (Plan, error) {
@@ -29,11 +62,15 @@ func Parse(data []byte) (Plan, error) {
 }
 
 func Validate(p Plan, r *state.Review, files []diff.File) []error {
+	steps := make([]state.Step, len(p.Steps))
+	for i, s := range p.Steps {
+		steps[i] = s.toState()
+	}
 	var errs []error
 	fail := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
-	if len(p.Steps) == 0 && len(r.Carried) == 0 {
+	if len(steps) == 0 && len(r.Carried) == 0 {
 		fail("plan has no steps")
 	}
 	inDiff := map[string]bool{}
@@ -53,12 +90,12 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		carried[s.ID] = true
 	}
 	closed := map[string]bool{}
-	for i, s := range p.Steps {
-		if s.Intro != "" && i > 0 && p.Steps[i-1].Chapter == s.Chapter {
+	for i, s := range steps {
+		if s.Intro != "" && i > 0 && steps[i-1].Chapter == s.Chapter {
 			fail("step %s: intro belongs on the first step of chapter %q", s.ID, s.Chapter)
 		}
-		if i > 0 && p.Steps[i-1].Chapter != s.Chapter {
-			closed[p.Steps[i-1].Chapter] = true
+		if i > 0 && steps[i-1].Chapter != s.Chapter {
+			closed[steps[i-1].Chapter] = true
 			if closed[s.Chapter] {
 				fail("step %s: chapter %q is split; keep its steps together", s.ID, s.Chapter)
 			}
@@ -120,7 +157,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 			}
 		}
 	}
-	for _, s := range p.Steps {
+	for _, s := range steps {
 		for _, d := range s.DependsOn {
 			switch {
 			case d == s.ID:
@@ -130,7 +167,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 			}
 		}
 	}
-	if c := findCycle(p.Steps); c != nil {
+	if c := findCycle(steps); c != nil {
 		fail("depends_on cycle: %s", strings.Join(c, " → "))
 	}
 	for _, f := range files {
@@ -140,7 +177,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		if rf := r.File(f.Path); rf != nil && rf.Tier == state.TierGenerated {
 			continue
 		}
-		for _, u := range uncovered(f, slices.Concat(p.Steps, r.Carried)) {
+		for _, u := range uncovered(f, slices.Concat(steps, r.Carried)) {
 			fail("not covered: %s", u)
 		}
 	}
@@ -307,10 +344,8 @@ func findCycle(steps []state.Step) []string {
 func Apply(r *state.Review, p Plan) {
 	r.Summary = p.Summary
 	r.Steps = make([]state.Step, len(p.Steps), len(p.Steps)+len(r.Carried))
-	for i, s := range p.Steps {
-		s.Status = state.StatusPending
-		s.MayChange = false
-		s.SkipReason, s.Announced = "", false
+	for i, ps := range p.Steps {
+		s := ps.toState()
 		for _, a := range s.Annotations {
 			if a.Detail != "" {
 				d := state.Detail{File: a.File, Line: max(a.To, a.Line), Text: a.Detail}
