@@ -94,9 +94,12 @@ type Message struct {
 const MaxMessages = 50
 
 type PublishPlan struct {
-	Verdict   string `yaml:"verdict"`
-	Decisions string `yaml:"decisions,omitempty"`
-	Approve   bool   `yaml:"approve,omitempty"`
+	Verdict     string `yaml:"verdict"`
+	Decisions   string `yaml:"decisions,omitempty"`
+	Approve     bool   `yaml:"approve,omitempty"`
+	Export      string `yaml:"export,omitempty"`
+	Approved    bool   `yaml:"approved,omitempty"`
+	VerdictSent bool   `yaml:"verdict_sent,omitempty"`
 }
 
 type Progress struct {
@@ -142,6 +145,7 @@ type Thread struct {
 	DecidedAt     time.Time `yaml:"decided_at,omitempty"`
 	DecidedBy     string    `yaml:"decided_by,omitempty"`
 	Resolves      int       `yaml:"resolves,omitempty"`
+	ReplyPosted   bool      `yaml:"reply_posted,omitempty"`
 	Published     bool      `yaml:"published,omitempty"`
 }
 

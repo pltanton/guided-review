@@ -34,7 +34,7 @@ review
           [--approve] [--partial]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
                        and print that dir (--dir: only print it)
-  mark-published       after the agent posted the export to the MR
+  mark-published       mark what the publish script logged to <export dir>/published.jsonl
   done
   list
 

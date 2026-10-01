@@ -914,7 +914,7 @@ func TestExport(t *testing.T) {
 		!slices.Equal(x.Comments, []int{1, 2}) || !x.Summary || len(x.Drafts) != 3 {
 		t.Fatalf("review.json: %+v", x)
 	}
-	first, err := os.ReadFile(filepath.Join(dir, x.Drafts[0]))
+	first, err := os.ReadFile(filepath.Join(dir, x.Drafts[0].File))
 	if err != nil || !strings.Contains(string(first), `"new_line": 6`) {
 		t.Fatalf("first draft must sit on line 6: %s %v", first, err)
 	}
@@ -924,6 +924,7 @@ func TestExport(t *testing.T) {
 		}
 	}
 
+	h.sendAll()
 	assertContains(t, h.mustRun("", "mark-published"), "marked 2 comments and 0 threads published")
 	if _, err := h.run("", "export", "--dry-run"); err == nil {
 		t.Fatal("mark-published must clear the prepared result")
@@ -1420,6 +1421,7 @@ func TestThreads(t *testing.T) {
 	if len(x.Threads) != 1 || x.Threads[0] != want {
 		t.Fatalf("threads = %+v, want %+v", x.Threads, want)
 	}
+	h.sendAll()
 	assertContains(t, h.mustRun("", "mark-published"), "1 threads published")
 	if out := h.mustRun("", "thread", "list"); strings.Contains(out, "d1") {
 		t.Fatalf("a published decision leaves the list until someone answers:\n%s", out)
@@ -1526,7 +1528,44 @@ func TestGitHubCommentsStayInOneHunk(t *testing.T) {
 func (h *harness) publishAll() {
 	h.t.Helper()
 	h.mustRun("", "export")
+	h.sendAll()
 	h.mustRun("", "mark-published")
+}
+
+func (h *harness) sendAll() {
+	h.t.Helper()
+	dir := strings.TrimSpace(h.mustRun("", "export", "--dir"))
+	data, err := os.ReadFile(filepath.Join(dir, "review.json"))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var x export
+	if err := json.Unmarshal(data, &x); err != nil {
+		h.t.Fatal(err)
+	}
+	all := x.Review
+	for _, d := range x.Drafts {
+		all = append(all, d.sent)
+	}
+	if x.Approve {
+		all = append(all, sent{Kind: "approve"})
+	}
+	for _, a := range x.Threads {
+		if a.Reply != "" {
+			all = append(all, sent{Kind: "thread", ID: a.ID, Part: "reply"})
+		}
+		if a.Resolve {
+			all = append(all, sent{Kind: "thread", ID: a.ID, Part: "resolve"})
+		}
+	}
+	var log bytes.Buffer
+	for _, x := range all {
+		line, _ := json.Marshal(x)
+		log.Write(append(line, '\n'))
+	}
+	if err := os.WriteFile(filepath.Join(dir, publishedLog), log.Bytes(), 0o600); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 func (h *harness) nextRound(content string) {
