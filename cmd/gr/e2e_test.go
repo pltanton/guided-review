@@ -261,7 +261,11 @@ func TestWorktreeStaysAcrossRounds(t *testing.T) {
 
 func TestFreshInitOnHeadUsesCheckout(t *testing.T) {
 	h := newHarness(t)
-	assertContains(t, h.mustRun("", "init"), "code: "+h.repo.Dir+"\n")
+	dir, err := filepath.EvalSymlinks(h.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertContains(t, h.mustRun("", "init"), "code: "+dir+"\n")
 }
 
 func TestInitOtherBranchUsesWorktree(t *testing.T) {
