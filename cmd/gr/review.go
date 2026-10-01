@@ -20,7 +20,8 @@ var errGate = errors.New("gate not passed")
 
 func cmdStatus(ctx context.Context, e env, args []string) error {
 	fs := e.flags("status")
-	gate := fs.Bool("gate", false, "exit non-zero unless every step is reviewed")
+	gate := fs.Bool("gate", false, "exit non-zero while a step is pending "+
+		"(stale steps after a blocker pass and are listed as not reviewed)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
