@@ -379,7 +379,7 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 	r.Round = oldRound + 1
 	r.PrevHeadSHA = old
 	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles, r.Carried = "", false, nil, nil
-	if s.repo.IsAncestor(ctx, old, t.head) {
+	if t.base == r.BaseSHA && s.repo.IsAncestor(ctx, old, t.head) {
 		r.RoundBaseSHA = old
 	} else {
 		prev, err := s.diff(ctx, r.BaseSHA, old)
@@ -497,7 +497,7 @@ func printHeader(e env, s session, r *state.Review) {
 	if r.Round > 1 {
 		if r.RoundRebased {
 			e.printf(
-				"round %d: rebased, changed files: %s\n",
+				"round %d: the base moved (rebase or merge), changed files: %s\n",
 				r.Round,
 				strings.Join(r.RoundFiles, " "),
 			)

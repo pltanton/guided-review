@@ -531,7 +531,7 @@ func TestReReviewRebase(t *testing.T) {
 	h.repo.Git("commit", "-q", "-a", "--amend", "--no-edit")
 
 	out := h.mustRun("", "init")
-	assertContains(t, out, "round 2: rebased, changed files: wire.go")
+	assertContains(t, out, "round 2: the base moved (rebase or merge), changed files: wire.go\n")
 	_, err := h.run(
 		"steps:\n  - id: r1\n    title: x\n    kind: logic\n    hunks: [{file: api/transfer.go}]\n",
 		"plan",
@@ -546,6 +546,30 @@ func TestReReviewRebase(t *testing.T) {
 		"set",
 	)
 	assertContains(t, out, "plan accepted: 1 steps")
+}
+
+func TestReReviewAfterMergingMain(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+
+	h.repo.Git("checkout", "-q", "main")
+	h.repo.Write("other.go", "package api\n\nvar Other = 1\n")
+	h.repo.Commit("upstream")
+	h.repo.Git("checkout", "-q", "feature")
+	h.repo.Git("merge", "-q", "--no-edit", "main")
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 2\n")
+	h.repo.Commit("fixup")
+
+	out := h.mustRun("", "init")
+	assertContains(t, out,
+		"round 2: the base moved (rebase or merge), changed files: wire.go\n",
+		"\n  wire.go  [added]  1-4\n")
+	if strings.Contains(out, "other.go") || strings.Contains(out, "api/transfer.go  [") {
+		t.Fatalf("the round must show only the author's fix:\n%s", out)
+	}
 }
 
 func TestWaitAndSay(t *testing.T) {

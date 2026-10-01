@@ -244,8 +244,8 @@ before leaving a step. You only hear about what needs you.
 
 ## Re-review (`gr init` printed "round N")
 
-1. The diff is only what changed since the last round (or, after a rebase, the files
-   whose patch changed). Open comments from earlier rounds are listed.
+1. The diff is only what changed since the last round (or, after a rebase or a merge
+   of the target branch, the files whose patch changed). Open comments from earlier rounds are listed.
 2. First step, before any plan: check each open comment against the new code.
    `gr comment resolve ID` when it is addressed; otherwise keep it open. `gr say` a
    summary: resolved, still open, new questions.
