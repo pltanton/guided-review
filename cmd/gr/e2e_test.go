@@ -90,7 +90,11 @@ func (h *harness) mustRun(stdin string, args ...string) string {
 func (h *harness) exportDir(id string) string {
 	h.t.Helper()
 	dir := strings.TrimSpace(h.mustRun("", "export", "--dir"))
-	if want := filepath.Join(h.repo.Dir, ".git", "guided-review", "exports", id); dir != want {
+	root, err := filepath.EvalSymlinks(h.repo.Dir)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if want := filepath.Join(root, ".git", "guided-review", "exports", id); dir != want {
 		h.t.Fatalf("export dir %q, want %q", dir, want)
 	}
 	return dir
