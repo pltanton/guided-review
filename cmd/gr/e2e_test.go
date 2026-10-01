@@ -1569,3 +1569,40 @@ func TestResolvedCommentsInTheSummary(t *testing.T) {
 		t.Fatalf("round 3 resolved nothing:\n%s", out)
 	}
 }
+
+func TestGitHubBodyWithoutSummary(t *testing.T) {
+	h := newHarness(t)
+	h.stubGitHub()
+	h.mustRun("", "init", "https://github.com/o/r/pull/7")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.edit(func(r *state.Review) { r.SummaryRound = 1 })
+	request := func() github.Review {
+		t.Helper()
+		dir := strings.TrimSpace(h.mustRun("", "export"))
+		data, err := os.ReadFile(filepath.Join(dir, "review-request.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req github.Review
+		if err := json.Unmarshal(data, &req); err != nil {
+			t.Fatal(err)
+		}
+		return req
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+	if req := request(); req.Event != "REQUEST_CHANGES" || req.Body != "Changes still requested." {
+		t.Fatalf("no comments and no summary: %+v", req)
+	}
+	h.mustRun("", "prepare", "--verdict", "approve", "--approve")
+	if req := request(); req.Event != "APPROVE" || req.Body != "" {
+		t.Fatalf("an approve needs no text: %+v", req)
+	}
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "nit", "x")
+	h.mustRun("", "prepare", "--verdict", "changes")
+	if req := request(); req.Body != "See the inline comments." {
+		t.Fatalf("inline comments get the pointer: %+v", req)
+	}
+}

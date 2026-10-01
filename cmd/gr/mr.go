@@ -320,8 +320,15 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRu
 	case p.Verdict != "approve":
 		req.Event = "REQUEST_CHANGES"
 	}
-	if req.Body == "" && req.Event != "COMMENT" {
+	switch {
+	case req.Body != "" || req.Event == "COMMENT":
+	case len(req.Comments) > 0:
 		req.Body = "See the inline comments."
+	case req.Event == "REQUEST_CHANGES":
+		req.Body = "Changes still requested."
+		if n := len(openThreads(r)); n > 0 {
+			req.Body = fmt.Sprintf("Changes still requested: %d open threads.", n)
+		}
 	}
 	if dryRun {
 		e.printf("%s", md.String())
