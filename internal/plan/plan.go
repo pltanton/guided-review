@@ -346,18 +346,8 @@ func Apply(r *state.Review, p Plan) {
 	r.Steps = make([]state.Step, len(p.Steps), len(p.Steps)+len(r.Carried))
 	for i, ps := range p.Steps {
 		s := ps.toState()
-		for _, a := range s.Annotations {
-			if a.Detail != "" {
-				d := state.Detail{File: a.File, Line: max(a.To, a.Line), Text: a.Detail}
-				s.Details = append(s.Details, d)
-			}
-		}
 		for j, h := range s.Hotspots {
 			s.Hotspots[j].File, _ = s.HotspotFile(h)
-			if h.Detail != "" && h.Line > 0 {
-				d := state.Detail{File: s.Hotspots[j].File, Line: h.Line, Text: h.Detail}
-				s.Details = append(s.Details, d)
-			}
 		}
 		r.Steps[i] = s
 	}

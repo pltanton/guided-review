@@ -815,6 +815,11 @@ func TestNoteDetail(t *testing.T) {
 	if _, err := h.run("", "note", "detail", "--line", "4", "x"); err == nil {
 		t.Fatal("a detail without --file must fail")
 	}
+	_, err := h.run("", "note", "detail", "--file", "api/transfer.go", "--line", "4", "x")
+	if err == nil {
+		t.Fatal("a detail without its note must fail")
+	}
+	h.mustRun("", "note", "add", "--file", "api/transfer.go", "--lines", "3-4", "guard")
 	h.mustRun("first", "note", "detail", "--file", "api/transfer.go", "--line", "4", "-")
 	out := h.mustRun("the guard\n```go\nif a < 0 {\n```\n", "note", "detail",
 		"--file", "api/transfer.go", "--line", "4", "-")
@@ -825,8 +830,8 @@ func TestNoteDetail(t *testing.T) {
 	}
 	st := r.Step("s1")
 	if text, ok := st.Detail("api/transfer.go", 4); !ok || !strings.HasPrefix(text, "the guard") ||
-		len(st.Details) != 1 {
-		t.Fatalf("detail must be replaced, got %q (%d)", text, len(r.Step("s1").Details))
+		!strings.HasPrefix(st.Annotations[0].Detail, "the guard") {
+		t.Fatalf("detail must be replaced in the note, got %q, %+v", text, st.Annotations)
 	}
 }
 

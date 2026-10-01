@@ -222,22 +222,18 @@ func AddNote(r *state.Review, stepID string, a state.Annotation) error {
 }
 
 func SetDetail(r *state.Review, stepID string, d state.Detail) error {
-	st := r.Step(cmp.Or(stepID, r.Current))
+	id := cmp.Or(stepID, r.Current)
+	st := r.Step(id)
 	switch {
 	case st == nil:
-		return fmt.Errorf("no step %q", cmp.Or(stepID, r.Current))
+		return fmt.Errorf("no step %q", id)
 	case d.File == "" || d.Line < 1:
 		return errors.New("a detail needs --file and --line of the note it explains")
 	case strings.TrimSpace(d.Text) == "":
 		return errors.New("empty detail")
-	}
-	i := slices.IndexFunc(st.Details, func(x state.Detail) bool {
-		return x.File == d.File && x.Line == d.Line
-	})
-	if i < 0 {
-		st.Details = append(st.Details, d)
-	} else {
-		st.Details[i] = d
+	case !st.SetDetail(d.File, d.Line, d.Text):
+		return fmt.Errorf("step %s: no note ends at %s:%d: add it with gr note add first",
+			id, d.File, d.Line)
 	}
 	return nil
 }
