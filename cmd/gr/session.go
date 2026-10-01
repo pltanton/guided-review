@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -121,9 +122,20 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 		e.printf("  %s  [%s]  %s\n", f.Path, label, strings.Join(ranges, " "))
 	}
 	if len(generated) > 0 {
+		generated = slices.Concat(
+			slices.DeleteFunc(slices.Clone(generated), func(f state.File) bool { return !markerOnly(f) }),
+			slices.DeleteFunc(generated, markerOnly),
+		)
 		e.printf("generated (%d files, not reviewed):\n", len(generated))
 		for _, f := range generated {
-			e.printf("  %s  +%d -%d\n", f.Path, f.Added, f.Deleted)
+			warn := ""
+			if markerOnly(f) {
+				warn = "⚠ "
+			}
+			e.printf("  %s%s  +%d -%d  %s\n", warn, f.Path, f.Added, f.Deleted, f.Reason)
+		}
+		if slices.ContainsFunc(generated, markerOnly) {
+			e.println("⚠ generated only by a comment in the file: ask the human before skipping")
 		}
 	}
 }

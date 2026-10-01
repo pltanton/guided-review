@@ -258,12 +258,18 @@ func reviewFiles(
 	}
 	attrs, _ := os.ReadFile(filepath.Join(s.repo.Dir, ".gitattributes"))
 	gitattrs := classify.GitattributesPatterns(string(attrs))
-	cls := classify.New(classify.DefaultPatterns, s.cfg.Generated, gitattrs)
+	cls := classify.New(
+		classify.Set{Source: "config pattern", Patterns: s.cfg.Generated},
+		classify.Set{Source: ".gitattributes", Patterns: gitattrs},
+		classify.Set{Source: "default pattern", Patterns: classify.DefaultPatterns},
+	)
 	out := make([]state.File, 0, len(files))
 	for _, f := range files {
-		tier := state.TierCore
-		if cls.Generated(f.Path) ||
-			f.Status != diff.Deleted && !f.Binary && hasMarker(ctx, s, head, f.Path) {
+		tier, reason := state.TierCore, cls.Match(f.Path)
+		if reason == "" && f.Status != diff.Deleted && !f.Binary {
+			reason = marker(ctx, s, head, f.Path)
+		}
+		if reason != "" {
 			tier = state.TierGenerated
 		}
 		added, deleted := f.Stat()
@@ -272,6 +278,7 @@ func reviewFiles(
 			OldPath: f.OldPath,
 			Status:  string(f.Status),
 			Tier:    tier,
+			Reason:  reason,
 			Added:   added,
 			Deleted: deleted,
 		})
@@ -279,9 +286,29 @@ func reviewFiles(
 	return files, out, nil
 }
 
-func hasMarker(ctx context.Context, s session, sha, path string) bool {
+func marker(ctx context.Context, s session, sha, path string) string {
 	content, err := s.repo.Show(ctx, sha, path)
-	return err == nil && classify.HasMarker(content)
+	if err != nil {
+		return ""
+	}
+	return classify.Marker(content)
+}
+
+func markerOnly(f state.File) bool {
+	return f.Tier == state.TierGenerated && strings.HasPrefix(f.Reason, classify.MarkerReason)
+}
+
+func unreviewedMarkerFiles(r *state.Review) []string {
+	var out []string
+	for _, f := range r.Files {
+		inStep := slices.ContainsFunc(r.Steps, func(st state.Step) bool {
+			return slices.ContainsFunc(st.Hunks, func(h state.StepHunk) bool { return h.File == f.Path })
+		})
+		if markerOnly(f) && !inStep {
+			out = append(out, f.Path)
+		}
+	}
+	return out
 }
 
 func startRound(ctx context.Context, s session, r *state.Review, t target) ([]diff.File, error) {

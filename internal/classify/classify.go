@@ -13,47 +13,68 @@ var DefaultPatterns = []string{
 	"**/build/generated/**", "vendor/**",
 }
 
-const markerLines = 40
+const (
+	markerLines  = 40
+	MarkerReason = "marker"
+)
 
-var commentPrefixes = []string{"//", "#", "/*", "*", "--", "<!--"}
+var (
+	commentPrefixes = []string{"//", "#", "/*", "*", "--", "<!--"}
+	goGenerated     = regexp.MustCompile(`^// Code generated .* DO NOT EDIT\.$`)
+)
 
-type Classifier struct {
-	res []*regexp.Regexp
+type Set struct {
+	Source   string
+	Patterns []string
 }
 
-func New(patternSets ...[]string) *Classifier {
+type rule struct {
+	reason string
+	re     *regexp.Regexp
+}
+
+type Classifier struct {
+	rules []rule
+}
+
+func New(sets ...Set) *Classifier {
 	c := &Classifier{}
-	for _, set := range patternSets {
-		for _, p := range set {
-			c.res = append(c.res, globToRegexp(p))
+	for _, set := range sets {
+		for _, p := range set.Patterns {
+			c.rules = append(c.rules, rule{set.Source + " " + p, globToRegexp(p)})
 		}
 	}
 	return c
 }
 
-func (c *Classifier) Generated(path string) bool {
-	for _, re := range c.res {
-		if re.MatchString(path) {
-			return true
+func (c *Classifier) Match(path string) string {
+	for _, r := range c.rules {
+		if r.re.MatchString(path) {
+			return r.reason
 		}
 	}
-	return false
+	return ""
 }
 
-func HasMarker(content string) bool {
+func Marker(content string) string {
+	first := true
 	for i, line := range strings.SplitN(content, "\n", markerLines+1) {
-		if i == markerLines {
+		line = strings.TrimSpace(line)
+		if i == markerLines || line != "" && !hasCommentPrefix(line) {
 			break
 		}
-		line = strings.TrimSpace(line)
-		if !hasCommentPrefix(line) {
+		if goGenerated.MatchString(line) {
+			return MarkerReason + " " + line
+		}
+		if strings.Trim(line, "/#*-<!> ") == "" || strings.HasPrefix(line, "#!") {
 			continue
 		}
-		if strings.Contains(line, "DO NOT EDIT") || strings.Contains(line, "@generated") {
-			return true
+		if first && strings.Contains(line, "@generated") {
+			return MarkerReason + " " + line
 		}
+		first = false
 	}
-	return false
+	return ""
 }
 
 func hasCommentPrefix(line string) bool {

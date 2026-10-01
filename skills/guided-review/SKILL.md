@@ -68,7 +68,9 @@ the unresolved MR discussions (`gr discussions` prints them in full), and
 `git diff --stat <base> <head>`. Do not read code yet.
 
 `gr say` at most three lines: the task in one line, how the change solves it in one
-line, then «верно понял?» with options such as «да» and «нет, поправлю». Everything else you noticed — failing checks, open
+line, then «верно понял?» with options such as «да» and «нет, поправлю». When `gr init`
+listed generated files, add one line naming them — the ⚠ ones first, they are generated
+only by a comment in the file — and ask «ок, не смотрим?». Everything else you noticed — failing checks, open
 discussions, spec mismatches, stale examples in the description — is not intake:
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
@@ -79,8 +81,8 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 ## Plan
 
 1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
-   Generated files are already excluded; decide which remaining files are
-   boilerplate.
+   Generated files are excluded; one the human wants to see goes into a step like any
+   other file. Decide which remaining files are boilerplate.
 2. Group into chapters and steps per references/ordering.md: intent first, one chapter
    per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them (and `file` when the step
