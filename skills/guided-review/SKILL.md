@@ -33,7 +33,7 @@ and the rest happens in the terminal chat.
    argument only when they gave nothing (current branch against the default
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
-   - "commit … not found locally": run `git fetch origin` and retry.
+   - "commit … not found locally": run the fetch commands it names and retry.
    - "already exists, resuming": `gr step show`, then continue the step loop. If it also
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.

@@ -174,13 +174,11 @@ func resolveTarget(
 			return target{}, err
 		}
 		refs := mr.DiffRefs
-		for _, sha := range []string{refs.BaseSHA, refs.HeadSHA} {
-			if _, err := repo.Commit(ctx, sha); err != nil {
-				return target{}, fmt.Errorf(
-					"commit %s not found locally: run git fetch origin",
-					short(sha),
-				)
-			}
+		if err := needCommits(ctx, repo,
+			[2]string{refs.BaseSHA, "git fetch origin"},
+			[2]string{refs.HeadSHA, fmt.Sprintf("git fetch origin merge-requests/%d/head", ref.IID)},
+		); err != nil {
+			return target{}, err
 		}
 		return target{
 			id:     fmt.Sprintf("mr-%d", ref.IID),
@@ -578,14 +576,11 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 	if err != nil {
 		return target{}, err
 	}
-	fetch := map[string]string{
-		pr.Base.SHA: "git fetch origin",
-		pr.Head.SHA: fmt.Sprintf("git fetch origin pull/%d/head", ref.Number),
-	}
-	for sha, how := range fetch {
-		if _, err := repo.Commit(ctx, sha); err != nil {
-			return target{}, fmt.Errorf("commit %s not found locally: run %s", short(sha), how)
-		}
+	if err := needCommits(ctx, repo,
+		[2]string{pr.Base.SHA, "git fetch origin"},
+		[2]string{pr.Head.SHA, fmt.Sprintf("git fetch origin pull/%d/head", ref.Number)},
+	); err != nil {
+		return target{}, err
 	}
 	base, err := repo.MergeBase(ctx, pr.Base.SHA, pr.Head.SHA)
 	if err != nil {
@@ -603,6 +598,21 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 			Project: ref.Project, IID: ref.Number, Title: pr.Title,
 		},
 	}, nil
+}
+
+func needCommits(ctx context.Context, repo gitx.Repo, shaFetch ...[2]string) error {
+	var missing, fetch []string
+	for _, sf := range shaFetch {
+		if _, err := repo.Commit(ctx, sf[0]); err != nil {
+			missing = append(missing, short(sf[0]))
+			fetch = append(fetch, sf[1])
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("commit %s not found locally: run %s",
+		strings.Join(missing, ", "), strings.Join(fetch, " && "))
 }
 
 func planOutdated(r *state.Review) bool {

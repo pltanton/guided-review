@@ -1176,6 +1176,30 @@ func TestGitHubPR(t *testing.T) {
 	}
 }
 
+func TestMissingCommitsNameEveryFetch(t *testing.T) {
+	h := newHarness(t)
+	base, head := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	h.gh = func(context.Context, ...string) ([]byte, error) {
+		return fmt.Appendf(nil, `{"title":"T","html_url":"u","head":{"ref":"f","sha":%q},"base":{"sha":%q}}`,
+			head, base), nil
+	}
+	h.glab = func(context.Context, ...string) ([]byte, error) {
+		return fmt.Appendf(nil, `{"title":"T","web_url":"u","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
+			base, base, head), nil
+	}
+	tests := map[string]string{
+		"https://github.com/o/r/pull/7": "commit aaaaaaaa, bbbbbbbb not found locally: " +
+			"run git fetch origin && git fetch origin pull/7/head",
+		"https://h/g/p/-/merge_requests/7": "commit aaaaaaaa, bbbbbbbb not found locally: " +
+			"run git fetch origin && git fetch origin merge-requests/7/head",
+	}
+	for url, want := range tests {
+		if _, err := h.run("", "init", url); err == nil || err.Error() != want {
+			t.Fatalf("%s: got %v, want %q", url, err, want)
+		}
+	}
+}
+
 func TestThreads(t *testing.T) {
 	h := newHarness(t)
 	base := h.repo.Git("rev-parse", "main")
