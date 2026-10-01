@@ -12,7 +12,7 @@ their remarks.
 The viewer pane (`gr view`) is the main interface: the human sees the plan, the code
 with your annotations, your messages, and types replies there. You talk to them with
 `gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
-turn — they are not looking at it.
+turn: the human glances at it, so it has to stay readable at a glance.
 
 When you ask a question with a few likely answers, offer them:
 `gr say --option "да" --option "нет, поправлю" "…"`. They become buttons in the viewer

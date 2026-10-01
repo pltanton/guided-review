@@ -27,9 +27,10 @@ callee when a call does something non-obvious. Verify by reading instead of gues
 6. **Data and concurrency.** Transaction boundaries, idempotency, races and lost updates,
    event and outbox ordering; migrations that lock large tables or break the running
    version; unbounded or N+1 queries, missing indexes, pagination.
-7. **Operability.** Errors carry context; failures are logged or counted; timeouts on
-   external calls; resources closed and contexts cancelled; config defaults and feature
-   flags that make sense.
+7. **Operability and observability.** Errors carry context; failures are logged or counted;
+   a new path or failure mode gets a log line, metric or trace span someone can alert on,
+   with ids to correlate it and no personal data; timeouts on external calls; resources
+   closed and contexts cancelled; config defaults and feature flags that make sense.
 8. **Naming, comments, consistency.** Names say what things are, comments say why, the
    code reads like its neighbours. These are nits: never let them crowd out 1–7, and skip
    what a formatter or linter already enforces.
@@ -50,6 +51,5 @@ People find most defects in 200–400 lines per sitting, reading slower than abo
 an hour; past that the defect rate found drops sharply. That is why steps stay under 300
 changed lines, and why the step message should say where to look.
 
-Sources: [Google eng-practices, what to look for](https://google.github.io/eng-practices/review/reviewer/looking-for.html),
-[SmartBear/Cisco study](https://smartbear.com/learn/code-review/best-practices-for-peer-code-review/),
-[OWASP Secure Code Review Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Code_Review_Cheat_Sheet.html).
+The rules behind each item, distilled from the sources, are in `sources.md`; read the
+section for an item when a step touches it.
