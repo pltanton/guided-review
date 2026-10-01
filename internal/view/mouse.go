@@ -9,6 +9,9 @@ import (
 const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+	if m.preview == "" && m.popup == nil && m.chatMouse(msg) {
+		return nil
+	}
 	switch {
 	case m.preview != "" && msg.Button == tea.MouseButtonWheelUp:
 		m.previewTop = max(m.previewTop-wheelStep, 0)

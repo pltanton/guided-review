@@ -171,6 +171,8 @@ func DefaultActions() []Action {
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
+		{Name: "chat", Group: vw, Desc: "select in the chat: j/k move, v select, y copy, esc back",
+			Keys: k("t"), run: do((*model).focusChat)},
 		{Name: "chat-up", Group: vw, Desc: "scroll the chat up", Keys: k("ctrl+y"),
 			run: do(func(m *model) { m.chatTop += wheelStep })},
 		{Name: "chat-down", Group: vw, Desc: "scroll the chat down", Keys: k("ctrl+e"),

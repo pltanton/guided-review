@@ -98,6 +98,10 @@ type model struct {
 	resizing string
 	chatTop  int
 
+	chatFocus, chatVisual, chatDrag bool
+	chatCursor, chatAnchor          int
+	chatFrom                        int
+
 	col        int
 	hscroll    int
 	nowrap     bool
@@ -742,6 +746,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
+	case m.chatFocus:
+		return m.handleChatKey(msg)
 	}
 	if i, ok := m.optionKey(msg.String()); ok {
 		m.answer(i)

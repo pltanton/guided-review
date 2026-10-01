@@ -407,16 +407,22 @@ func (m *model) yank() {
 		m.status = "nothing to copy here"
 		return
 	}
+	if m.copyText(strings.Join(out, "\n")) {
+		m.visual = false
+		m.status = fmt.Sprintf("copied %d lines", len(out))
+	}
+}
+
+func (m *model) copyText(text string) bool {
 	copyText := m.clip
 	if copyText == nil {
 		copyText = clipboard
 	}
-	if err := copyText(strings.Join(out, "\n")); err != nil {
+	if err := copyText(text); err != nil {
 		m.err = err
-		return
+		return false
 	}
-	m.visual = false
-	m.status = fmt.Sprintf("copied %d lines", len(out))
+	return true
 }
 
 func clipboard(text string) error {

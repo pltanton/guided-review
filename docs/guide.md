@@ -36,7 +36,8 @@ Point at a line or a selection and write: Enter sends, Alt+Enter or Ctrl+J start
 line (so does Shift+Enter in a terminal that sends it as Alt+Enter). The agent writes the comment with a severity
 and, for an obvious fix, a suggestion. You can also just ask about code without leaving
 a comment, or save a comment exactly as typed. When the agent needs a decision, it
-offers answers you pick with one key.
+offers answers you pick with one key. `t` moves into the chat, where `v` selects lines
+and `y` copies them; dragging the mouse over chat lines copies them too.
 
 </details>
 
