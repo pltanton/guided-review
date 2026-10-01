@@ -212,18 +212,19 @@ type Annotation struct {
 }
 
 type Comment struct {
-	ID         int      `yaml:"id"`
-	Step       string   `yaml:"step"`
-	File       string   `yaml:"file"`
-	Lines      string   `yaml:"lines"`
-	SHA        string   `yaml:"sha"`
-	Severity   Severity `yaml:"severity"`
-	Body       string   `yaml:"body"`
-	Suggestion string   `yaml:"suggestion,omitempty"`
-	Round      int      `yaml:"round,omitempty"`
-	Resolved   bool     `yaml:"resolved,omitempty"`
-	Published  bool     `yaml:"published,omitempty"`
-	ThreadID   string   `yaml:"thread_id,omitempty"`
+	ID            int      `yaml:"id"`
+	Step          string   `yaml:"step"`
+	File          string   `yaml:"file"`
+	Lines         string   `yaml:"lines"`
+	SHA           string   `yaml:"sha"`
+	Severity      Severity `yaml:"severity"`
+	Body          string   `yaml:"body"`
+	Suggestion    string   `yaml:"suggestion,omitempty"`
+	Round         int      `yaml:"round,omitempty"`
+	Resolved      bool     `yaml:"resolved,omitempty"`
+	Published     bool     `yaml:"published,omitempty"`
+	ThreadID      string   `yaml:"thread_id,omitempty"`
+	ResolvedRound int      `yaml:"resolved_round,omitempty"`
 }
 
 func (r *Review) CodeDir(repoDir string) string {

@@ -148,7 +148,7 @@ func (r *Review) Decide(id, verdict, reply string, now time.Time) error {
 	}
 	t := r.ThreadState(*d)
 	if i := slices.IndexFunc(r.Comments, func(c Comment) bool { return c.ID == t.Resolves }); i >= 0 {
-		r.Comments[i].Resolved = false
+		r.Comments[i].Resolved, r.Comments[i].ResolvedRound = false, 0
 	}
 	t.Resolves = 0
 	switch verdict {
@@ -161,7 +161,7 @@ func (r *Review) Decide(id, verdict, reply string, now time.Time) error {
 		return fmt.Errorf("verdict %q: want resolve, open or none", verdict)
 	}
 	if c := r.CommentFor(*d); c != nil && verdict == VerdictResolve && !c.Resolved {
-		c.Resolved, t.Resolves = true, c.ID
+		c.Resolved, c.ResolvedRound, t.Resolves = true, max(r.Round, 1), c.ID
 	}
 	r.SetThread(t)
 	return nil

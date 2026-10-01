@@ -194,7 +194,7 @@ func cmdExport(ctx context.Context, e env, args []string) error {
 	var md strings.Builder
 	var notes []gitlab.DraftNote
 	for _, c := range r.Comments {
-		if c.Published {
+		if c.Published || c.Resolved {
 			continue
 		}
 		note, where := commentDraft(r, c, mrFiles)
@@ -276,7 +276,7 @@ func exportGitHub(e env, r *state.Review, mrFiles []diff.File, dir string, dryRu
 	var md strings.Builder
 	var parts, general []string
 	for _, c := range r.Comments {
-		if c.Published {
+		if c.Published || c.Resolved {
 			continue
 		}
 		x.Comments = append(x.Comments, c.ID)
@@ -514,11 +514,13 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	}
 	open := map[state.Severity]int{}
 	var resolved []string
+	round := max(r.Round, 1)
 	for _, c := range r.Comments {
-		if c.Resolved {
-			resolved = append(resolved, fmt.Sprintf("#%d", c.ID))
-		} else {
+		switch {
+		case !c.Resolved:
 			open[c.Severity]++
+		case c.ResolvedRound == round && (c.Published || r.MR == nil && c.Round < round):
+			resolved = append(resolved, fmt.Sprintf("#%d", c.ID))
 		}
 	}
 	var counts []string

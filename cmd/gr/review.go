@@ -276,6 +276,11 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			if err := plan.ResolveComment(r, id); err != nil {
 				return err
 			}
+			for i := range r.Comments {
+				if r.Comments[i].ID == id {
+					r.Comments[i].ResolvedRound = max(r.Round, 1)
+				}
+			}
 			msg = fmt.Sprintf("comment #%d resolved", id)
 			break
 		}

@@ -1225,3 +1225,50 @@ func TestGitHubCommentsStayInOneHunk(t *testing.T) {
 		t.Fatalf("review request: %s", data)
 	}
 }
+
+func (h *harness) publishAll() {
+	h.t.Helper()
+	h.mustRun("", "export")
+	h.mustRun("", "mark-published")
+}
+
+func (h *harness) nextRound(content string) {
+	h.t.Helper()
+	h.repo.Write("wire.go", content)
+	h.repo.Commit("fixup")
+	h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.mustRun("steps:\n  - {id: r1, title: fixup, kind: logic, hunks: [{file: wire.go}]}\n",
+		"plan", "set")
+	h.mustRun("", "step", "next")
+}
+
+func TestResolvedCommentsInTheSummary(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "major", "return an error")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "7",
+		"--severity", "nit", "spacing")
+	h.mustRun("", "comment", "resolve", "2")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes")
+	out := h.mustRun("", "export", "--dry-run")
+	if strings.Contains(out, "--- #2") || strings.Contains(out, "Resolved since") {
+		t.Fatalf("a comment resolved before it was published is not sent or mentioned:\n%s", out)
+	}
+	assertContains(t, out, "--- #1", "Comments: 1 major, inline.")
+	h.publishAll()
+
+	h.nextRound("package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.mustRun("", "comment", "resolve", "1")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	assertContains(t, h.mustRun("", "export", "--dry-run"), "Resolved since the last round: #1.")
+	h.publishAll()
+
+	h.nextRound("package api\n\nvar _ = Transfer\nvar _ = 2\n")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	if out := h.mustRun("", "export", "--dry-run"); strings.Contains(out, "Resolved since") {
+		t.Fatalf("round 3 resolved nothing:\n%s", out)
+	}
+}
