@@ -70,7 +70,15 @@ type model struct {
 
 	focusFiles bool
 	fileCursor int
+	fileTop    int
+	fileFollow string
 	viewStep   string
+
+	focusPlan  bool
+	planCursor int
+	planTop    int
+	planFollow string
+	planOpen   map[string]bool
 
 	showRemoved   bool
 	unfolded      map[string]bool
@@ -688,20 +696,27 @@ func (m *model) moveStep(args ...string) {
 
 func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	files := m.stepFiles()
-	switch msg.String() {
-	case "q":
+	switch m.keys().name(msg.String()) {
+	case "quit":
 		return tea.Quit
-	case "j", "down":
+	case "down":
 		m.fileCursor = min(m.fileCursor+1, len(files)-1)
-	case "k", "up":
+	case "up":
 		m.fileCursor = max(m.fileCursor-1, 0)
-	case "enter":
+	case "top":
+		m.fileCursor = 0
+	case "bottom":
+		m.fileCursor = max(len(files)-1, 0)
+	case "message", "open":
 		if m.fileCursor < len(files) {
 			m.jumpToFile(files[m.fileCursor])
 		}
 		m.focusFiles = false
-	case "esc", "f":
+	case "back", "files":
 		m.focusFiles = false
+	case "steps":
+		m.focusFiles = false
+		m.focusPlanPanel()
 	}
 	return nil
 }
@@ -752,6 +767,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
+	case m.focusPlan:
+		return m.handlePlanKey(msg)
 	case m.chatFocus:
 		return m.handleChatKey(msg)
 	}

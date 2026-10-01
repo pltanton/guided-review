@@ -24,6 +24,8 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case m.popup != nil && msg.Button == tea.MouseButtonWheelDown:
 		m.popup.top = min(m.popup.top+wheelStep, max(len(m.popup.lines)-1, 0))
 		m.popup.sel = min(m.popup.sel+1, max(len(m.popup.items)-1, 0))
+	case msg.Button == tea.MouseButtonWheelUp && m.sideWheel(msg.X, msg.Y, -wheelStep):
+	case msg.Button == tea.MouseButtonWheelDown && m.sideWheel(msg.X, msg.Y, wheelStep):
 	case msg.Button == tea.MouseButtonWheelUp && m.overChat(msg.X, msg.Y):
 		m.chatTop += wheelStep
 	case msg.Button == tea.MouseButtonWheelDown && m.overChat(msg.X, msg.Y):
@@ -62,6 +64,8 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			side := m.sidebar(max(m.height-len(m.bottomLines()), 1), pw)
 			if msg.Y < len(side) {
 				switch e := side[msg.Y]; {
+				case e.chapter != "":
+					m.toggleChapter(e.chapter)
 				case e.step != "":
 					return m.showStep(e.step)
 				case e.file != "":
