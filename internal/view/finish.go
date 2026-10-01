@@ -34,7 +34,7 @@ type finishCard struct {
 }
 
 func (m *model) finishBody(w int) (lines []string, cards []finishCard) {
-	for _, sec := range strings.Split("\n"+expandTabs(m.preview), "\n--- ")[1:] {
+	for _, sec := range strings.Split("\n"+expandTabs(state.WithoutMarker(m.preview)), "\n--- ")[1:] {
 		head, body, _ := strings.Cut(sec, "\n")
 		body = strings.TrimRight(body, "\n")
 		if head == "summary" {

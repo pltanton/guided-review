@@ -113,3 +113,13 @@ func TestPreviewKeysFollowTheKeymap(t *testing.T) {
 		t.Fatal("a preview key taken twice is a conflict")
 	}
 }
+
+func TestPreviewHidesCommentMarkers(t *testing.T) {
+	m, _ := finishModel(t, true)
+	m.preview = "--- #4 a.go:3\n**nit** rename\n\n" + state.CommentMarker(4) + "\n"
+	lines, _ := m.finishBody(80)
+	if text := ansi.Strip(strings.Join(lines, "\n")); strings.Contains(text, "gr:comment") ||
+		!strings.Contains(text, "rename") {
+		t.Fatalf("preview shows the marker or lost the body:\n%s", text)
+	}
+}
