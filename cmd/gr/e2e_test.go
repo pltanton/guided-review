@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -530,6 +531,43 @@ func TestForceKeepsComments(t *testing.T) {
 	assertContains(t, out, "kept 1 comments")
 	out = h.mustRun("", "comment", "list")
 	assertContains(t, out, "#1 major s1 api/transfer.go:5  return an error")
+}
+
+func TestUnreadableStateIsKept(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "major", "return an error")
+	path := filepath.Join(h.repo.Dir, ".git", "guided-review", "feature", "state.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := regexp.MustCompile(`(?m)^head_sha: .*$`).ReplaceAll(data, []byte("head_sha: [1, 2]"))
+	if err := os.WriteFile(path, broken, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = h.run("", "init")
+	if err == nil || !strings.Contains(err.Error(), "state of review feature is unreadable") ||
+		!strings.Contains(err.Error(), "nothing was changed") {
+		t.Fatalf("init over a broken state must fail, got %v", err)
+	}
+	if got, _ := os.ReadFile(path); !bytes.Equal(got, broken) {
+		t.Fatal("init changed the broken state")
+	}
+	copies, _ := filepath.Glob(path + ".broken-*")
+	if len(copies) != 1 {
+		t.Fatalf("copies of the broken state: %v", copies)
+	}
+	if got, _ := os.ReadFile(copies[0]); !bytes.Equal(got, broken) {
+		t.Fatal("the copy differs from the broken state")
+	}
+
+	out := h.mustRun("", "init", "--force")
+	assertContains(t, out, "kept 1 comments")
+	assertContains(t, h.mustRun("", "comment", "list"), "api/transfer.go:5  return an error")
 }
 
 func TestDiscussionsFull(t *testing.T) {

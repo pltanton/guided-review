@@ -38,8 +38,11 @@ and the rest happens in the terminal chat.
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.
    - "round N": this is a re-review, see below.
-   - Never pass `--force`: it throws away the plan and progress. Only the user may
-     ask to start over.
+   - Never pass `--force` on your own: it throws away the plan and progress. Only the
+     user may ask to start over.
+   - "state of review … is unreadable": show the human the error as gr printed it (here
+     in the terminal, the viewer is not open yet) and offer «начать заново (--force)» or
+     «разберусь сам». Run `gr init --force` only after they chose it.
 2. If `$TMUX` is set, open the viewer full screen in a window named after the review id
    gr printed (`review-<id>`, e.g. `review-mr-521`). If that window already exists it may
    run an old binary or show another review, so restart it instead of skipping:

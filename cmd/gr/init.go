@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/pltanton/guided-review/internal/classify"
 	"github.com/pltanton/guided-review/internal/diff"
 	"github.com/pltanton/guided-review/internal/github"
@@ -55,13 +57,24 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if *id != "" {
 		t.id = *id
 	}
+	old, err := s.store.Load(t.id)
+	exists := err == nil
+	if err != nil && !errors.Is(err, state.ErrNoReview) && !errors.Is(err, os.ErrNotExist) {
+		broken, berr := backupState(s, t.id)
+		if berr != nil {
+			return fmt.Errorf("state of review %s is unreadable: %w; backup failed: %w", t.id, err, berr)
+		}
+		if !*force {
+			return fmt.Errorf("state of review %s is unreadable: %w\nnothing was changed, "+
+				"a copy is in %s; `gr init --force` starts over, comments that can be read are kept",
+				t.id, err, broken)
+		}
+		old, exists = &state.Review{Comments: readableComments(broken)}, true
+	}
 	worktree, err := ensureWorktree(ctx, e, s.repo, t)
 	if err != nil {
 		return err
 	}
-
-	old, err := s.store.Load(t.id)
-	exists := err == nil
 	var r *state.Review
 	var files []diff.File
 	switch {
@@ -111,6 +124,28 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	}
 	printIntro(e, s, r, files)
 	return nil
+}
+
+func backupState(s session, id string) (string, error) {
+	path := filepath.Join(s.store.ReviewDir(id), state.FileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	broken := path + ".broken-" + time.Now().Format("20060102-150405")
+	return broken, os.WriteFile(broken, data, 0o644)
+}
+
+func readableComments(path string) []state.Comment {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var r struct {
+		Comments []state.Comment `yaml:"comments"`
+	}
+	_ = yaml.Unmarshal(data, &r)
+	return r.Comments
 }
 
 func resolveTarget(
