@@ -81,6 +81,7 @@ func Dependents(r *state.Review, id string) []string {
 type Impact struct {
 	Stale     []string
 	MayChange []string
+	Restored  []string
 }
 
 func AddComment(r *state.Review, c state.Comment) (state.Comment, Impact, error) {
@@ -114,25 +115,42 @@ func AddComment(r *state.Review, c state.Comment) (state.Comment, Impact, error)
 	}
 	c.ID++
 	r.Comments = append(r.Comments, c)
+	return c, recomputeStale(r), nil
+}
 
+func recomputeStale(r *state.Review) Impact {
+	round := max(r.Round, 1)
+	blocked, affected := map[string]bool{}, map[string]bool{}
+	for _, c := range r.Comments {
+		weighty := c.Severity == state.SeverityBlocker || c.Severity == state.SeverityMajor
+		if c.Resolved || !weighty || max(c.Round, 1) != round {
+			continue
+		}
+		for _, d := range Dependents(r, c.Step) {
+			affected[d] = true
+			blocked[d] = blocked[d] || c.Severity == state.SeverityBlocker
+		}
+	}
 	var imp Impact
-	if c.Severity != state.SeverityBlocker && c.Severity != state.SeverityMajor {
-		return c, imp, nil
-	}
-	for _, id := range Dependents(r, c.Step) {
-		s := r.Step(id)
-		if s.Status != state.StatusPending {
-			continue
-		}
-		if c.Severity == state.SeverityBlocker && len(s.Hotspots) == 0 {
+	for i := range r.Steps {
+		s := &r.Steps[i]
+		switch {
+		case s.Status == state.StatusStale && !blocked[s.ID]:
+			s.Status = state.StatusPending
+			imp.Restored = append(imp.Restored, s.ID)
+		case s.Status == state.StatusPending && blocked[s.ID] && len(s.Hotspots) == 0:
 			s.Status = state.StatusStale
-			imp.Stale = append(imp.Stale, id)
-			continue
+			imp.Stale = append(imp.Stale, s.ID)
 		}
-		s.MayChange = true
-		imp.MayChange = append(imp.MayChange, id)
+		switch {
+		case !affected[s.ID]:
+			s.MayChange = false
+		case s.Status == state.StatusPending && !s.MayChange:
+			s.MayChange = true
+			imp.MayChange = append(imp.MayChange, s.ID)
+		}
 	}
-	return c, imp, nil
+	return imp
 }
 
 func Gate(r *state.Review) []string {
@@ -224,52 +242,34 @@ func SetDetail(r *state.Review, stepID string, d state.Detail) error {
 	return nil
 }
 
-func ResolveComment(r *state.Review, id int) error {
+func ResolveComment(r *state.Review, id int) (Impact, error) {
 	for i := range r.Comments {
 		if r.Comments[i].ID == id {
 			r.Comments[i].Resolved = true
-			return nil
+			return recomputeStale(r), nil
 		}
 	}
-	return fmt.Errorf("no comment #%d", id)
+	return Impact{}, fmt.Errorf("no comment #%d", id)
 }
 
-func DeleteComment(r *state.Review, id int) (restored []string, err error) {
+func DeleteComment(r *state.Review, id int) (Impact, error) {
 	i := slices.IndexFunc(r.Comments, func(c state.Comment) bool { return c.ID == id })
 	switch {
 	case i < 0:
-		return nil, fmt.Errorf("no comment #%d", id)
+		return Impact{}, fmt.Errorf("no comment #%d", id)
 	case r.Comments[i].Published:
-		return nil, fmt.Errorf("comment #%d is already on the MR: delete it there", id)
+		return Impact{}, fmt.Errorf("comment #%d is already on the MR: delete it there", id)
 	}
 	r.Comments = slices.Delete(r.Comments, i, i+1)
-	blocked, affected := map[string]bool{}, map[string]bool{}
-	for _, c := range r.Comments {
-		if c.Resolved || c.Severity != state.SeverityBlocker && c.Severity != state.SeverityMajor {
-			continue
-		}
-		for _, d := range Dependents(r, c.Step) {
-			affected[d] = true
-			blocked[d] = blocked[d] || c.Severity == state.SeverityBlocker
-		}
-	}
-	for j := range r.Steps {
-		s := &r.Steps[j]
-		if s.Status == state.StatusStale && !blocked[s.ID] {
-			s.Status = state.StatusPending
-			restored = append(restored, s.ID)
-		}
-		s.MayChange = s.MayChange && affected[s.ID]
-	}
-	return restored, nil
+	return recomputeStale(r), nil
 }
 
-func EditComment(r *state.Review, id int, body string, severity state.Severity) error {
+func EditComment(r *state.Review, id int, body string, severity state.Severity) (Impact, error) {
 	if strings.TrimSpace(body) == "" {
-		return errors.New("empty comment")
+		return Impact{}, errors.New("empty comment")
 	}
 	if severity != "" && !slices.Contains(state.Severities, severity) {
-		return fmt.Errorf("severity %q, want one of %v", severity, state.Severities)
+		return Impact{}, fmt.Errorf("severity %q, want one of %v", severity, state.Severities)
 	}
 	for i := range r.Comments {
 		if r.Comments[i].ID != id {
@@ -279,7 +279,7 @@ func EditComment(r *state.Review, id int, body string, severity state.Severity) 
 		if severity != "" {
 			r.Comments[i].Severity = severity
 		}
-		return nil
+		return recomputeStale(r), nil
 	}
-	return fmt.Errorf("no comment #%d", id)
+	return Impact{}, fmt.Errorf("no comment #%d", id)
 }

@@ -263,6 +263,9 @@ func TestReviewLoop(t *testing.T) {
 
 	out = h.mustRun("", "step", "goto", "s2")
 	assertContains(t, out, "s2 2/2 [stale]")
+
+	out = h.mustRun("", "comment", "resolve", "1")
+	assertContains(t, out, "comment #1 resolved", "back to pending: s2")
 }
 
 func TestStepSkip(t *testing.T) {

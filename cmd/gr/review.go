@@ -232,6 +232,7 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	var msg string
+	var imp plan.Impact
 	switch args[0] {
 	case "list":
 		for _, c := range r.Comments {
@@ -263,18 +264,14 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			return err
 		}
 		if args[0] == "delete" {
-			restored, err := plan.DeleteComment(r, id)
-			if err != nil {
+			if imp, err = plan.DeleteComment(r, id); err != nil {
 				return err
 			}
 			msg = fmt.Sprintf("comment #%d deleted", id)
-			if len(restored) > 0 {
-				msg += "\nback to pending: " + strings.Join(restored, " ")
-			}
 			break
 		}
 		if args[0] == "resolve" {
-			if err := plan.ResolveComment(r, id); err != nil {
+			if imp, err = plan.ResolveComment(r, id); err != nil {
 				return err
 			}
 			msg = fmt.Sprintf("comment #%d resolved", id)
@@ -286,7 +283,7 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			return err
 		}
 		body := strings.Join(fs.Args(), " ")
-		if err := plan.EditComment(r, id, body, state.Severity(*severity)); err != nil {
+		if imp, err = plan.EditComment(r, id, body, state.Severity(*severity)); err != nil {
 			return err
 		}
 		msg = fmt.Sprintf("comment #%d updated", id)
@@ -300,7 +297,8 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
 		}
-		c, imp, err := plan.AddComment(r, state.Comment{
+		var c state.Comment
+		c, imp, err = plan.AddComment(r, state.Comment{
 			Step:       *step,
 			File:       *file,
 			Lines:      *lines,
@@ -312,14 +310,17 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 			return err
 		}
 		msg = fmt.Sprintf("comment #%d %s %s:%s", c.ID, c.Severity, c.File, c.Lines)
-		if len(imp.Stale) > 0 {
-			msg += "\nstale (depend on a blocked step): " + strings.Join(imp.Stale, " ")
-		}
-		if len(imp.MayChange) > 0 {
-			msg += "\nmay change: " + strings.Join(imp.MayChange, " ")
-		}
 	default:
 		return fmt.Errorf("unknown comment command %q", args[0])
+	}
+	if len(imp.Stale) > 0 {
+		msg += "\nstale (depend on a blocked step): " + strings.Join(imp.Stale, " ")
+	}
+	if len(imp.MayChange) > 0 {
+		msg += "\nmay change: " + strings.Join(imp.MayChange, " ")
+	}
+	if len(imp.Restored) > 0 {
+		msg += "\nback to pending: " + strings.Join(imp.Restored, " ")
 	}
 	if err := s.store.Save(r); err != nil {
 		return err

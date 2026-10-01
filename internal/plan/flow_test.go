@@ -178,10 +178,10 @@ func TestAddNoteAndResolve(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := plan.ResolveComment(r, c.ID); err != nil || !r.Comments[0].Resolved {
+	if _, err := plan.ResolveComment(r, c.ID); err != nil || !r.Comments[0].Resolved {
 		t.Fatalf("resolve: %v %+v", err, r.Comments)
 	}
-	if err := plan.ResolveComment(r, 99); err == nil {
+	if _, err := plan.ResolveComment(r, 99); err == nil {
 		t.Fatal("unknown comment must fail")
 	}
 }
@@ -192,18 +192,21 @@ func TestEditComment(t *testing.T) {
 		r,
 		state.Comment{File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x"},
 	)
-	if err := plan.EditComment(r, c.ID, "better text", state.SeverityMinor); err != nil {
+	if _, err := plan.EditComment(r, c.ID, "better text", state.SeverityMinor); err != nil {
 		t.Fatal(err)
 	}
 	if got := r.Comments[0]; got.Body != "better text" || got.Severity != state.SeverityMinor {
 		t.Fatalf("edited: %+v", got)
 	}
-	if err := plan.EditComment(r, c.ID, "keep severity", ""); err != nil ||
+	if _, err := plan.EditComment(r, c.ID, "keep severity", ""); err != nil ||
 		r.Comments[0].Severity != state.SeverityMinor {
 		t.Fatalf("empty severity must keep it: %v %+v", err, r.Comments[0])
 	}
-	if plan.EditComment(r, 99, "x", "") == nil || plan.EditComment(r, c.ID, " ", "") == nil ||
-		plan.EditComment(r, c.ID, "x", "huge") == nil {
+	edit := func(id int, body string, sev state.Severity) error {
+		_, err := plan.EditComment(r, id, body, sev)
+		return err
+	}
+	if edit(99, "x", "") == nil || edit(c.ID, " ", "") == nil || edit(c.ID, "x", "huge") == nil {
 		t.Fatal("bad edits must fail")
 	}
 }
@@ -216,9 +219,9 @@ func TestDeleteComment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	restored, err := plan.DeleteComment(r, c.ID)
-	if err != nil || !reflect.DeepEqual(restored, []string{"s2", "s3"}) || len(r.Comments) != 0 {
-		t.Fatalf("DeleteComment = %v, %v; comments %+v", restored, err, r.Comments)
+	imp, err := plan.DeleteComment(r, c.ID)
+	if err != nil || !reflect.DeepEqual(imp.Restored, []string{"s2", "s3"}) || len(r.Comments) != 0 {
+		t.Fatalf("DeleteComment = %+v, %v; comments %+v", imp, err, r.Comments)
 	}
 	if r.Step("s5").MayChange {
 		t.Fatal("may-change must be cleared with its only cause")
@@ -229,5 +232,67 @@ func TestDeleteComment(t *testing.T) {
 	r.Comments = append(r.Comments, state.Comment{ID: 9, Published: true})
 	if _, err := plan.DeleteComment(r, 9); err == nil {
 		t.Fatal("a published comment must not be deleted locally")
+	}
+}
+
+func blockedReview(t *testing.T) (*state.Review, state.Comment) {
+	t.Helper()
+	r := flowReview()
+	c, _, err := plan.AddComment(r, state.Comment{
+		File: "a.go", Lines: "3", Severity: state.SeverityBlocker, Body: "wrong",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, c
+}
+
+func TestResolveBlockerRestoresStale(t *testing.T) {
+	r, c := blockedReview(t)
+	imp, err := plan.ResolveComment(r, c.ID)
+	if err != nil || !reflect.DeepEqual(imp.Restored, []string{"s2", "s3"}) {
+		t.Fatalf("ResolveComment = %+v, %v", imp, err)
+	}
+	if r.Step("s2").Status != state.StatusPending || r.Step("s5").MayChange {
+		t.Fatalf("steps: %+v", r.Steps)
+	}
+}
+
+func TestEditCommentSeverityRecomputesStale(t *testing.T) {
+	r, c := blockedReview(t)
+	imp, err := plan.EditComment(r, c.ID, "local rework after all", state.SeverityMajor)
+	if err != nil || !reflect.DeepEqual(imp.Restored, []string{"s2", "s3"}) ||
+		!reflect.DeepEqual(imp.MayChange, []string{"s2", "s3"}) {
+		t.Fatalf("downgrade to major = %+v, %v", imp, err)
+	}
+	if r.Step("s3").Status != state.StatusPending || !r.Step("s3").MayChange {
+		t.Fatalf("steps: %+v", r.Steps)
+	}
+	imp, err = plan.EditComment(r, c.ID, "wrong approach", state.SeverityBlocker)
+	if err != nil || !reflect.DeepEqual(imp.Stale, []string{"s2", "s3"}) {
+		t.Fatalf("upgrade to blocker = %+v, %v", imp, err)
+	}
+	imp, err = plan.EditComment(r, c.ID, "fine", state.SeverityMinor)
+	if err != nil || !reflect.DeepEqual(imp.Restored, []string{"s2", "s3"}) ||
+		r.Step("s5").MayChange {
+		t.Fatalf("downgrade to minor = %+v, %v; steps %+v", imp, err, r.Steps)
+	}
+}
+
+func TestEarlierRoundBlockerDoesNotStaleNewSteps(t *testing.T) {
+	r := flowReview()
+	r.Round = 2
+	r.Comments = []state.Comment{
+		{ID: 1, Step: "s1", Severity: state.SeverityBlocker, Body: "old", Round: 1},
+	}
+	c, imp, err := plan.AddComment(r, state.Comment{
+		File: "a.go", Lines: "1", Severity: state.SeverityNit, Body: "x",
+	})
+	if err != nil || len(imp.Stale) != 0 || r.Step("s2").Status != state.StatusPending {
+		t.Fatalf("AddComment = %+v, %+v, %v; steps %+v", c, imp, err, r.Steps)
+	}
+	r.Steps[1].Status = state.StatusStale
+	if imp, _ := plan.DeleteComment(r, c.ID); !reflect.DeepEqual(imp.Restored, []string{"s2"}) {
+		t.Fatalf("DeleteComment = %+v", imp)
 	}
 }
