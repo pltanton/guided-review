@@ -190,11 +190,13 @@ func (m *model) sideChatLines(h, w int) []string {
 	}
 	lines := []string{title, dimStyle.Render(hint), dimStyle.Render(strings.Repeat("─", max(w, 1)))}
 	prompt := m.sidePrompt(w)
-	lines = append(lines, m.chatWindow(m.chatRows(w, true), h-len(lines)-len(prompt), w)...)
+	chatH := max(h-len(lines)-len(prompt), 0)
+	lines = append(lines, m.chatWindow(m.chatRows(w, true), chatH, w)...)
 	for len(lines)+len(prompt) < h {
 		lines = append(lines, "")
 	}
-	return append(lines, prompt...)[:h]
+	lines = append(lines, prompt...)
+	return lines[max(len(lines)-h, 0):]
 }
 
 func (m *model) inputInSideChat() bool {
@@ -457,55 +459,99 @@ func (m *model) promptLines(width int) []string {
 		}
 		return m.inputLines(cursorStyle.Render(string(m.cmdMode)), hint, width)
 	case m.composing:
-		prompt := "› "
-		switch {
-		case m.composeKind == inbox.KindSkip:
-			prompt = "skip reason › "
-		case m.composeKind == inbox.KindAsk:
-			prompt = fmt.Sprintf("ask %s:%s › ", m.anchorFile, m.anchorLines)
-		case m.composeKind == kindThreadReply:
-			prompt = "reply, thread stays open › "
-		case m.composeThread != "":
-			prompt = "ask about the thread › "
-		case m.composeKind == inbox.KindEdit:
-			prompt = fmt.Sprintf("edit #%d › ", m.composeRef)
-		case m.composeRef > 0:
-			prompt = fmt.Sprintf("re #%d %s:%s › ", m.composeRef, m.anchorFile, m.anchorLines)
-		case m.anchorFile != "":
-			prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
-		}
-		hints := []string{"ctrl+r raw"}
-		if m.interrupted {
-			prompt = "paused · " + prompt
-		}
-		lead := cursorStyle.Render(prompt)
-		if m.rawMode() {
-			hints = []string{"tab severity", "ctrl+r via the agent"}
-			tag := "RAW " + string(m.severity())
-			if m.composeKind == inbox.KindEdit {
-				tag = "RAW"
-			} else if m.composeRef > 0 {
-				prompt = fmt.Sprintf("%s:%s › ", m.anchorFile, m.anchorLines)
-			}
-			lead = delStyle.Bold(true).Render(tag) + " " + cursorStyle.Render(prompt)
-		}
-		switch m.composeKind {
-		case inbox.KindAsk:
-			hints = []string{"enter alone explains"}
-		case inbox.KindSkip:
-			hints = nil
-		}
-		if m.anchorFile != "" {
-			hints = append(hints, "⌫ no line")
-		}
-		hints = append(hints, "alt+enter new line")
-		return m.inputLines(lead, dimStyle.Render("   "+strings.Join(hints, " · ")), width)
+		return append(m.inputLines(cursorStyle.Render("› "), "", width), m.composeStatus(width))
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
 		last, _ = m.footer()
 	}
 	return []string{last}
+}
+
+type composeHint struct{ key, desc string }
+
+func (m *model) composeMode() (
+	badge string, style lipgloss.Style, anchor string, hints []composeHint,
+) {
+	loc := ""
+	if m.anchorFile != "" {
+		loc = path.Base(m.anchorFile) + ":" + m.anchorLines
+	}
+	badge, style, anchor = "MSG", keyStyle, loc
+	hints = []composeHint{{"enter", "send"}}
+	switch {
+	case m.composeKind == inbox.KindSkip:
+		badge, hints[0].desc = "SKIP", "skip"
+	case m.composeKind == kindThreadReply:
+		badge, anchor, hints[0].desc = "REPLY", m.threadLabel(), "reply, thread stays open"
+	case m.composeThread != "":
+		badge, anchor = "THREAD", m.threadLabel()
+	case m.composeKind == inbox.KindAsk:
+		badge, hints = "ASK", append(hints, composeHint{"enter", "alone explains"})
+	case m.rawMode():
+		style, hints[0].desc = delStyle.Bold(true).Background(surfaceTone.color()), "save"
+		if m.composeKind == inbox.KindEdit {
+			badge = fmt.Sprintf("RAW EDIT #%d", m.composeRef)
+		} else {
+			badge, hints = "RAW "+string(m.severity()), append(hints, composeHint{"tab", "severity"})
+		}
+		hints = append(hints, composeHint{"ctrl+r", "via agent"})
+	case m.composeKind == inbox.KindEdit:
+		badge, hints[0].desc = fmt.Sprintf("EDIT #%d", m.composeRef), "save"
+		hints = append(hints, composeHint{"ctrl+r", "raw"})
+	default:
+		if m.composeRef > 0 {
+			anchor = strings.TrimSpace(fmt.Sprintf("re #%d %s", m.composeRef, loc))
+		}
+		hints = append(hints, composeHint{"ctrl+r", "raw"})
+	}
+	hints = append(hints, composeHint{"alt+enter", "line"})
+	if m.anchorFile != "" {
+		hints = append(hints, composeHint{"⌫", "drops line"})
+	}
+	return badge, style, anchor, append(hints, composeHint{"esc", "cancel"})
+}
+
+func (m *model) threadLabel() string {
+	if m.review == nil {
+		return ""
+	}
+	for _, d := range m.review.Discussions {
+		switch {
+		case d.ID != m.composeThread:
+		case d.File != "":
+			return fmt.Sprintf("%s:%d", path.Base(d.File), d.Line)
+		case d.Author != "":
+			return "@" + d.Author
+		}
+	}
+	return ""
+}
+
+func (m *model) composeStatus(width int) string {
+	badge, style, anchor, hints := m.composeMode()
+	left := style.Render(" " + badge + " ")
+	if m.interrupted {
+		left += hotStyle.Background(surfaceTone.color()).Render("paused ")
+	}
+	if anchor != "" {
+		left += buttonStyle.Render(anchor + " ")
+	}
+	lw := ansi.StringWidth(left)
+	if lw >= width {
+		return ansi.Truncate(left, width, "…")
+	}
+	for n := len(hints); n > 0; n-- {
+		parts := make([]string, n)
+		for i, h := range hints[:n] {
+			parts[i] = cursorStyle.Render(h.key) + dimStyle.Render(" "+h.desc)
+		}
+		right := strings.Join(parts, dimStyle.Render(" · "))
+		if gap := width - lw - ansi.StringWidth(right); gap >= 2 {
+			return left + strings.Repeat(" ", gap) + right
+		}
+	}
+	return left
 }
 
 func (m *model) View() string {

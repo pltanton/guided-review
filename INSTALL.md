@@ -63,7 +63,21 @@ is on `PATH`: `gopls` (Go), `kotlin-lsp` (Kotlin), `basedpyright-langserver` (Py
 `typescript-language-server` (TypeScript), `jdtls` (Java), `rust-analyzer` (Rust). Offer to install the
 ones for the languages the human works in; nothing breaks without them.
 
-## 5. Done
+## 5. Optional: Shift+Enter for a new line
+
+Alt+Enter and Ctrl+J always start a new line in the viewer's input. Shift+Enter does too,
+but tmux passes it on only with extended keys on; otherwise it arrives as plain Enter and
+sends. Offer to add to `~/.tmux.conf`:
+
+```
+set -g extended-keys on
+set -as terminal-features 'xterm*:extkeys'
+```
+
+The second line is needed when the outer terminal does not announce extended keys itself.
+Reload with `tmux source-file ~/.tmux.conf`.
+
+## 6. Done
 
 Tell the human how to start: in tmux, inside a repository,
 

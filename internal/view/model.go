@@ -451,6 +451,12 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleMouse(msg)
 	case tea.KeyMsg:
 		return m, m.handleKeys(msg)
+	case fmt.Stringer:
+		// bubbletea v1 hands modified keys over as its unexported unknownCSISequenceMsg.
+		if mod, ok := modifiedEnter(msg.String()); ok {
+			alt := mod&2 != 0 || m.composing && mod != 0
+			return m, m.handleKeys(tea.KeyMsg{Type: tea.KeyEnter, Alt: alt})
+		}
 	}
 	return m, nil
 }

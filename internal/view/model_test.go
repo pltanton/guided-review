@@ -637,7 +637,7 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.relist()
 	m.cursor = 1
 	m.Update(key("c"))
-	if out := ansi.Strip(m.View()); !strings.Contains(out, "a.go:1 ›") {
+	if out := ansi.Strip(m.View()); !strings.Contains(out, " MSG a.go:1 ") {
 		t.Fatalf("prompt must show the anchor:\n%s", out)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
@@ -1160,7 +1160,8 @@ func TestRawComment(t *testing.T) {
 		m.Update(k)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "RAW nit a.go:2 › -x stays, exactly") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "› -x stays, exactly") ||
+		!strings.Contains(v, " RAW nit a.go:2 ") {
 		t.Fatalf("raw prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))
@@ -1188,7 +1189,7 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 	m.cursor = 2
 	m.Update(key("A"))
 	typeText(m, "why 1?")
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "ask a.go:2 › why 1?") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "› why 1?") || !strings.Contains(v, " ASK a.go:2 ") {
 		t.Fatalf("ask prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))

@@ -33,7 +33,11 @@ mentions, written during planning, so it opens instantly.
 <summary>Talking to the agent</summary>
 
 Point at a line or a selection and write: Enter sends, Alt+Enter or Ctrl+J starts a new
-line (so does Shift+Enter in a terminal that sends it as Alt+Enter). The agent writes the comment with a severity
+line. Shift+Enter does too; in tmux it needs `set -g extended-keys on` in `~/.tmux.conf`
+(plus `set -as terminal-features 'xterm*:extkeys'` if the outer terminal does not
+announce them), otherwise tmux delivers it as plain Enter. The line under the input shows
+the mode (MSG, ASK, RAW, EDIT…), where the comment goes and the keys that work right
+now. The agent writes the comment with a severity
 and, for an obvious fix, a suggestion. You can also just ask about code without leaving
 a comment, or save a comment exactly as typed. When the agent needs a decision, it
 offers answers you pick with one key. `t` moves into the chat, where `v` selects lines
@@ -120,4 +124,3 @@ a skill named `guided-review-notify` and follows it with the merge request link,
 verdict and the comment counts — for example to message the author in your team chat.
 Put it in `~/.claude/skills/guided-review-notify/SKILL.md` (or the Codex equivalent);
 without it the agent prints a line to forward.
-

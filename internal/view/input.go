@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -471,6 +472,37 @@ func wrapRunes(rs []rune, avail int) []inputSeg {
 	return append(segs, inputSeg{from, len(rs), true})
 }
 
+func modifiedEnter(s string) (mod int, ok bool) {
+	body, ok := strings.CutPrefix(s, "?CSI[")
+	if !ok || !strings.HasSuffix(body, "]?") {
+		return 0, false
+	}
+	body = strings.TrimSuffix(body, "]?")
+	var seq []byte
+	for _, f := range strings.Fields(body) {
+		b, err := strconv.ParseUint(f, 10, 8)
+		if err != nil {
+			return 0, false
+		}
+		seq = append(seq, byte(b))
+	}
+	var code, param string
+	switch text := string(seq); {
+	case strings.HasPrefix(text, "27;") && strings.HasSuffix(text, "~"):
+		param, code, _ = strings.Cut(strings.TrimSuffix(text[3:], "~"), ";")
+	case strings.HasSuffix(text, "u"):
+		code, param, _ = strings.Cut(strings.TrimSuffix(text, "u"), ";")
+	}
+	if code != "13" {
+		return 0, false
+	}
+	n, err := strconv.Atoi(cmp.Or(param, "1"))
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n - 1, true
+}
+
 func (m *model) inputLines(lead, hint string, width int) []string {
 	width = max(width, 10)
 	pos := min(m.inputPos, len(m.input))
@@ -491,8 +523,9 @@ func (m *model) inputLines(lead, hint string, width int) []string {
 			lines = append(lines, pad+text)
 		}
 	}
-	start := min(max(len(lines)-inputRows, 0), cursorLine)
-	lines = lines[start:min(start+inputRows, len(lines))]
+	rows := max(1, min(inputRows, (m.height-2)/3))
+	start := min(max(len(lines)-rows, 0), cursorLine)
+	lines = lines[start:min(start+rows, len(lines))]
 	switch last := len(lines) - 1; {
 	case hint == "":
 	case ansi.StringWidth(lines[last])+ansi.StringWidth(hint) <= width:

@@ -31,7 +31,10 @@ func Run(ctx context.Context, o Options) error {
 	}
 	p := tea.NewProgram(m, opts...)
 	go forward(w, p)
+	// tmux with extended-keys on tells shift+enter from enter only to apps that ask for it.
+	_, _ = os.Stdout.WriteString("\x1b[>4;1m")
 	_, err = p.Run()
+	_, _ = os.Stdout.WriteString("\x1b[>4;0m")
 	if m.lsp != nil {
 		m.lsp.close()
 	}
