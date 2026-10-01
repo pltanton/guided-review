@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/pltanton/guided-review/internal/classify"
 	"github.com/pltanton/guided-review/internal/diff"
@@ -55,13 +58,28 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if *id != "" {
 		t.id = *id
 	}
-	worktree, err := ensureWorktree(ctx, e, s.repo, t)
+	old, err := s.store.Load(t.id)
+	exists := err == nil
+	if err != nil && !errors.Is(err, state.ErrNoReview) && !errors.Is(err, os.ErrNotExist) {
+		broken, berr := backupState(s, t.id)
+		if berr != nil {
+			return fmt.Errorf("state of review %s is unreadable: %w; backup failed: %w", t.id, err, berr)
+		}
+		if !*force {
+			return fmt.Errorf("state of review %s is unreadable: %w\nnothing was changed, "+
+				"a copy is in %s; `gr init --force` starts over, comments that can be read are kept",
+				t.id, err, broken)
+		}
+		old, exists = &state.Review{Comments: readableComments(broken)}, true
+	}
+	var prevWorktree string
+	if exists {
+		prevWorktree = old.Worktree
+	}
+	worktree, err := ensureWorktree(ctx, e, s, t, prevWorktree)
 	if err != nil {
 		return err
 	}
-
-	old, err := s.store.Load(t.id)
-	exists := err == nil
 	var r *state.Review
 	var files []diff.File
 	switch {
@@ -113,6 +131,28 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	return nil
 }
 
+func backupState(s session, id string) (string, error) {
+	path := filepath.Join(s.store.ReviewDir(id), state.FileName)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	broken := path + ".broken-" + time.Now().Format("20060102-150405")
+	return broken, os.WriteFile(broken, data, 0o600)
+}
+
+func readableComments(path string) []state.Comment {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var r struct {
+		Comments []state.Comment `yaml:"comments"`
+	}
+	_ = yaml.Unmarshal(data, &r)
+	return r.Comments
+}
+
 func resolveTarget(
 	ctx context.Context,
 	e env,
@@ -120,6 +160,8 @@ func resolveTarget(
 	arg, base string,
 ) (target, error) {
 	switch {
+	case base != "" && (github.IsPRURL(arg) || gitlab.IsMRURL(arg) || strings.Contains(arg, "..")):
+		return target{}, errors.New("--base goes with a branch, not with an MR URL or a range")
 	case github.IsPRURL(arg):
 		return githubTarget(ctx, e, repo, arg)
 	case gitlab.IsMRURL(arg):
@@ -132,13 +174,11 @@ func resolveTarget(
 			return target{}, err
 		}
 		refs := mr.DiffRefs
-		for _, sha := range []string{refs.BaseSHA, refs.HeadSHA} {
-			if _, err := repo.Commit(ctx, sha); err != nil {
-				return target{}, fmt.Errorf(
-					"commit %s not found locally: run git fetch origin",
-					short(sha),
-				)
-			}
+		if err := needCommits(ctx, repo,
+			[2]string{refs.BaseSHA, "git fetch origin"},
+			[2]string{refs.HeadSHA, fmt.Sprintf("git fetch origin merge-requests/%d/head", ref.IID)},
+		); err != nil {
+			return target{}, err
 		}
 		return target{
 			id:     fmt.Sprintf("mr-%d", ref.IID),
@@ -156,23 +196,7 @@ func resolveTarget(
 			},
 		}, nil
 	case strings.Contains(arg, ".."):
-		a, b, _ := strings.Cut(arg, "..")
-		baseSHA, err := repo.Commit(ctx, a)
-		if err != nil {
-			return target{}, err
-		}
-		headSHA, err := repo.Commit(ctx, b)
-		if err != nil {
-			return target{}, err
-		}
-		id := short(baseSHA) + "-" + short(headSHA)
-		return target{
-			id:     id,
-			source: arg,
-			base:   baseSHA,
-			head:   headSHA,
-			branch: repo.BranchName(ctx, b),
-		}, nil
+		return rangeTarget(ctx, repo, arg)
 	}
 	rev := arg
 	if rev == "" {
@@ -199,6 +223,35 @@ func resolveTarget(
 	return target{id: id, source: rev, base: baseSHA, head: headSHA, branch: branch}, nil
 }
 
+func rangeTarget(ctx context.Context, repo gitx.Repo, arg string) (target, error) {
+	a, b, ok := strings.Cut(arg, "...")
+	if !ok {
+		a, b, _ = strings.Cut(arg, "..")
+	}
+	tip, err := repo.Commit(ctx, cmp.Or(a, "HEAD"))
+	if err != nil {
+		return target{}, err
+	}
+	headSHA, err := repo.Commit(ctx, cmp.Or(b, "HEAD"))
+	if err != nil {
+		return target{}, err
+	}
+	baseSHA, err := repo.MergeBase(ctx, tip, headSHA)
+	switch {
+	case errors.Is(err, gitx.ErrNoMergeBase):
+		baseSHA = tip
+	case err != nil:
+		return target{}, err
+	}
+	return target{
+		id:     short(tip) + "-" + short(headSHA),
+		source: arg,
+		base:   baseSHA,
+		head:   headSHA,
+		branch: repo.BranchName(ctx, cmp.Or(b, "HEAD")),
+	}, nil
+}
+
 func defaultBase(ctx context.Context, repo gitx.Repo) (string, error) {
 	for _, c := range []string{"origin/HEAD", "origin/main", "origin/master", "main", "master"} {
 		if _, err := repo.Commit(ctx, c); err == nil {
@@ -208,22 +261,26 @@ func defaultBase(ctx context.Context, repo gitx.Repo) (string, error) {
 	return "", errors.New("cannot find the default branch: pass --base")
 }
 
-func ensureWorktree(ctx context.Context, e env, repo gitx.Repo, t target) (string, error) {
-	head, err := repo.Commit(ctx, "HEAD")
-	if err != nil || head == t.head {
-		return "", err
+func ensureWorktree(ctx context.Context, e env, s session, t target, prev string) (string, error) {
+	path := prev
+	if _, err := os.Stat(path); err != nil {
+		head, err := s.repo.Commit(ctx, "HEAD")
+		if err != nil || head == t.head {
+			return "", err
+		}
+		name := fmt.Sprintf("%s-%s-%s", filepath.Base(s.repo.Dir), s.store.Key, t.id)
+		path = filepath.Join(e.cacheDir, "guided-review", name)
 	}
-	path := filepath.Join(e.cacheDir, "guided-review", filepath.Base(repo.Dir)+"-"+t.id)
 	if _, err := os.Stat(path); err != nil {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return "", err
 		}
-		return path, repo.WorktreeAdd(ctx, path, t.head)
+		return path, s.repo.WorktreeAdd(ctx, path, t.head)
 	}
 	if cur, err := (gitx.Repo{Dir: path}).Commit(ctx, "HEAD"); err == nil && cur == t.head {
 		return path, nil
 	}
-	return path, repo.WorktreeCheckout(ctx, path, t.head)
+	return path, s.repo.WorktreeCheckout(ctx, path, t.head)
 }
 
 func newReview(ctx context.Context, s session, t target) (*state.Review, []diff.File, error) {
@@ -258,12 +315,18 @@ func reviewFiles(
 	}
 	attrs, _ := os.ReadFile(filepath.Join(s.repo.Dir, ".gitattributes"))
 	gitattrs := classify.GitattributesPatterns(string(attrs))
-	cls := classify.New(classify.DefaultPatterns, s.cfg.Generated, gitattrs)
+	cls := classify.New(
+		classify.Set{Source: "config pattern", Patterns: s.cfg.Generated},
+		classify.Set{Source: ".gitattributes", Patterns: gitattrs},
+		classify.Set{Source: "default pattern", Patterns: classify.DefaultPatterns},
+	)
 	out := make([]state.File, 0, len(files))
 	for _, f := range files {
-		tier := state.TierCore
-		if cls.Generated(f.Path) ||
-			f.Status != diff.Deleted && !f.Binary && hasMarker(ctx, s, head, f.Path) {
+		tier, reason := state.TierCore, cls.Match(f.Path)
+		if reason == "" && f.Status != diff.Deleted && !f.Binary {
+			reason = marker(ctx, s, head, f.Path)
+		}
+		if reason != "" {
 			tier = state.TierGenerated
 		}
 		added, deleted := f.Stat()
@@ -272,6 +335,7 @@ func reviewFiles(
 			OldPath: f.OldPath,
 			Status:  string(f.Status),
 			Tier:    tier,
+			Reason:  reason,
 			Added:   added,
 			Deleted: deleted,
 		})
@@ -279,9 +343,29 @@ func reviewFiles(
 	return files, out, nil
 }
 
-func hasMarker(ctx context.Context, s session, sha, path string) bool {
+func marker(ctx context.Context, s session, sha, path string) string {
 	content, err := s.repo.Show(ctx, sha, path)
-	return err == nil && classify.HasMarker(content)
+	if err != nil {
+		return ""
+	}
+	return classify.Marker(content)
+}
+
+func markerOnly(f state.File) bool {
+	return f.Tier == state.TierGenerated && strings.HasPrefix(f.Reason, classify.MarkerReason)
+}
+
+func unreviewedMarkerFiles(r *state.Review) []string {
+	var out []string
+	for _, f := range r.Files {
+		inStep := slices.ContainsFunc(r.Steps, func(st state.Step) bool {
+			return slices.ContainsFunc(st.Hunks, func(h state.StepHunk) bool { return h.File == f.Path })
+		})
+		if markerOnly(f) && !inStep {
+			out = append(out, f.Path)
+		}
+	}
+	return out
 }
 
 func startRound(ctx context.Context, s session, r *state.Review, t target) ([]diff.File, error) {
@@ -293,7 +377,7 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 	r.Round = oldRound + 1
 	r.PrevHeadSHA = old
 	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles, r.Carried = "", false, nil, nil
-	if s.repo.IsAncestor(ctx, old, t.head) {
+	if t.base == r.BaseSHA && s.repo.IsAncestor(ctx, old, t.head) {
 		r.RoundBaseSHA = old
 	} else {
 		prev, err := s.diff(ctx, r.BaseSHA, old)
@@ -411,7 +495,7 @@ func printHeader(e env, s session, r *state.Review) {
 	if r.Round > 1 {
 		if r.RoundRebased {
 			e.printf(
-				"round %d: rebased, changed files: %s\n",
+				"round %d: the base moved (rebase or merge), changed files: %s\n",
 				r.Round,
 				strings.Join(r.RoundFiles, " "),
 			)
@@ -510,14 +594,11 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 	if err != nil {
 		return target{}, err
 	}
-	fetch := map[string]string{
-		pr.Base.SHA: "git fetch origin",
-		pr.Head.SHA: fmt.Sprintf("git fetch origin pull/%d/head", ref.Number),
-	}
-	for sha, how := range fetch {
-		if _, err := repo.Commit(ctx, sha); err != nil {
-			return target{}, fmt.Errorf("commit %s not found locally: run %s", short(sha), how)
-		}
+	if err := needCommits(ctx, repo,
+		[2]string{pr.Base.SHA, "git fetch origin"},
+		[2]string{pr.Head.SHA, fmt.Sprintf("git fetch origin pull/%d/head", ref.Number)},
+	); err != nil {
+		return target{}, err
 	}
 	base, err := repo.MergeBase(ctx, pr.Base.SHA, pr.Head.SHA)
 	if err != nil {
@@ -535,6 +616,21 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 			Project: ref.Project, IID: ref.Number, Title: pr.Title,
 		},
 	}, nil
+}
+
+func needCommits(ctx context.Context, repo gitx.Repo, shaFetch ...[2]string) error {
+	var missing, fetch []string
+	for _, sf := range shaFetch {
+		if _, err := repo.Commit(ctx, sf[0]); err != nil {
+			missing = append(missing, short(sf[0]))
+			fetch = append(fetch, sf[1])
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("commit %s not found locally: run %s",
+		strings.Join(missing, ", "), strings.Join(fetch, " && "))
 }
 
 func planOutdated(r *state.Review) bool {

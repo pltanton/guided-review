@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -104,20 +105,12 @@ func (s session) exported(id string) string {
 
 func (s session) diff(ctx context.Context, base, head string) ([]diff.File, error) {
 	algo := cmp.Or(s.cfg.Diff, gitx.DefaultDiffAlgorithm)
-	raw, err := s.repo.DiffWith(ctx, algo, base, head)
-	if err != nil {
-		return nil, err
-	}
-	return diff.Parse(raw)
+	return s.repo.Files(ctx, algo, base, head)
 }
 
 // GitLab and GitHub check comment positions against their own Myers diff of the MR.
 func (s session) serverDiff(ctx context.Context, base, head string) ([]diff.File, error) {
-	raw, err := s.repo.DiffWith(ctx, "myers", base, head)
-	if err != nil {
-		return nil, err
-	}
-	return diff.Parse(raw)
+	return s.repo.Files(ctx, "myers", base, head)
 }
 
 func (s session) reviewDiff(ctx context.Context, r *state.Review) ([]diff.File, error) {
@@ -169,9 +162,20 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 		e.printf("  %s  [%s]  %s\n", f.Path, label, strings.Join(ranges, " "))
 	}
 	if len(generated) > 0 {
+		generated = slices.Concat(
+			slices.DeleteFunc(slices.Clone(generated), func(f state.File) bool { return !markerOnly(f) }),
+			slices.DeleteFunc(generated, markerOnly),
+		)
 		e.printf("generated (%d files, not reviewed):\n", len(generated))
 		for _, f := range generated {
-			e.printf("  %s  +%d -%d\n", f.Path, f.Added, f.Deleted)
+			warn := ""
+			if markerOnly(f) {
+				warn = "⚠ "
+			}
+			e.printf("  %s%s  +%d -%d  %s\n", warn, f.Path, f.Added, f.Deleted, f.Reason)
+		}
+		if slices.ContainsFunc(generated, markerOnly) {
+			e.println("⚠ generated only by a comment in the file: ask the human before skipping")
 		}
 	}
 }

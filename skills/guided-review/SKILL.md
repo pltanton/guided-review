@@ -33,15 +33,18 @@ and the rest happens in the terminal chat.
    argument only when they gave nothing (current branch against the default
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
-   - "commit … not found locally": run `git fetch origin` and retry.
+   - "commit … not found locally": run the fetch commands it names and retry.
    - "who you are on …": glab or gh is not logged in; ask the user to run
      `glab auth login` / `gh auth login`, then retry.
    - "already exists, resuming": `gr step show`, then continue the step loop. If it also
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.
    - "round N": this is a re-review, see below.
-   - Never pass `--force`: it throws away the plan and progress. Only the user may
-     ask to start over.
+   - Never pass `--force` on your own: it throws away the plan and progress. Only the
+     user may ask to start over.
+   - "state of review … is unreadable": show the human the error as gr printed it (here
+     in the terminal, the viewer is not open yet) and offer «начать заново (--force)» or
+     «разберусь сам». Run `gr init --force` only after they chose it.
 2. If `$TMUX` is set, open the viewer full screen in a window named after the review id
    gr printed (`review-<id>`, e.g. `review-mr-521`). If that window already exists it may
    run an old binary or show another review, so restart it instead of skipping:
@@ -70,7 +73,9 @@ the unresolved MR discussions (`gr discussions` prints them in full), and
 `git diff --stat <base> <head>`. Do not read code yet.
 
 `gr say` at most three lines: the task in one line, how the change solves it in one
-line, then «верно понял?» with options such as «да» and «нет, поправлю». Everything else you noticed — failing checks, open
+line, then «верно понял?» with options such as «да» and «нет, поправлю». When `gr init`
+listed generated files, add one line naming them — the ⚠ ones first, they are generated
+only by a comment in the file — and ask «ок, не смотрим?». Everything else you noticed — failing checks, open
 discussions, spec mismatches, stale examples in the description — is not intake:
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
@@ -81,8 +86,8 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 ## Plan
 
 1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
-   Generated files are already excluded; decide which remaining files are
-   boilerplate.
+   Generated files are excluded; one the human wants to see goes into a step like any
+   other file. Decide which remaining files are boilerplate.
 2. Group into chapters and steps per references/ordering.md: intent first, one chapter
    per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
    references/hotspots.md, with `line` so the viewer marks them (and `file` when the step
@@ -241,8 +246,8 @@ before leaving a step. You only hear about what needs you.
 
 ## Re-review (`gr init` printed "round N")
 
-1. The diff is only what changed since the last round (or, after a rebase, the files
-   whose patch changed). Open comments from earlier rounds are listed.
+1. The diff is only what changed since the last round (or, after a rebase or a merge
+   of the target branch, the files whose patch changed). Open comments from earlier rounds are listed.
 2. First step, before any plan: check each open comment against the new code.
    `gr comment resolve ID` when it is addressed; otherwise keep it open. `gr say` a
    summary: resolved, still open, new questions.

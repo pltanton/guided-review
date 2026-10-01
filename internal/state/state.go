@@ -160,6 +160,7 @@ type File struct {
 	OldPath string `yaml:"old_path,omitempty"`
 	Status  string `yaml:"status"`
 	Tier    Tier   `yaml:"tier"`
+	Reason  string `yaml:"reason,omitempty"`
 	Added   int    `yaml:"added"`
 	Deleted int    `yaml:"deleted"`
 }
