@@ -50,7 +50,7 @@ and `y` copies them; dragging the mouse over chat lines copies them too.
 
 The viewer tracks which changed lines you scrolled past and reminds you once about the
 rest and about hotspots nobody discussed. Nothing can be published until every step is
-reviewed or skipped.
+reviewed or skipped; steps a blocker made stale are listed in the summary as not reviewed.
 
 </details>
 

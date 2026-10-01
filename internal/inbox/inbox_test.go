@@ -2,11 +2,35 @@ package inbox_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/pltanton/guided-review/internal/inbox"
 )
+
+func TestFilesArePrivate(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "mr-1")
+	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindNext}); err != nil {
+		t.Fatal(err)
+	}
+	if err := inbox.MarkIdle(dir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := inbox.Wait(context.Background(), dir, time.Second, 10*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if fi, err := os.Stat(dir); err != nil || fi.Mode().Perm() != 0o700 {
+		t.Fatalf("inbox dir: %v %v", fi.Mode(), err)
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if fi, err := e.Info(); err != nil || fi.Mode().Perm() != 0o600 {
+			t.Fatalf("%s: %v %v", e.Name(), fi.Mode(), err)
+		}
+	}
+}
 
 func TestAppendReadWait(t *testing.T) {
 	dir := t.TempDir()
