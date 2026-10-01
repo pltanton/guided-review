@@ -217,16 +217,47 @@ func uncovered(f diff.File, steps []state.Step) []string {
 		}
 		return []string{f.Path}
 	}
+	in := func(n, slack int) bool {
+		return slices.ContainsFunc(ranges, func(r [2]int) bool { return r[0] <= n && n <= r[1]+slack })
+	}
 	var out []string
+	gaps := func(from, to int) {
+		for n := from; n <= to; n++ {
+			if in(n, 0) {
+				continue
+			}
+			end := n
+			for end < to && !in(end+1, 0) {
+				end++
+			}
+			if end == n {
+				out = append(out, fmt.Sprintf("%s:%d", f.Path, n))
+			} else {
+				out = append(out, fmt.Sprintf("%s:%d-%d", f.Path, n, end))
+			}
+			n = end
+		}
+	}
 	for _, h := range f.Hunks {
-		covered := slices.ContainsFunc(ranges, func(r [2]int) bool {
-			return r[0] <= h.NewEnd() && h.NewStart <= r[1]
-		})
-		if !covered {
-			out = append(out, fmt.Sprintf("%s:%s", f.Path, h.Range()))
+		if f.Status == diff.Deleted {
+			gaps(h.OldStart, h.OldStart+h.OldLines-1)
+			continue
+		}
+		if h.NewLines > 0 {
+			gaps(h.NewStart, h.NewEnd())
+		}
+		if h.OldLines > 0 && !in(removalAt(h), 1) {
+			out = append(out, fmt.Sprintf("%s:%d(del)", f.Path, h.NewStart))
 		}
 	}
 	return out
+}
+
+func removalAt(h diff.Hunk) int {
+	if h.NewLines == 0 {
+		return h.NewStart + 1
+	}
+	return h.NewStart
 }
 
 func findCycle(steps []state.Step) []string {

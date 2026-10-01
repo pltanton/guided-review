@@ -19,8 +19,11 @@ func fixture() (*state.Review, []diff.File) {
 	}}
 	files := []diff.File{
 		{
-			Path:  "api/a.go",
-			Hunks: []diff.Hunk{{NewStart: 10, NewLines: 5}, {NewStart: 40, NewLines: 0}},
+			Path: "api/a.go",
+			Hunks: []diff.Hunk{
+				{NewStart: 10, NewLines: 5},
+				{OldStart: 38, OldLines: 2, NewStart: 40, NewLines: 0},
+			},
 		},
 		{Path: "wire.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 3}}},
 		{Path: "a.pb.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 100}}},
@@ -67,9 +70,28 @@ func TestValidate(t *testing.T) {
 		},
 		{"uncovered file", func(p *plan.Plan) { p.Boilerplate = nil }, "not covered: wire.go:1-3"},
 		{
-			"deleted file needs whole-file step",
-			func(p *plan.Plan) { p.Steps[0].Hunks[1].Lines = "1-4" },
-			"not covered: gone.go:0(del)",
+			"deleted file is covered by its old lines",
+			func(p *plan.Plan) { p.Steps[0].Hunks[1].Lines = "1-3" },
+			"not covered: gone.go:4",
+		},
+		{
+			"part of a hunk is not covered",
+			func(p *plan.Plan) { p.Steps[0].Hunks[0].Lines = "1-11" },
+			"not covered: api/a.go:12-14",
+		},
+		{
+			"two steps cover one hunk together",
+			func(p *plan.Plan) {
+				p.Steps[0].Hunks[0].Lines = "10-12"
+				rest := state.StepHunk{File: "api/a.go", Lines: "13-14"}
+				p.Steps[1].Hunks = append(p.Steps[1].Hunks, rest)
+			},
+			"",
+		},
+		{
+			"removed lines are covered where they were",
+			func(p *plan.Plan) { p.Steps[1].Hunks[0].Lines = "42-45" },
+			"not covered: api/a.go:40(del)",
 		},
 		{
 			"duplicate id",
