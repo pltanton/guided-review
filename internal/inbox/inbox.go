@@ -57,7 +57,7 @@ func (e Event) String() string {
 		fmt.Fprintf(&b, " re #%d", e.Comment)
 	}
 	if e.Text != "" {
-		fmt.Fprintf(&b, ": %s", e.Text)
+		fmt.Fprintf(&b, ": %s", strings.ReplaceAll(e.Text, "\n", "\n    "))
 	}
 	return b.String()
 }

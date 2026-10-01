@@ -88,7 +88,13 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEsc:
 		m.composing, m.input, m.composeThread = false, nil, ""
 		m.resume()
+	case tea.KeyCtrlJ:
+		m.insert([]rune{'\n'})
 	case tea.KeyEnter:
+		if msg.Alt {
+			m.insert([]rune{'\n'})
+			return nil
+		}
 		defer m.resume()
 		text := strings.TrimSpace(string(m.input))
 		thread := m.composeThread
@@ -120,6 +126,10 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		}
 	case tea.KeyCtrlX:
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
+	case tea.KeyUp:
+		m.inputLineMove(-1)
+	case tea.KeyDown:
+		m.inputLineMove(1)
 	case tea.KeyLeft:
 		m.inputPos = max(m.inputPos-1, 0)
 	case tea.KeyRight:
@@ -152,6 +162,31 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		m.insert(msg.Runes)
 	}
 	return nil
+}
+
+func (m *model) inputLineMove(d int) {
+	pos := min(m.inputPos, len(m.input))
+	lineStart := func(i int) int {
+		for i > 0 && m.input[i-1] != '\n' {
+			i--
+		}
+		return i
+	}
+	lineEnd := func(i int) int {
+		for i < len(m.input) && m.input[i] != '\n' {
+			i++
+		}
+		return i
+	}
+	start := lineStart(pos)
+	col := pos - start
+	switch {
+	case d < 0 && start > 0:
+		m.inputPos = min(lineStart(start-1)+col, start-1)
+	case d > 0 && lineEnd(pos) < len(m.input):
+		next := lineEnd(pos) + 1
+		m.inputPos = min(next+col, lineEnd(next))
+	}
 }
 
 func (m *model) insert(rs []rune) {
@@ -372,16 +407,22 @@ func (m *model) yank() {
 		m.status = "nothing to copy here"
 		return
 	}
+	if m.copyText(strings.Join(out, "\n")) {
+		m.visual = false
+		m.status = fmt.Sprintf("copied %d lines", len(out))
+	}
+}
+
+func (m *model) copyText(text string) bool {
 	copyText := m.clip
 	if copyText == nil {
 		copyText = clipboard
 	}
-	if err := copyText(strings.Join(out, "\n")); err != nil {
+	if err := copyText(text); err != nil {
 		m.err = err
-		return
+		return false
 	}
-	m.visual = false
-	m.status = fmt.Sprintf("copied %d lines", len(out))
+	return true
 }
 
 func clipboard(text string) error {
@@ -393,4 +434,71 @@ func clipboard(text string) error {
 	encoded := base64.StdEncoding.EncodeToString([]byte(text))
 	_, err := fmt.Fprintf(os.Stdout, "\x1b]52;c;%s\x07", encoded)
 	return err
+}
+
+const inputRows = 5
+
+type inputSeg struct {
+	from, to int
+	hard     bool
+}
+
+func wrapRunes(rs []rune, avail int) []inputSeg {
+	avail = max(avail, 1)
+	var segs []inputSeg
+	from, x, space := 0, 0, -1
+	for i, r := range rs {
+		if r == '\n' {
+			segs = append(segs, inputSeg{from, i, true})
+			from, x, space = i+1, 0, -1
+			continue
+		}
+		w := ansi.StringWidth(string(r))
+		if x+w > avail && i > from {
+			brk := i
+			if space >= from {
+				brk = space + 1
+			}
+			segs = append(segs, inputSeg{from, brk, false})
+			from, space = brk, -1
+			x = ansi.StringWidth(string(rs[from:i]))
+		}
+		if r == ' ' {
+			space = i
+		}
+		x += w
+	}
+	return append(segs, inputSeg{from, len(rs), true})
+}
+
+func (m *model) inputLines(lead, hint string, width int) []string {
+	width = max(width, 10)
+	pos := min(m.inputPos, len(m.input))
+	var lines []string
+	indent, first := ansi.StringWidth(lead), lead
+	if indent > width/2 {
+		lines, indent, first = []string{lead}, 2, "  "
+	}
+	pad, cursorLine := strings.Repeat(" ", indent), 0
+	for k, sg := range wrapRunes(m.input, width-indent-1) {
+		text := string(m.input[sg.from:sg.to])
+		if sg.from <= pos && (pos < sg.to || pos == sg.to && sg.hard) {
+			text, cursorLine = withCursor(m.input[sg.from:sg.to], pos-sg.from), len(lines)
+		}
+		if k == 0 {
+			lines = append(lines, first+text)
+		} else {
+			lines = append(lines, pad+text)
+		}
+	}
+	start := min(max(len(lines)-inputRows, 0), cursorLine)
+	lines = lines[start:min(start+inputRows, len(lines))]
+	switch last := len(lines) - 1; {
+	case hint == "":
+	case ansi.StringWidth(lines[last])+ansi.StringWidth(hint) <= width:
+		lines[last] += hint
+	default:
+		lines = append(lines, hint)
+	}
+	return lines
 }

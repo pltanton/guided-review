@@ -147,11 +147,15 @@ func (m *model) finishView() string {
 	if strings.Contains(m.preview, "--- summary") {
 		facts = append(facts, "summary")
 	}
+	keys := m.keys().key("verdict") + " verdict"
+	if r.MR != nil {
+		keys += " · " + m.keys().key("approve") + " approve"
+	}
 	top := []string{
 		"",
 		boldStyle.Render(ansi.Truncate(title, w, "…")),
 		dimStyle.Render(strings.Repeat("─", w)),
-		strings.Join(facts, dimStyle.Render(" · ")),
+		strings.Join(facts, dimStyle.Render(" · ")) + hotStyle.Render("   "+keys),
 	}
 	body, cards := m.finishBody(w)
 	h := max(m.height-len(top)-2, 1)
@@ -166,8 +170,11 @@ func (m *model) finishView() string {
 	for len(lines) < m.height-1 {
 		lines = append(lines, "")
 	}
-	hint := fmt.Sprintf("%s hand to the agent · j/k comment · E edit · DD delete · s severity"+
-		" · c ask the agent · esc back", m.keys().key("finish"))
+	km := m.keys()
+	del := km.key("delete-comment")
+	hint := fmt.Sprintf("%s hand to the agent · j/k comment · %s edit · %s%s delete · %s severity"+
+		" · %s ask the agent · esc back", km.key("finish"), km.key("edit-comment"), del, del,
+		km.key("severity"), km.key("message"))
 	if len(body) > h {
 		at := fmt.Sprintf("%d–%d of %d · ", m.previewTop+1, m.previewTop+len(shown), len(body))
 		hint = at + hint
@@ -198,16 +205,37 @@ func verdictStyle(v string) string {
 	return hotStyle.Render("changes requested")
 }
 
+func (m *model) previewSelected() int {
+	_, cards := m.finishBody(max(m.width-2, 20))
+	if m.previewSel < len(cards) {
+		return cards[m.previewSel].id
+	}
+	return 0
+}
+
 func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 	page := max(m.height/2, 1)
 	_, cards := m.finishBody(max(m.width-2, 20))
-	selected := 0
-	if m.previewSel < len(cards) {
-		selected = cards[m.previewSel].id
-	}
-	switch msg.String() {
-	case "P":
+	selected := m.previewSelected()
+	km, k := m.keys(), msg.String()
+	switch {
+	case km.previewKey("finish", k):
 		return m.finish()
+	case km.previewKey("message", k):
+		m.startCompose(inbox.KindMessage)
+		m.anchorFile, m.anchorLines, m.composeRef = "", "", selected
+		return nil
+	case km.previewKey("edit-comment", k):
+		m.editComment(selected)
+		return nil
+	case km.previewKey("delete-comment", k):
+		m.deleteCommentID(selected)
+		return nil
+	}
+	if i, ok := km.preview[k]; ok && km.actions[i].Group == finishGroup {
+		return km.actions[i].run(m)
+	}
+	switch k {
 	case "esc", "q":
 		m.preview = ""
 	case "j", "down":
@@ -222,17 +250,55 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 		m.previewTop = 0
 	case "G", "end":
 		m.previewTop = 1 << 20
-	case "c", "enter":
-		m.startCompose(inbox.KindMessage)
-		m.anchorFile, m.anchorLines, m.composeRef = "", "", selected
-	case "E":
-		m.editComment(selected)
-	case "D":
-		m.deleteCommentID(selected)
-	case "s":
-		m.cycleSeverity(selected)
 	}
 	return nil
+}
+
+var verdictCycle = []string{"approve", "changes", "blocked"}
+
+func (m *model) publishPlan() *state.PublishPlan {
+	if m.preview == "" || m.review == nil || m.review.Publish == nil || m.runGr == nil {
+		m.status = "open the finish preview first (" + m.keys().key("finish") + ")"
+		return nil
+	}
+	return m.review.Publish
+}
+
+func (m *model) cycleVerdict() {
+	if p := m.publishPlan(); p != nil {
+		i := slices.Index(verdictCycle, p.Verdict)
+		m.prepare(verdictCycle[(i+1)%len(verdictCycle)], p.Approve)
+	}
+}
+
+func (m *model) toggleApprove() {
+	p := m.publishPlan()
+	switch {
+	case p == nil:
+	case m.review.MR == nil:
+		m.status = "approve needs a merge request"
+	default:
+		m.prepare(p.Verdict, !p.Approve)
+	}
+}
+
+func (m *model) prepare(verdict string, approve bool) {
+	plan := *m.review.Publish
+	args := []string{"prepare", "--verdict", verdict, "--decisions", plan.Decisions}
+	if approve {
+		args = append(args, "--approve")
+	}
+	if out, err := m.runGr(args...); err != nil {
+		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+		return
+	}
+	plan.Verdict, plan.Approve = verdict, approve
+	m.review.Publish, m.err = &plan, nil
+	m.status = "verdict: " + ansi.Strip(verdictStyle(verdict))
+	if approve {
+		m.status += " · approve"
+	}
+	m.refreshPreview()
 }
 
 func (m *model) editComment(id int) {

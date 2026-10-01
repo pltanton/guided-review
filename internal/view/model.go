@@ -98,7 +98,13 @@ type model struct {
 	resizing string
 	chatTop  int
 
+	chatFocus, chatVisual, chatDrag bool
+	chatCursor, chatAnchor          int
+	chatFrom                        int
+
 	col        int
+	hscroll    int
+	nowrap     bool
 	pendingKey string
 	count      string
 	km         *keymap
@@ -357,6 +363,7 @@ func (m *model) applyConfig(c config.Config) {
 	m.km, err = newKeymap(c.Keys)
 	m.err = err
 	m.splitView, m.showPlan, m.mouse = c.View.Split, !c.View.HidePlan, !c.View.NoMouse
+	m.nowrap = c.View.NoWrap
 	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
 	m.context = m.baseCtx
 	if c.View.Style != "" {
@@ -603,6 +610,7 @@ func (m *model) showStep(id string) tea.Cmd {
 	}
 	m.step = st
 	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseCtx, nil
+	m.hscroll = 0
 	if m.src == nil {
 		return nil
 	}
@@ -738,6 +746,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
+	case m.chatFocus:
+		return m.handleChatKey(msg)
 	}
 	if i, ok := m.optionKey(msg.String()); ok {
 		m.answer(i)
@@ -763,14 +773,10 @@ func (m *model) jump(dir int, match func(line) bool) {
 
 func (m *model) clamp() {
 	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
-	body := m.bodyHeight()
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}
-	if m.cursor >= m.offset+body {
-		m.offset = m.cursor - body + 1
-	}
-	m.offset = max(0, m.offset)
+	m.offset = max(0, m.offset, m.topFor(m.cursor, m.bodyHeight()))
 }
 
 func (m *model) openEditor() tea.Cmd {

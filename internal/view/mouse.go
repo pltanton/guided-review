@@ -9,6 +9,9 @@ import (
 const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+	if m.preview == "" && m.popup == nil && m.chatMouse(msg) {
+		return nil
+	}
 	switch {
 	case m.preview != "" && msg.Button == tea.MouseButtonWheelUp:
 		m.previewTop = max(m.previewTop-wheelStep, 0)
@@ -33,10 +36,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		if m.resizing = m.separatorAt(msg.X, msg.Y); m.resizing != "" {
 			return nil
 		}
+		if i := m.optionAt(msg.X, msg.Y); i >= 0 {
+			m.answer(i)
+			return nil
+		}
 		if m.onChatInput(msg.X, msg.Y) {
-			if i := m.optionAt(msg.X - m.inputRowX()); i >= 0 && !m.composing {
-				m.answer(i)
-			} else if !m.composing {
+			if !m.composing {
 				m.startCompose(inbox.KindMessage)
 			}
 			return nil
@@ -65,11 +70,15 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 			return nil
 		}
-		if i, ok := m.rowAt(msg.Y); ok {
+		if i, sub, ok := m.rowAt(msg.Y); ok {
 			m.cursor, m.anchor, m.dragging, m.visual = i, i, true, false
 			m.clamp()
 			if !m.useSplit() {
-				m.col = max(msg.X-m.planWidth()-8, 0)
+				start := m.hscroll
+				if !m.nowrap {
+					start = sub * codeAvail(m.mainWidth())
+				}
+				m.col = start + max(msg.X-m.planWidth()-codePrefix, 0)
 			}
 			if it := m.lines[i]; it.Kind == RowFold || it.GapTo > 0 {
 				m.toggleFold()
@@ -84,7 +93,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
-		if i, ok := m.rowAt(msg.Y); ok {
+		if i, _, ok := m.rowAt(msg.Y); ok {
 			m.cursor = i
 			m.visual = m.cursor != m.anchor
 			m.clamp()
@@ -98,17 +107,24 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 func (m *model) scroll(d int) {
 	body := m.bodyHeight()
 	m.offset = max(0, min(m.offset+d, len(m.lines)-body))
-	m.cursor = max(m.offset, min(m.cursor, m.offset+body-1))
+	m.cursor = max(m.offset, min(m.cursor, m.lastShown()))
 	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
 }
 
-func (m *model) rowAt(y int) (int, bool) {
+func (m *model) rowAt(y int) (i, sub int, ok bool) {
 	hdr := len(m.header())
 	if y < hdr || y >= hdr+m.bodyHeight() {
-		return 0, false
+		return 0, 0, false
 	}
-	i := m.offset + y - hdr
-	return i, i < len(m.lines)
+	sub = y - hdr
+	for i = m.offset; i < len(m.lines); i++ {
+		h := m.lineHeight(i)
+		if sub < h {
+			return i, sub, true
+		}
+		sub -= h
+	}
+	return 0, 0, false
 }
 
 func (m *model) overChat(x, y int) bool {
@@ -134,13 +150,18 @@ func (m *model) separatorAt(x, y int) string {
 
 func (m *model) onChatInput(x, y int) bool {
 	bodyH := m.height - len(m.bottomLines())
+	_, top, _, pills := m.pillsAt()
 	switch {
+	case pills && m.chatWidth() > 0:
+		return x > m.width-m.chatWidth() && y >= top-1 && y < bodyH
+	case pills:
+		return y >= top && y < m.height-1
 	case m.step == nil:
 		return y == m.height-2
 	case m.chatWidth() > 0:
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
-	return len(m.answerOptions()) > 0 && y == m.height-2
+	return false
 }
 
 func (m *model) inputRowX() int {

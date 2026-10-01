@@ -71,4 +71,4 @@ Tell the human how to start: in tmux, inside a repository,
 /guided-review <merge request or pull request URL>
 ```
 
-and that `h` in the viewer lists every key.
+and that `?` in the viewer lists every key.

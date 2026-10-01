@@ -35,10 +35,10 @@ var (
 	fieldStyle    = mutedTone.fg().Background(surfaceTone.color())
 	labelStyle    = mutedTone.fg().Bold(true)
 	chapterStyle  = accentTone.fg()
+	chatStyle     = accentTone.fg().Bold(true)
 )
 
 const (
-	hints      = "c message  h help  q quit"
 	configHint = "~/.config/guided-review/config.yaml (gr config init)"
 )
 
@@ -99,7 +99,9 @@ func (m *model) footer() (string, []span) {
 	}
 	if m.step == nil {
 		if m.status == "" {
-			tail = hints
+			km := m.keys()
+			tail = km.key("message") + " message  " + km.key("help") + " help  " +
+				km.key("quit") + " quit"
 		}
 		return dimStyle.Render(tail), nil
 	}
@@ -165,24 +167,30 @@ func (m *model) chatScrollHint() string {
 	return m.keys().key("chat-up") + "/" + m.keys().key("chat-down") + " scroll"
 }
 
-func (m *model) sideChatLines(h, w int) []string {
+const sideChatTop = 3
+
+func (m *model) sidePrompt(w int) []string {
 	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
-	lines := []string{
-		labelStyle.Render("CHAT"),
-		dimStyle.Render(m.chatScrollHint() + " · drag │ to resize"),
-		rule,
-	}
 	km := m.keys()
-	prompt := []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
-		km.key("message"), km.key("message-general")))}
 	switch {
 	case m.inputInSideChat():
-		prompt = append([]string{rule}, m.promptLines(w)...)
+		return append([]string{rule}, m.promptLines(w)...)
 	case len(m.answerOptions()) > 0:
-		pills, _ := m.optionPills()
-		prompt = []string{rule, pills}
+		pills, _ := m.optionPills(w)
+		return append([]string{rule}, pills...)
 	}
-	lines = append(lines, window(m.chatLines(w, true), h-len(lines)-len(prompt), m.chatTop)...)
+	return []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
+		km.key("message"), km.key("message-general")))}
+}
+
+func (m *model) sideChatLines(h, w int) []string {
+	title, hint := labelStyle.Render("CHAT"), m.chatScrollHint()+" · drag │ to resize"
+	if m.chatFocus {
+		title, hint = chatStyle.Render("CHAT"), m.chatFocusHint()
+	}
+	lines := []string{title, dimStyle.Render(hint), dimStyle.Render(strings.Repeat("─", max(w, 1)))}
+	prompt := m.sidePrompt(w)
+	lines = append(lines, m.chatWindow(m.chatRows(w, true), h-len(lines)-len(prompt), w)...)
 	for len(lines)+len(prompt) < h {
 		lines = append(lines, "")
 	}
@@ -299,6 +307,7 @@ type chatLine struct {
 	at   time.Time
 	step string
 	you  bool
+	live bool
 	text string
 }
 
@@ -336,17 +345,32 @@ func (m *model) conversation(all bool) []chatLine {
 	for _, e := range m.events {
 		if m.pending(e) && !m.agentIdle {
 			thinking := hotStyle.Render(m.spin() + " thinking…")
-			out = append(out, chatLine{at: e.Time, step: e.Step, text: thinking})
+			out = append(out, chatLine{at: e.Time, step: e.Step, live: true, text: thinking})
 			break
 		}
 	}
 	return out
 }
 
+type chatRow struct {
+	text      string
+	msg, hard int
+	source    string
+}
+
 func (m *model) chatLines(width int, all bool) []string {
+	var out []string
+	for _, r := range m.chatRows(width, all) {
+		out = append(out, r.text)
+	}
+	return out
+}
+
+func (m *model) chatRows(width int, all bool) []chatRow {
 	const gutter = "       " + "│ "
 	roomy := all || m.step == nil
-	var lines []string
+	var lines []chatRow
+	gap := func(text string) { lines = append(lines, chatRow{text: text, msg: -1}) }
 	prevStep, prevYou := "\x00", false
 	for i, c := range m.conversation(all) {
 		named := roomy || i == 0 || c.you != prevYou
@@ -359,12 +383,12 @@ func (m *model) chatLines(width int, all bool) []string {
 				label = c.step
 			}
 			if len(lines) > 0 {
-				lines = append(lines, "")
+				gap("")
 			}
-			lines = append(lines, dimStyle.Render("── "+label+" ──"))
+			gap(dimStyle.Render("── " + label + " ──"))
 			prevStep = c.step
 		} else if roomy && i > 0 {
-			lines = append(lines, "")
+			gap("")
 		}
 		style, name := agentStyle, "claude"
 		if c.you {
@@ -372,22 +396,28 @@ func (m *model) chatLines(width int, all bool) []string {
 		}
 		bar := style.Render("│")
 		textW := max(width-ansi.StringWidth(gutter), 10)
-		for j, l := range strings.Split(ansi.Wrap(c.text, textW, ""), "\n") {
-			lead := "       " + bar + " "
-			if j == 0 && named {
-				lead = style.Render(name) + " " + bar + " "
+		msg, first := i, true
+		if c.live {
+			msg = -1
+		}
+		for h, hard := range strings.Split(c.text, "\n") {
+			for _, l := range strings.Split(ansi.Wrap(hard, textW, ""), "\n") {
+				lead := "       " + bar + " "
+				if first && named {
+					lead = style.Render(name) + " " + bar + " "
+				}
+				first = false
+				lines = append(lines, chatRow{text: lead + l, msg: msg, hard: h, source: hard})
 			}
-			lines = append(lines, lead+l)
 		}
 		prevYou = c.you
 	}
 	return lines
 }
 
-func window(lines []string, height, fromBottom int) []string {
-	end := max(len(lines)-fromBottom, min(height, len(lines)))
-	start := max(end-height, 0)
-	return lines[start:end]
+func windowRange(n, height, fromBottom int) (start, end int) {
+	end = max(n-fromBottom, min(height, n))
+	return max(end-height, 0), end
 }
 
 func (m *model) bottomLines() []string {
@@ -396,14 +426,18 @@ func (m *model) bottomLines() []string {
 		limit = max(m.height-4, 1)
 	}
 	var lines []string
-	chat := m.chatLines(m.width, m.step == nil)
+	chat := m.chatRows(m.width, m.step == nil)
 	if len(chat) > 0 && m.chatWidth() == 0 {
-		label := "── chat · " + m.chatScrollHint() + " "
+		label, style := "── chat · "+m.chatScrollHint()+" ", dimStyle
+		if m.chatFocus {
+			label, style = "── chat · "+m.chatFocusHint()+" ", chatStyle
+		}
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
-		lines = append(lines, dimStyle.Render(ansi.Truncate(label, m.width, "")))
-		lines = append(lines, window(chat, limit, m.chatTop)...)
-		if pills, _ := m.optionPills(); len(m.answerOptions()) > 0 && !m.composing {
-			lines = append(lines, pills)
+		lines = append(lines, style.Render(ansi.Truncate(label, m.width, "")))
+		lines = append(lines, m.chatWindow(chat, limit, m.width)...)
+		if len(m.answerOptions()) > 0 && !m.composing {
+			pills, _ := m.optionPills(m.width)
+			lines = append(lines, pills...)
 		}
 	}
 	if m.inputInSideChat() {
@@ -417,12 +451,11 @@ func (m *model) promptLines(width int) []string {
 	var last string
 	switch {
 	case m.composing && m.cmdMode != 0:
-		pos := min(m.inputPos, len(m.input))
-		last = cursorStyle.Render(string(m.cmdMode)) + m.inputWithCursor(pos)
+		hint := ""
 		if m.status != "" {
-			last += "   " + dimStyle.Render(m.status)
+			hint = "   " + dimStyle.Render(m.status)
 		}
-		return wrapInput(last, width)
+		return m.inputLines(cursorStyle.Render(string(m.cmdMode)), hint, width)
 	case m.composing:
 		prompt := "› "
 		switch {
@@ -465,9 +498,8 @@ func (m *model) promptLines(width int) []string {
 		if m.anchorFile != "" {
 			hints = append(hints, "⌫ no line")
 		}
-		pos := min(m.inputPos, len(m.input))
-		last = lead + m.inputWithCursor(pos) + dimStyle.Render("   "+strings.Join(hints, " · "))
-		return wrapInput(last, width)
+		hints = append(hints, "alt+enter new line")
+		return m.inputLines(lead, dimStyle.Render("   "+strings.Join(hints, " · ")), width)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
@@ -508,18 +540,12 @@ func (m *model) View() string {
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
 	ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
-	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 &&
-		m.cursor-m.offset >= room {
-		m.offset = m.cursor - room + 1
+	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 {
+		m.offset = max(m.offset, m.topFor(m.cursor, room))
 	}
 
-	body := m.bodyHeight()
-	for i := m.offset; !m.help && i < min(len(m.lines), m.offset+body); i++ {
-		m.markSeen(m.lines[i])
-	}
-	below := ""
-	if rest := len(m.lines) - (m.offset + body); rest > 0 {
-		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
+	if !m.help {
+		m.markShown()
 	}
 	panel := func(title, hint string, lines []string) []string {
 		rule := dimStyle.Render(strings.Repeat("─", max(mw, 1)))
@@ -535,37 +561,31 @@ func (m *model) View() string {
 		loading := fmt.Sprintf("%s loading %d files…", m.spin(), len(m.step.Hunks))
 		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
+	shown := m.offset
 	for i := m.offset; len(main) < bodyH-1; i++ {
 		if i >= len(m.lines) || m.help {
 			main = append(main, "")
 			continue
 		}
-		row := m.renderRow(i, mw)
+		rows := m.renderRows(i, mw)
 		if i == m.cursor && !m.useSplit() {
 			if plain, ok := m.currentCode(); ok {
 				from, to := wordBounds(plain, m.col)
-				row = underline(row, codePrefix+from, codePrefix+to)
+				m.underlineWord(rows, from, to, mw)
 			}
 		}
-		line := fit(row, mw)
-		switch {
-		case i == m.cursor:
-			line = paint(line, cursorTone)
-		case m.selected(i):
-			line = paint(line, selectTone)
-		case m.lines[i].Kind == RowFile:
-			line = paint(line, fileTone)
-		case m.lines[i].Kind == RowNote && m.lines[i].Dim:
-			line = paint(line, surfaceTone)
-		case m.lines[i].Kind == RowNote:
-			line = paint(line, noteKinds[m.lines[i].NoteKind].bg)
-		case m.lines[i].Pair:
-		case m.lines[i].Kind == RowAdded:
-			line = paint(line, addLineTone)
-		case m.lines[i].Kind == RowRemoved:
-			line = paint(line, delLineTone)
+		if room := bodyH - 1 - len(main); len(rows) <= room {
+			shown = i + 1
+		} else {
+			rows = rows[:room]
 		}
-		main = append(main, line)
+		for _, row := range rows {
+			main = append(main, m.paintRow(i, fit(row, mw)))
+		}
+	}
+	below := ""
+	if rest := len(m.lines) - shown; rest > 0 && !m.help {
+		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
 	if m.popup != nil {
@@ -604,9 +624,25 @@ func (m *model) View() string {
 	return strings.Join(out, "\n")
 }
 
-func wrapInput(s string, width int) []string {
-	lines := strings.Split(ansi.Wrap(s, max(width, 10), ""), "\n")
-	return lines[max(len(lines)-5, 0):]
+func (m *model) paintRow(i int, line string) string {
+	switch l := m.lines[i]; {
+	case i == m.cursor:
+		return paint(line, cursorTone)
+	case m.selected(i):
+		return paint(line, selectTone)
+	case l.Kind == RowFile:
+		return paint(line, fileTone)
+	case l.Kind == RowNote && l.Dim:
+		return paint(line, surfaceTone)
+	case l.Kind == RowNote:
+		return paint(line, noteKinds[l.NoteKind].bg)
+	case l.Pair:
+	case l.Kind == RowAdded:
+		return paint(line, addLineTone)
+	case l.Kind == RowRemoved:
+		return paint(line, delLineTone)
+	}
+	return line
 }
 
 func fit(s string, w int) string {
@@ -786,13 +822,6 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	return out[:h]
 }
 
-func (m *model) renderRow(i, w int) string {
-	if m.useSplit() {
-		return m.renderSplit(i, w)
-	}
-	return renderUnified(m.animate(m.lines[i].Row))
-}
-
 func renderUnified(r Row) string {
 	switch r.Kind {
 	case RowFile:
@@ -829,36 +858,8 @@ func renderUnified(r Row) string {
 const codePrefix = len("+1234 | ")
 
 func renderCode(c Cell, hot bool) string {
-	marker, num, text := " ", fmt.Sprintf("%4d", c.Line), c.Text
-	if c.Line == 0 {
-		num = "    "
-	}
-	switch c.Kind {
-	case RowAdded:
-		marker = addStyle.Render("+")
-	case RowRemoved:
-		marker = delStyle.Render("-")
-	}
-	switch {
-	case c.Moved:
-		marker, text = dimStyle.Render("↕"), dimStyle.Render(c.Plain)
-	case c.Reformat:
-		marker = dimStyle.Render("≈")
-	case c.Emph != nil:
-		text = emphasize(c.Text, c.Emph, c.Kind)
-	}
-	if c.RenamedFrom != "" {
-		marker = gapStyle.Render("⇄")
-		text += dimStyle.Render("  ← was " + c.RenamedFrom)
-	}
-	if hot {
-		marker = hotStyle.Render("⚑")
-	}
-	sep := dimStyle.Render(" │ ")
-	if c.Mark != "" {
-		sep = " " + noteKinds[c.Mark].tone.fg().Render("┃") + " "
-	}
-	return marker + dimStyle.Render(num) + sep + text
+	gutter, _, text := codeParts(c, hot)
+	return gutter + text
 }
 
 func emphasize(text string, emph [][2]int, kind RowKind) string {
@@ -938,17 +939,13 @@ func renderNote(r Row) string {
 	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Italic(true).Render(r.Text)
 }
 
-func (m *model) renderSplit(i, w int) string {
-	l := m.lines[i]
-	if !l.Pair {
-		return renderUnified(m.animate(l.Row))
-	}
-	side := (w - 2) / 2
-	cell := func(c Cell, hot bool) string {
+func (m *model) renderSplit(l line, w int) (rows []string) {
+	lw, rw := m.splitWidths(w)
+	cell := func(c Cell, hot bool, w int) []string {
 		if c.Line == 0 && c.Text == "" {
-			return ""
+			return nil
 		}
-		return renderCode(c, hot)
+		return m.codeRows(c, hot, w)
 	}
 	tint := func(s string, c Cell, w int) string {
 		switch c.Kind {
@@ -959,9 +956,19 @@ func (m *model) renderSplit(i, w int) string {
 		}
 		return fit(s, w)
 	}
-	left := tint(cell(l.Left, false), l.Left, side)
-	right := tint(cell(l.Right, l.Hotspot && l.Right.Line > 0), l.Right, w-side-1)
-	return left + dimStyle.Render("┃") + right
+	left := cell(l.Left, false, lw)
+	right := cell(l.Right, l.Hotspot && l.Right.Line > 0, rw)
+	at := func(side []string, k int) string {
+		if k < len(side) {
+			return side[k]
+		}
+		return ""
+	}
+	for k := range max(len(left), len(right), 1) {
+		rows = append(rows, tint(at(left, k), l.Left, lw)+dimStyle.Render("┃")+
+			tint(at(right, k), l.Right, rw))
+	}
+	return rows
 }
 
 const intakeWidth = 100
@@ -970,23 +977,18 @@ func (m *model) intakeView() string {
 	w := min(max(m.width-2, 20), intakeWidth)
 	pad := strings.Repeat(" ", max((m.width-w)/2, 0))
 	top := m.intakeTop(w)
-	prompt := m.promptLines(w)
-	if !m.composing && m.err == nil {
-		field := fmt.Sprintf("› press %s or enter to answer the agent", m.keys().key("message"))
-		line := fieldStyle.Render(fit(field, w))
-		if len(m.answerOptions()) > 0 {
-			line, _ = m.optionPills()
-		}
-		prompt = append([]string{line}, prompt...)
-	}
+	prompt := m.intakePrompt(w)
 	chatH := max(m.height-len(top)-len(prompt)-1, 1)
-	chat := window(m.chatLines(w, false), chatH, m.chatTop)
+	chat := m.chatWindow(m.chatRows(w, false), chatH, w)
 	if len(chat) == 0 {
 		chat = []string{dimStyle.Render("the agent is reading the MR; its questions show up here")}
 	}
-	rule := "── conversation "
+	rule, style := "── conversation ", dimStyle
+	if m.chatFocus {
+		rule, style = "── conversation · "+m.chatFocusHint()+" ", chatStyle
+	}
 	rule += strings.Repeat("─", max(w-ansi.StringWidth(rule), 0))
-	lines := append(top, dimStyle.Render(rule))
+	lines := append(top, style.Render(rule))
 	lines = append(lines, chat...)
 	for len(lines)+len(prompt) < m.height {
 		lines = append(lines, "")
@@ -996,6 +998,19 @@ func (m *model) intakeView() string {
 		lines[i] = pad + fit(l, w)
 	}
 	return strings.Join(lines, "\n")
+}
+
+func (m *model) intakePrompt(w int) []string {
+	prompt := m.promptLines(w)
+	if m.composing || m.err != nil {
+		return prompt
+	}
+	field := fmt.Sprintf("› press %s or enter to answer the agent", m.keys().key("message"))
+	lines := []string{fieldStyle.Render(fit(field, w))}
+	if len(m.answerOptions()) > 0 {
+		lines, _ = m.optionPills(w)
+	}
+	return append(lines, prompt...)
 }
 
 func (m *model) intakeTop(w int) []string {
@@ -1088,12 +1103,12 @@ func (m *model) animate(r Row) Row {
 	return r
 }
 
-func (m *model) inputWithCursor(pos int) string {
-	if pos >= len(m.input) {
-		return string(m.input) + "█"
+func withCursor(rs []rune, pos int) string {
+	if pos >= len(rs) || rs[pos] == '\n' {
+		return string(rs[:min(pos, len(rs))]) + "█"
 	}
-	under := lipgloss.NewStyle().Reverse(true).Render(string(m.input[pos]))
-	return string(m.input[:pos]) + under + string(m.input[pos+1:])
+	under := lipgloss.NewStyle().Reverse(true).Render(string(rs[pos]))
+	return string(rs[:pos]) + under + string(rs[pos+1:])
 }
 
 func (m *model) keyHints(prefix string) []string {

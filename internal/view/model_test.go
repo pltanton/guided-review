@@ -83,7 +83,7 @@ func TestNavigation(t *testing.T) {
 func TestEventsFromKeys(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.cursor = 2
-	m.Update(key("?"))
+	m.Update(key("A"))
 	m.Update(key("enter"))
 	m.Update(key("v"))
 	m.Update(key("j"))
@@ -348,7 +348,7 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"next · >", "message · c", "ask · ?", "skip · S"} {
+	for _, b := range []string{"next · >", "message · c", "ask · A", "skip · S"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
@@ -945,7 +945,7 @@ func TestKeymapOverrides(t *testing.T) {
 
 func TestHelpOverlay(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.Update(key("h"))
+	m.Update(key("?"))
 	out := ansi.Strip(m.View())
 	for _, want := range []string{"navigate", "lsp", "gd", "go to definition", "finish"} {
 		if !strings.Contains(out, want) {
@@ -1186,7 +1186,7 @@ func TestRawComment(t *testing.T) {
 func TestAskDeleteAndChatSize(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.cursor = 2
-	m.Update(key("?"))
+	m.Update(key("A"))
 	typeText(m, "why 1?")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "ask a.go:2 › why 1?") {
 		t.Fatalf("ask prompt missing:\n%s", v)
@@ -1267,7 +1267,7 @@ func TestFoldNote(t *testing.T) {
 func TestCursorHint(t *testing.T) {
 	m, _ := newTestModel(t)
 	footer := func() string { f, _ := m.footer(); return ansi.Strip(f) }
-	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "h help · q quit") {
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "? help · q quit") {
 		t.Fatalf("plain line footer: %q", f)
 	}
 	m.seek(func(l line) bool { return l.Kind == RowNote })
@@ -1808,10 +1808,10 @@ func TestFinishScreenEdits(t *testing.T) {
 func TestInputCursorKeepsText(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.input, m.inputPos = []rune("проблемы"), 4
-	if got := ansi.Strip(m.inputWithCursor(4)); got != "проблемы" {
+	if got := ansi.Strip(withCursor(m.input, 4)); got != "проблемы" {
 		t.Fatalf("a cursor inside the text must not add a character: %q", got)
 	}
-	if got := ansi.Strip(m.inputWithCursor(8)); got != "проблемы█" {
+	if got := ansi.Strip(withCursor(m.input, 8)); got != "проблемы█" {
 		t.Fatalf("at the end the cursor is a block: %q", got)
 	}
 }

@@ -17,6 +17,7 @@ type View struct {
 	Split    bool   `yaml:"split"`
 	HidePlan bool   `yaml:"hide_plan"`
 	NoMouse  bool   `yaml:"no_mouse"`
+	NoWrap   bool   `yaml:"no_wrap"`
 	Context  int    `yaml:"context"`
 	Style    string `yaml:"style"`
 }

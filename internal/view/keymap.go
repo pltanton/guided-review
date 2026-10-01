@@ -21,7 +21,12 @@ type Action struct {
 	run   func(*model) tea.Cmd
 }
 
-var groups = []string{"navigate", "diff", "lsp", "review", "view"}
+const finishGroup = "finish preview"
+
+var (
+	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
+	previewActions = []string{"finish", "edit-comment", "delete-comment", "message"}
+)
 
 func DefaultActions() []Action {
 	do := func(f func(*model)) func(*model) tea.Cmd {
@@ -90,6 +95,10 @@ func DefaultActions() []Action {
 			run: do((*model).wordNext)},
 		{Name: "word-prev", Group: nav, Desc: "previous symbol in the line", Keys: k("b"),
 			run: do((*model).wordPrev)},
+		{Name: "scroll-left", Group: nav, Desc: "scroll long lines left (no wrap)", Keys: k("h"),
+			run: do(func(m *model) { m.scrollSideways(-hscrollStep) })},
+		{Name: "scroll-right", Group: nav, Desc: "scroll long lines right (no wrap)", Keys: k("l"),
+			run: do(func(m *model) { m.scrollSideways(hscrollStep) })},
 
 		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block; fold a note",
 			Keys: k("o"), run: do((*model).toggleFold)},
@@ -134,7 +143,7 @@ func DefaultActions() []Action {
 				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 			})},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
-			Keys: k("?"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
+			Keys: k("A"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
 		{Name: "details", Group: rev, Desc: "details behind the agent's note under the cursor",
 			Keys: k("i"), run: do((*model).noteDetails)},
 		{Name: "yank", Group: rev, Desc: "copy the selection or the line to the clipboard",
@@ -154,12 +163,16 @@ func DefaultActions() []Action {
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
 			run: (*model).openEditor},
 
+		{Name: "wrap", Group: vw, Desc: "wrap long lines / cut them and scroll sideways",
+			Keys: k("W"), run: do(func(m *model) { m.setWrap(m.nowrap) })},
 		{Name: "plan", Group: vw, Desc: "show / hide the plan panel", Keys: k("p"),
 			run: do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
 			run: do((*model).focusAgent)},
+		{Name: "chat", Group: vw, Desc: "select in the chat: j/k move, v select, y copy, esc back",
+			Keys: k("t"), run: do((*model).focusChat)},
 		{Name: "chat-up", Group: vw, Desc: "scroll the chat up", Keys: k("ctrl+y"),
 			run: do(func(m *model) { m.chatTop += wheelStep })},
 		{Name: "chat-down", Group: vw, Desc: "scroll the chat down", Keys: k("ctrl+e"),
@@ -171,12 +184,19 @@ func DefaultActions() []Action {
 			Keys:  k(":"),
 			run:   do(func(m *model) { m.startCmd(':') }),
 		},
-		{Name: "help", Group: vw, Desc: "this help", Keys: k("h", "f1"),
+		{Name: "help", Group: vw, Desc: "this help", Keys: k("?", "f1"),
 			run: do(func(m *model) { m.help, m.helpTop = true, 0 })},
 		{Name: "interrupt", Group: rev, Desc: "stop the agent's current work and add to your question",
 			Keys: k("ctrl+c"), run: do((*model).interrupt)},
 		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q"),
 			run: func(*model) tea.Cmd { return tea.Quit }},
+
+		{Name: "verdict", Group: finishGroup, Desc: "verdict: approve → changes → blocked",
+			Keys: k("v"), run: do((*model).cycleVerdict)},
+		{Name: "approve", Group: finishGroup, Desc: "approve the MR on publishing, or not",
+			Keys: k("a"), run: do((*model).toggleApprove)},
+		{Name: "severity", Group: finishGroup, Desc: "next severity of the selected comment",
+			Keys: k("s"), run: do(func(m *model) { m.cycleSeverity(m.previewSelected()) })},
 	}
 }
 
@@ -205,11 +225,15 @@ func (m *model) focusAgent() {
 type keymap struct {
 	actions  []Action
 	byKey    map[string]int
+	preview  map[string]int
 	prefixes map[string]bool
 }
 
 func newKeymap(overrides map[string][]string) (*keymap, error) {
-	km := &keymap{actions: DefaultActions(), byKey: map[string]int{}, prefixes: map[string]bool{}}
+	km := &keymap{
+		actions: DefaultActions(), byKey: map[string]int{}, preview: map[string]int{},
+		prefixes: map[string]bool{},
+	}
 	var unknown []string
 	for name, keys := range overrides {
 		i := slices.IndexFunc(km.actions, func(a Action) bool { return a.Name == name })
@@ -220,16 +244,25 @@ func newKeymap(overrides map[string][]string) (*keymap, error) {
 		km.actions[i].Keys = keys
 	}
 	var conflicts []string
+	bind := func(byKey map[string]int, i int, k string) bool {
+		if j, taken := byKey[k]; taken {
+			conflicts = append(
+				conflicts,
+				fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, km.actions[i].Name),
+			)
+			return false
+		}
+		byKey[k] = i
+		return true
+	}
 	for i, a := range km.actions {
 		for _, k := range a.Keys {
-			if j, taken := km.byKey[k]; taken {
-				conflicts = append(
-					conflicts,
-					fmt.Sprintf("%q: %s and %s", k, km.actions[j].Name, a.Name),
-				)
+			if a.Group == finishGroup || slices.Contains(previewActions, a.Name) {
+				bind(km.preview, i, k)
+			}
+			if a.Group == finishGroup || !bind(km.byKey, i, k) {
 				continue
 			}
-			km.byKey[k] = i
 			if first, _, seq := strings.Cut(k, " "); seq {
 				km.prefixes[first] = true
 			}
@@ -256,6 +289,11 @@ func (km *keymap) key(name string) string {
 		}
 	}
 	return ""
+}
+
+func (km *keymap) previewKey(name, k string) bool {
+	i, ok := km.preview[k]
+	return ok && km.actions[i].Name == name
 }
 
 func (m *model) keys() *keymap {
@@ -329,12 +367,14 @@ func (m *model) back() tea.Cmd {
 func (m *model) wordNext() {
 	if plain, ok := m.currentCode(); ok {
 		m.col = nextWord(plain, wordStart(plain, m.col))
+		m.followCol()
 	}
 }
 
 func (m *model) wordPrev() {
 	if plain, ok := m.currentCode(); ok {
 		m.col = prevWord(plain, wordStart(plain, m.col))
+		m.followCol()
 	}
 }
 

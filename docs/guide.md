@@ -1,7 +1,7 @@
 # guided-review guide
 
 What happens during a review, and how to configure it. Installation is in
-[INSTALL.md](../INSTALL.md); every key is listed by `h` in the viewer.
+[INSTALL.md](../INSTALL.md); every key is listed by `?` in the viewer.
 
 ## How it works
 
@@ -32,10 +32,12 @@ mentions, written during planning, so it opens instantly.
 <details>
 <summary>Talking to the agent</summary>
 
-Point at a line or a selection and write. The agent writes the comment with a severity
+Point at a line or a selection and write: Enter sends, Alt+Enter or Ctrl+J starts a new
+line (so does Shift+Enter in a terminal that sends it as Alt+Enter). The agent writes the comment with a severity
 and, for an obvious fix, a suggestion. You can also just ask about code without leaving
 a comment, or save a comment exactly as typed. When the agent needs a decision, it
-offers answers you pick with one key.
+offers answers you pick with one key. `t` moves into the chat, where `v` selects lines
+and `y` copies them; dragging the mouse over chat lines copies them too.
 
 </details>
 
@@ -53,7 +55,9 @@ reviewed or skipped.
 
 The unified view shows the resulting code. Large removals fold away, moved code is
 marked as moved, whitespace-only changes and renames are marked instead of highlighted,
-and only the changed words inside a line are coloured. With a language server you get
+and only the changed words inside a line are coloured. Long lines wrap under the code
+column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
+instead, and `h`/`l` scroll sideways. With a language server you get
 definitions, references, implementations, callers, and a call flow for the step.
 
 </details>
@@ -64,7 +68,8 @@ definitions, references, implementations, callers, and a call flow for the step.
 `gr` never writes to GitLab or GitHub. At the end it writes inline comments and a
 summary (verdict, decisions, what was skipped and why) to
 `<git common dir>/guided-review/exports/<id>/` (`gr export --dir` prints it).
-You review and edit it, then the agent posts it: GitLab draft notes in one batch or one
+You review and edit it (in the preview `v` cycles the verdict and `a` turns approve on
+or off), then the agent posts it: GitLab draft notes in one batch or one
 GitHub review. A `guided-review-notify` skill, if present, then tells the author. A
 local branch without an MR ends in `fixes.json` instead, which the agent applies right
 away or leaves for later (`gr list` shows where it is).

@@ -88,6 +88,10 @@ func TestFormat(t *testing.T) {
 			inbox.Event{Kind: inbox.KindEdit, Step: "s3", Comment: 2, Text: "rename to total"},
 			"[edit] s3 #2: rename to total",
 		},
+		{
+			inbox.Event{Kind: inbox.KindMessage, Step: "s3", Text: "two things:\n- a\n[x] b"},
+			"[message] s3: two things:\n    - a\n    [x] b",
+		},
 	}
 	for _, tt := range tests {
 		if got := tt.e.String(); got != tt.want {
