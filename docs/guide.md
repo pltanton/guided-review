@@ -1,7 +1,7 @@
 # guided-review guide
 
 What happens during a review, and how to configure it. Installation is in
-[INSTALL.md](../INSTALL.md); every key is listed by `h` in the viewer.
+[INSTALL.md](../INSTALL.md); every key is listed by `?` in the viewer.
 
 ## How it works
 
@@ -53,7 +53,9 @@ reviewed or skipped.
 
 The unified view shows the resulting code. Large removals fold away, moved code is
 marked as moved, whitespace-only changes and renames are marked instead of highlighted,
-and only the changed words inside a line are coloured. With a language server you get
+and only the changed words inside a line are coloured. Long lines wrap under the code
+column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
+instead, and `h`/`l` scroll sideways. With a language server you get
 definitions, references, implementations, callers, and a call flow for the step.
 
 </details>

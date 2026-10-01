@@ -38,7 +38,6 @@ var (
 )
 
 const (
-	hints      = "c message  h help  q quit"
 	configHint = "~/.config/guided-review/config.yaml (gr config init)"
 )
 
@@ -99,7 +98,9 @@ func (m *model) footer() (string, []span) {
 	}
 	if m.step == nil {
 		if m.status == "" {
-			tail = hints
+			km := m.keys()
+			tail = km.key("message") + " message  " + km.key("help") + " help  " +
+				km.key("quit") + " quit"
 		}
 		return dimStyle.Render(tail), nil
 	}
@@ -508,18 +509,12 @@ func (m *model) View() string {
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
 	ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
-	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 &&
-		m.cursor-m.offset >= room {
-		m.offset = m.cursor - room + 1
+	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 {
+		m.offset = max(m.offset, m.topFor(m.cursor, room))
 	}
 
-	body := m.bodyHeight()
-	for i := m.offset; !m.help && i < min(len(m.lines), m.offset+body); i++ {
-		m.markSeen(m.lines[i])
-	}
-	below := ""
-	if rest := len(m.lines) - (m.offset + body); rest > 0 {
-		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
+	if !m.help {
+		m.markShown()
 	}
 	panel := func(title, hint string, lines []string) []string {
 		rule := dimStyle.Render(strings.Repeat("─", max(mw, 1)))
@@ -535,37 +530,31 @@ func (m *model) View() string {
 		loading := fmt.Sprintf("%s loading %d files…", m.spin(), len(m.step.Hunks))
 		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
+	shown := m.offset
 	for i := m.offset; len(main) < bodyH-1; i++ {
 		if i >= len(m.lines) || m.help {
 			main = append(main, "")
 			continue
 		}
-		row := m.renderRow(i, mw)
+		rows := m.renderRows(i, mw)
 		if i == m.cursor && !m.useSplit() {
 			if plain, ok := m.currentCode(); ok {
 				from, to := wordBounds(plain, m.col)
-				row = underline(row, codePrefix+from, codePrefix+to)
+				m.underlineWord(rows, from, to, mw)
 			}
 		}
-		line := fit(row, mw)
-		switch {
-		case i == m.cursor:
-			line = paint(line, cursorTone)
-		case m.selected(i):
-			line = paint(line, selectTone)
-		case m.lines[i].Kind == RowFile:
-			line = paint(line, fileTone)
-		case m.lines[i].Kind == RowNote && m.lines[i].Dim:
-			line = paint(line, surfaceTone)
-		case m.lines[i].Kind == RowNote:
-			line = paint(line, noteKinds[m.lines[i].NoteKind].bg)
-		case m.lines[i].Pair:
-		case m.lines[i].Kind == RowAdded:
-			line = paint(line, addLineTone)
-		case m.lines[i].Kind == RowRemoved:
-			line = paint(line, delLineTone)
+		if room := bodyH - 1 - len(main); len(rows) <= room {
+			shown = i + 1
+		} else {
+			rows = rows[:room]
 		}
-		main = append(main, line)
+		for _, row := range rows {
+			main = append(main, m.paintRow(i, fit(row, mw)))
+		}
+	}
+	below := ""
+	if rest := len(m.lines) - shown; rest > 0 && !m.help {
+		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
 	if m.popup != nil {
@@ -602,6 +591,27 @@ func (m *model) View() string {
 		out = append(out, fit(line, m.width))
 	}
 	return strings.Join(out, "\n")
+}
+
+func (m *model) paintRow(i int, line string) string {
+	switch l := m.lines[i]; {
+	case i == m.cursor:
+		return paint(line, cursorTone)
+	case m.selected(i):
+		return paint(line, selectTone)
+	case l.Kind == RowFile:
+		return paint(line, fileTone)
+	case l.Kind == RowNote && l.Dim:
+		return paint(line, surfaceTone)
+	case l.Kind == RowNote:
+		return paint(line, noteKinds[l.NoteKind].bg)
+	case l.Pair:
+	case l.Kind == RowAdded:
+		return paint(line, addLineTone)
+	case l.Kind == RowRemoved:
+		return paint(line, delLineTone)
+	}
+	return line
 }
 
 func wrapInput(s string, width int) []string {
@@ -786,13 +796,6 @@ func (m *model) sidebar(h, w int) []sideEntry {
 	return out[:h]
 }
 
-func (m *model) renderRow(i, w int) string {
-	if m.useSplit() {
-		return m.renderSplit(i, w)
-	}
-	return renderUnified(m.animate(m.lines[i].Row))
-}
-
 func renderUnified(r Row) string {
 	switch r.Kind {
 	case RowFile:
@@ -829,36 +832,8 @@ func renderUnified(r Row) string {
 const codePrefix = len("+1234 | ")
 
 func renderCode(c Cell, hot bool) string {
-	marker, num, text := " ", fmt.Sprintf("%4d", c.Line), c.Text
-	if c.Line == 0 {
-		num = "    "
-	}
-	switch c.Kind {
-	case RowAdded:
-		marker = addStyle.Render("+")
-	case RowRemoved:
-		marker = delStyle.Render("-")
-	}
-	switch {
-	case c.Moved:
-		marker, text = dimStyle.Render("↕"), dimStyle.Render(c.Plain)
-	case c.Reformat:
-		marker = dimStyle.Render("≈")
-	case c.Emph != nil:
-		text = emphasize(c.Text, c.Emph, c.Kind)
-	}
-	if c.RenamedFrom != "" {
-		marker = gapStyle.Render("⇄")
-		text += dimStyle.Render("  ← was " + c.RenamedFrom)
-	}
-	if hot {
-		marker = hotStyle.Render("⚑")
-	}
-	sep := dimStyle.Render(" │ ")
-	if c.Mark != "" {
-		sep = " " + noteKinds[c.Mark].tone.fg().Render("┃") + " "
-	}
-	return marker + dimStyle.Render(num) + sep + text
+	gutter, _, text := codeParts(c, hot)
+	return gutter + text
 }
 
 func emphasize(text string, emph [][2]int, kind RowKind) string {
@@ -938,17 +913,13 @@ func renderNote(r Row) string {
 	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Italic(true).Render(r.Text)
 }
 
-func (m *model) renderSplit(i, w int) string {
-	l := m.lines[i]
-	if !l.Pair {
-		return renderUnified(m.animate(l.Row))
-	}
-	side := (w - 2) / 2
-	cell := func(c Cell, hot bool) string {
+func (m *model) renderSplit(l line, w int) (rows []string) {
+	lw, rw := m.splitWidths(w)
+	cell := func(c Cell, hot bool, w int) []string {
 		if c.Line == 0 && c.Text == "" {
-			return ""
+			return nil
 		}
-		return renderCode(c, hot)
+		return m.codeRows(c, hot, w)
 	}
 	tint := func(s string, c Cell, w int) string {
 		switch c.Kind {
@@ -959,9 +930,19 @@ func (m *model) renderSplit(i, w int) string {
 		}
 		return fit(s, w)
 	}
-	left := tint(cell(l.Left, false), l.Left, side)
-	right := tint(cell(l.Right, l.Hotspot && l.Right.Line > 0), l.Right, w-side-1)
-	return left + dimStyle.Render("┃") + right
+	left := cell(l.Left, false, lw)
+	right := cell(l.Right, l.Hotspot && l.Right.Line > 0, rw)
+	at := func(side []string, k int) string {
+		if k < len(side) {
+			return side[k]
+		}
+		return ""
+	}
+	for k := range max(len(left), len(right), 1) {
+		rows = append(rows, tint(at(left, k), l.Left, lw)+dimStyle.Render("┃")+
+			tint(at(right, k), l.Right, rw))
+	}
+	return rows
 }
 
 const intakeWidth = 100

@@ -18,7 +18,7 @@ var commandNames = []string{
 	"q", "all", "boilerplate", "generated", "f", "sym", "set", "msg", "skip",
 }
 
-var setOptions = []string{"context=", "diff="}
+var setOptions = []string{"context=", "diff=", "wrap", "nowrap"}
 
 func (m *model) startCmd(mode rune) {
 	m.composing, m.composeKind, m.cmdMode = true, "", mode
@@ -97,7 +97,7 @@ func (m *model) execCommand(line string) tea.Cmd {
 			return a.run(m)
 		}
 	}
-	m.status = "unknown command: " + name + " (h lists actions)"
+	m.status = "unknown command: " + name + " (" + m.keys().key("help") + " lists actions)"
 	return nil
 }
 
@@ -163,8 +163,11 @@ func (m *model) setOption(arg string) {
 		}
 		m.setAlgorithm(value)
 		return
+	case "wrap", "nowrap":
+		m.setWrap(opt == "wrap")
+		return
 	default:
-		m.status = "usage: :set context=N | diff=ALGORITHM"
+		m.status = "usage: :set context=N | diff=ALGORITHM | wrap | nowrap"
 		return
 	}
 	if m.src != nil && m.step != nil {

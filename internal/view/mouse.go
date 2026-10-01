@@ -65,11 +65,15 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 			return nil
 		}
-		if i, ok := m.rowAt(msg.Y); ok {
+		if i, sub, ok := m.rowAt(msg.Y); ok {
 			m.cursor, m.anchor, m.dragging, m.visual = i, i, true, false
 			m.clamp()
 			if !m.useSplit() {
-				m.col = max(msg.X-m.planWidth()-8, 0)
+				start := m.hscroll
+				if !m.nowrap {
+					start = sub * codeAvail(m.mainWidth())
+				}
+				m.col = start + max(msg.X-m.planWidth()-codePrefix, 0)
 			}
 			if it := m.lines[i]; it.Kind == RowFold || it.GapTo > 0 {
 				m.toggleFold()
@@ -84,7 +88,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
-		if i, ok := m.rowAt(msg.Y); ok {
+		if i, _, ok := m.rowAt(msg.Y); ok {
 			m.cursor = i
 			m.visual = m.cursor != m.anchor
 			m.clamp()
@@ -98,17 +102,24 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 func (m *model) scroll(d int) {
 	body := m.bodyHeight()
 	m.offset = max(0, min(m.offset+d, len(m.lines)-body))
-	m.cursor = max(m.offset, min(m.cursor, m.offset+body-1))
+	m.cursor = max(m.offset, min(m.cursor, m.lastShown()))
 	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
 }
 
-func (m *model) rowAt(y int) (int, bool) {
+func (m *model) rowAt(y int) (i, sub int, ok bool) {
 	hdr := len(m.header())
 	if y < hdr || y >= hdr+m.bodyHeight() {
-		return 0, false
+		return 0, 0, false
 	}
-	i := m.offset + y - hdr
-	return i, i < len(m.lines)
+	sub = y - hdr
+	for i = m.offset; i < len(m.lines); i++ {
+		h := m.lineHeight(i)
+		if sub < h {
+			return i, sub, true
+		}
+		sub -= h
+	}
+	return 0, 0, false
 }
 
 func (m *model) overChat(x, y int) bool {

@@ -90,6 +90,10 @@ func DefaultActions() []Action {
 			run: do((*model).wordNext)},
 		{Name: "word-prev", Group: nav, Desc: "previous symbol in the line", Keys: k("b"),
 			run: do((*model).wordPrev)},
+		{Name: "scroll-left", Group: nav, Desc: "scroll long lines left (no wrap)", Keys: k("h"),
+			run: do(func(m *model) { m.scrollSideways(-hscrollStep) })},
+		{Name: "scroll-right", Group: nav, Desc: "scroll long lines right (no wrap)", Keys: k("l"),
+			run: do(func(m *model) { m.scrollSideways(hscrollStep) })},
 
 		{Name: "open", Group: dif, Desc: "open ⋯ hidden lines or a ▸ folded block; fold a note",
 			Keys: k("o"), run: do((*model).toggleFold)},
@@ -134,7 +138,7 @@ func DefaultActions() []Action {
 				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 			})},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
-			Keys: k("?"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
+			Keys: k("A"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
 		{Name: "details", Group: rev, Desc: "details behind the agent's note under the cursor",
 			Keys: k("i"), run: do((*model).noteDetails)},
 		{Name: "yank", Group: rev, Desc: "copy the selection or the line to the clipboard",
@@ -154,6 +158,8 @@ func DefaultActions() []Action {
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
 			run: (*model).openEditor},
 
+		{Name: "wrap", Group: vw, Desc: "wrap long lines / cut them and scroll sideways",
+			Keys: k("W"), run: do(func(m *model) { m.setWrap(m.nowrap) })},
 		{Name: "plan", Group: vw, Desc: "show / hide the plan panel", Keys: k("p"),
 			run: do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
@@ -171,7 +177,7 @@ func DefaultActions() []Action {
 			Keys:  k(":"),
 			run:   do(func(m *model) { m.startCmd(':') }),
 		},
-		{Name: "help", Group: vw, Desc: "this help", Keys: k("h", "f1"),
+		{Name: "help", Group: vw, Desc: "this help", Keys: k("?", "f1"),
 			run: do(func(m *model) { m.help, m.helpTop = true, 0 })},
 		{Name: "interrupt", Group: rev, Desc: "stop the agent's current work and add to your question",
 			Keys: k("ctrl+c"), run: do((*model).interrupt)},
@@ -329,12 +335,14 @@ func (m *model) back() tea.Cmd {
 func (m *model) wordNext() {
 	if plain, ok := m.currentCode(); ok {
 		m.col = nextWord(plain, wordStart(plain, m.col))
+		m.followCol()
 	}
 }
 
 func (m *model) wordPrev() {
 	if plain, ok := m.currentCode(); ok {
 		m.col = prevWord(plain, wordStart(plain, m.col))
+		m.followCol()
 	}
 }
 
