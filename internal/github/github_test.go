@@ -69,3 +69,16 @@ func TestFetchDiscussions(t *testing.T) {
 		}
 	}
 }
+
+func TestCurrentUser(t *testing.T) {
+	reply := `{"login":"alice"}`
+	run := func(context.Context, ...string) ([]byte, error) { return []byte(reply), nil }
+	if me, err := github.CurrentUser(context.Background(), run, "github.com"); err != nil || me != "alice" {
+		t.Fatalf("CurrentUser = %q, %v", me, err)
+	}
+	reply = `{}`
+	if _, err := github.CurrentUser(context.Background(), run, "github.com"); err == nil ||
+		!strings.Contains(err.Error(), "gh auth login") {
+		t.Fatalf("a reply without a login is an error, got %v", err)
+	}
+}

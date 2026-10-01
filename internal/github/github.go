@@ -210,6 +210,9 @@ func CurrentUser(ctx context.Context, run Runner, host string) (string, error) {
 	if err := json.Unmarshal(out, &u); err != nil {
 		return "", fmt.Errorf("decode user: %w", err)
 	}
+	if u.Login == "" {
+		return "", errors.New("no user in the reply: run gh auth login")
+	}
 	return u.Login, nil
 }
 

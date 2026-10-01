@@ -34,6 +34,8 @@ and the rest happens in the terminal chat.
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
    - "commit … not found locally": run `git fetch origin` and retry.
+   - "who you are on …": glab or gh is not logged in; ask the user to run
+     `glab auth login` / `gh auth login`, then retry.
    - "already exists, resuming": `gr step show`, then continue the step loop. If it also
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.

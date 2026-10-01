@@ -70,6 +70,9 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 		return errors.New("--approve needs a merge request: a local review has nothing to approve")
 	case *approve && *verdict != "approve":
 		return errors.New("--approve only goes with --verdict approve")
+	case r.MR != nil && r.MR.Me == "" && *verdict == "approve":
+		return errors.New("approve needs your login on the MR to check your threads: " +
+			"run gr discussions")
 	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
 	}

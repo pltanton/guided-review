@@ -447,7 +447,11 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 	r.Discussions = r.Discussions[:0]
 	if r.MR.Provider == state.ProviderGitHub {
 		if r.MR.Me == "" {
-			r.MR.Me, _ = github.CurrentUser(ctx, e.gh, r.MR.Host)
+			me, err := github.CurrentUser(ctx, e.gh, r.MR.Host)
+			if err != nil {
+				return fmt.Errorf("who you are on %s: %w", r.MR.Host, err)
+			}
+			r.MR.Me = me
 		}
 		ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
 		ds, err := github.FetchDiscussions(ctx, e.gh, ref)
@@ -462,7 +466,11 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 		return err
 	}
 	if r.MR.Me == "" {
-		r.MR.Me, _ = gitlab.CurrentUser(ctx, e.glab, r.MR.Host)
+		me, err := gitlab.CurrentUser(ctx, e.glab, r.MR.Host)
+		if err != nil {
+			return fmt.Errorf("who you are on %s: %w", r.MR.Host, err)
+		}
+		r.MR.Me = me
 	}
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
 	ds, err := gitlab.FetchDiscussions(ctx, e.glab, ref)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -146,6 +147,9 @@ func TestInitMR(t *testing.T) {
 		"position":{"new_path":"api/transfer.go","new_line":5,"old_path":"api/transfer.go"}}]},
 		{"id":"d2","notes":[{"body":"please add a test","author":{"username":"bob"},"system":false,"resolvable":true}]}]`
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(discussions), nil
 		}
@@ -458,6 +462,9 @@ func TestDiscussionsFull(t *testing.T) {
 	base := h.repo.Git("rev-parse", "main")
 	head := h.repo.Git("rev-parse", "HEAD")
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(
 				`[{"id":"d1","notes":[{"body":"## ci-report\nline two\nline three","author":{"username":"ci"},"system":false,"resolvable":true},
@@ -531,6 +538,9 @@ func mrHarness(t *testing.T) (*harness, *[]string) {
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
 		path := args[len(args)-1]
 		calls = append(calls, path)
+		if path == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(path, "/discussions") {
 			return []byte(`[]`), nil
 		}
@@ -933,6 +943,9 @@ func TestGitHubPR(t *testing.T) {
 	var calls []string
 	h.gh = func(_ context.Context, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if args[len(args)-1] == "user" {
+			return []byte(`{"login":"me"}`), nil
+		}
 		if slices.Contains(args, "graphql") {
 			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
 				{"id":"t1","isResolved":false,"path":"api/transfer.go","line":5,"diffSide":"RIGHT",
@@ -1077,4 +1090,28 @@ func TestThreads(t *testing.T) {
 	h.mustRun("", "discussions")
 	assertContains(t, h.mustRun("", "thread", "list"),
 		"thread d1  api/transfer.go:5  answered, undecided")
+}
+
+func TestInitNeedsTheCurrentUser(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.edit(func(r *state.Review) { r.MR.Me = "" })
+	if _, err := h.run("", "prepare", "--verdict", "approve"); err == nil ||
+		!strings.Contains(err.Error(), "your login") {
+		t.Fatalf("approve without knowing who you are must be refused, got %v", err)
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+
+	login := h.glab
+	h.glab = func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return nil, errors.New("glab api user: 401 (not logged in? run: glab auth login)")
+		}
+		return login(ctx, args...)
+	}
+	if _, err := h.run("", "discussions"); err == nil ||
+		!strings.Contains(err.Error(), "glab auth login") {
+		t.Fatalf("a failed user lookup must surface with its hint, got %v", err)
+	}
 }
