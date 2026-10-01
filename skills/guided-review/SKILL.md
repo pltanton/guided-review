@@ -317,44 +317,55 @@ line, say whether the code answers it.
 5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or not — and ask «публикую?».
-   Only on a clear yes, by provider:
+   Only on a clear yes, run the block for the provider as one Bash call: shell variables
+   do not survive between calls. Each block posts the review, then replies to and
+   resolves your threads (`threads` in `review.json`), and runs `gr mark-published` only
+   if everything went out.
 
-   **GitHub** — one request carries the summary, the verdict and every comment:
+   **GitHub** — one request carries the summary, the verdict and every comment; a thread
+   reply goes to its first comment, a resolve takes the thread's node id:
    ```bash
-   dir=$(gr export --dir); host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
-   gh api --hostname $host -X POST "$api" --input "$dir/review-request.json"
-   gr mark-published
+   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
+   ok=1
+   gh api --hostname "$host" -X POST "$api" --input "$dir/review-request.json" >/dev/null || ok=0
+   while [ $ok = 1 ] && read -r t; do
+     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
+     if [ -n "$reply" ]; then gh api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
+     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
+       gh api --hostname "$host" graphql -f id="$(jq -r .id <<<"$t")" \
+         -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' >/dev/null || ok=0
+     fi
+   done < <(jq -c '.threads[]?' "$dir/review.json")
+   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
    ```
    GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set `"event": "COMMENT"`
    in `review-request.json` and post again.
 
-   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last:
+   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last; a
+   thread reply goes to `reply_api`, a resolve to the discussion's `api`:
    ```bash
-   dir=$(gr export --dir); host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
-   glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
-   for f in $(jq -r '.drafts[]' $dir/review.json); do
-     glab api --hostname $host -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" || break
+   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
+   glab api --hostname "$host" "$api/draft_notes" | jq length   # must be 0; otherwise stop and ask
+   ok=1
+   for f in $(jq -r '.drafts[]' "$dir/review.json"); do
+     glab api --hostname "$host" -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" >/dev/null || { ok=0; break; }
    done
-   glab api --hostname $host -X POST "$api/draft_notes/bulk_publish"
-   # only if review.json has "approve": true
-   glab api --hostname $host -X POST "$api/approve"
-   gr mark-published
+   [ $ok = 1 ] && { glab api --hostname "$host" -X POST "$api/draft_notes/bulk_publish" >/dev/null || ok=0; }
+   if [ $ok = 1 ] && [ "$(jq -r .approve "$dir/review.json")" = true ]; then
+     glab api --hostname "$host" -X POST "$api/approve" >/dev/null || ok=0
+   fi
+   while [ $ok = 1 ] && read -r t; do
+     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
+     if [ -n "$reply" ]; then glab api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
+     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
+       glab api --hostname "$host" -X PUT "$(jq -r .api <<<"$t")" -f resolved=true >/dev/null || ok=0
+     fi
+   done < <(jq -c '.threads[]?' "$dir/review.json")
+   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
    ```
-   If a GitLab POST fails, stop: say the error and that the drafts created so far sit
-   unpublished on the MR; do not retry blindly. After success give the link.
-
-   **Threads** — `review.json` `threads` holds each decision, before `gr mark-published`:
-   ```bash
-   jq -c '.threads[]?' $dir/review.json | while read -r t; do
-     id=$(jq -r .id <<<"$t"); reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
-     # GitLab: glab api --hostname $host …; GitHub: gh api --hostname $host …
-     [ -n "$reply" ] && glab api --hostname $host -X POST "$ra" -f body="$reply"
-     # GitLab resolve:
-     [ "$(jq -r .resolve <<<"$t")" = true ] && glab api --hostname $host -X PUT "$(jq -r .api <<<"$t")" -f resolved=true
-     # GitHub resolve (id is the review thread node id):
-     # gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id="$id"
-   done
-   ```
+   If a block stops, say the error and what already went out (on GitLab, drafts created
+   before a failed POST sit unpublished on the MR); do not retry blindly, and do not run
+   `gr mark-published` by hand. After success give the link.
 6. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
