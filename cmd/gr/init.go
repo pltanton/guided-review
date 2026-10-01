@@ -16,6 +16,7 @@ import (
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -284,10 +285,14 @@ func hasMarker(ctx context.Context, s session, sha, path string) bool {
 }
 
 func startRound(ctx context.Context, s session, r *state.Review, t target) ([]diff.File, error) {
-	old := r.HeadSHA
-	r.Round = max(r.Round, 1) + 1
+	old, oldRound := r.HeadSHA, max(r.Round, 1)
+	steps := r.Steps
+	if len(steps) == 0 {
+		steps = r.Carried
+	}
+	r.Round = oldRound + 1
 	r.PrevHeadSHA = old
-	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles = "", false, nil
+	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles, r.Carried = "", false, nil, nil
 	if s.repo.IsAncestor(ctx, old, t.head) {
 		r.RoundBaseSHA = old
 	} else {
@@ -302,6 +307,9 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 		r.RoundRebased, r.RoundFiles = true, changedPatches(prev, cur)
 	}
 	r.BaseSHA, r.StartSHA, r.HeadSHA = t.base, t.start, t.head
+	if err := carrySteps(ctx, s, r, steps, oldRound, old); err != nil {
+		return nil, err
+	}
 	files, stateFiles, err := reviewFiles(ctx, s, r.DiffBase(), r.HeadSHA)
 	if err != nil {
 		return nil, err
@@ -309,12 +317,37 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 	r.Files = stateFiles
 	r.Steps, r.Current, r.Summary, r.Publish = nil, "", "", nil
 	r.RoundStart = time.Now()
-	if r.RoundRebased {
-		files = slices.DeleteFunc(files, func(f diff.File) bool {
-			return !slices.Contains(r.RoundFiles, f.Path)
-		})
-	}
+	files = slices.DeleteFunc(files, func(f diff.File) bool { return !r.InRound(f.Path) })
 	return files, nil
+}
+
+func carrySteps(
+	ctx context.Context,
+	s session,
+	r *state.Review,
+	steps []state.Step,
+	oldRound int,
+	oldHead string,
+) error {
+	if !slices.ContainsFunc(steps, plan.Unreviewed) {
+		return nil
+	}
+	since, err := s.diff(ctx, oldHead, r.HeadSHA)
+	if err != nil {
+		return err
+	}
+	full, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
+	if err != nil {
+		return err
+	}
+	if r.Carried = plan.Carry(steps, oldRound, since, full); len(r.Carried) == 0 || r.RoundRebased {
+		return nil
+	}
+	r.RoundBaseSHA, r.RoundFiles = "", make([]string, len(since))
+	for i, f := range since {
+		r.RoundFiles[i] = f.Path
+	}
+	return nil
 }
 
 func changedPatches(prev, cur []diff.File) []string {
@@ -350,6 +383,10 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 	if r.Round > 1 {
 		next = "check open comments against the new code, " +
 			"then pipe a plan for this round to `gr plan set`"
+	}
+	if len(r.Carried) > 0 && len(files) == 0 {
+		next = "check open comments against the new code, then `echo 'steps: []' | gr plan set` " +
+			"to go on with the carried steps"
 	}
 	e.printf("\nnext: %s\n", next)
 }
@@ -391,6 +428,14 @@ func printHeader(e env, s session, r *state.Review) {
 		for _, c := range open {
 			e.printf("  #%d %s %s:%s  %s\n", c.ID, c.Severity, c.File, c.Lines, c.Body)
 		}
+	}
+	if len(r.Carried) > 0 {
+		ids := make([]string, len(r.Carried))
+		for i, st := range r.Carried {
+			ids[i] = st.ID
+		}
+		e.printf("carried, not reviewed in an earlier round: %s (they follow this round's plan)\n",
+			strings.Join(ids, " "))
 	}
 	printDiscussions(e, r, false)
 }

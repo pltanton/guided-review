@@ -33,7 +33,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 	fail := func(format string, args ...any) {
 		errs = append(errs, fmt.Errorf(format, args...))
 	}
-	if len(p.Steps) == 0 {
+	if len(p.Steps) == 0 && len(r.Carried) == 0 {
 		fail("plan has no steps")
 	}
 	inDiff := map[string]bool{}
@@ -48,6 +48,10 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		boilerplate[b] = true
 	}
 	ids := map[string]bool{}
+	carried := map[string]bool{}
+	for _, s := range r.Carried {
+		carried[s.ID] = true
+	}
 	closed := map[string]bool{}
 	for i, s := range p.Steps {
 		if s.Intro != "" && i > 0 && p.Steps[i-1].Chapter == s.Chapter {
@@ -65,6 +69,9 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		}
 		if ids[s.ID] {
 			fail("step %s: duplicate id", s.ID)
+		}
+		if carried[s.ID] {
+			fail("step %s: id taken by a step carried from an earlier round", s.ID)
 		}
 		ids[s.ID] = true
 		if s.Title == "" {
@@ -118,7 +125,7 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 			switch {
 			case d == s.ID:
 				fail("step %s: depends on itself", s.ID)
-			case !ids[d]:
+			case !ids[d] && !carried[d]:
 				fail("step %s: depends_on %s: no such step", s.ID, d)
 			}
 		}
@@ -127,13 +134,13 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		fail("depends_on cycle: %s", strings.Join(c, " → "))
 	}
 	for _, f := range files {
-		if boilerplate[f.Path] || r.RoundRebased && !slices.Contains(r.RoundFiles, f.Path) {
+		if boilerplate[f.Path] || !r.InRound(f.Path) {
 			continue
 		}
 		if rf := r.File(f.Path); rf != nil && rf.Tier == state.TierGenerated {
 			continue
 		}
-		for _, u := range uncovered(f, p.Steps) {
+		for _, u := range uncovered(f, slices.Concat(p.Steps, r.Carried)) {
 			fail("not covered: %s", u)
 		}
 	}
@@ -268,7 +275,7 @@ func findCycle(steps []state.Step) []string {
 
 func Apply(r *state.Review, p Plan) {
 	r.Summary = p.Summary
-	r.Steps = make([]state.Step, len(p.Steps))
+	r.Steps = make([]state.Step, len(p.Steps), len(p.Steps)+len(r.Carried))
 	for i, s := range p.Steps {
 		s.Status = state.StatusPending
 		s.MayChange = false
@@ -287,6 +294,10 @@ func Apply(r *state.Review, p Plan) {
 			}
 		}
 		r.Steps[i] = s
+	}
+	for _, s := range r.Carried {
+		s.Status, s.MayChange, s.SkipReason, s.Announced = state.StatusPending, false, "", false
+		r.Steps = append(r.Steps, s)
 	}
 	boilerplate := map[string]bool{}
 	for _, b := range p.Boilerplate {

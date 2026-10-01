@@ -54,5 +54,8 @@ reading.
   not defend the original code.
 - Lines refer to the reviewed commit; if the file changed since, find the spot by content.
 - Report one line per fix: done, or not done and why. Run the tests.
-- Offer another round: after a commit, `gr init --self` shows only what changed and starts
-  by checking these fixes. Same flow from step 3.
+- `unreviewed` in `fixes.json` lists steps the human left for later (a partial finish).
+  Then, after the fixes, offer «досмотреть остаток»: commit, `gr init --self` (the new
+  round starts with these fixes and carries the unreviewed steps), same flow from step 3.
+- Otherwise offer another round: after a commit, `gr init --self` shows only what changed
+  and starts by checking these fixes. Same flow from step 3.

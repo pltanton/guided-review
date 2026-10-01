@@ -28,7 +28,8 @@ review
   discussions
   thread list | assess ID --propose resolve|open [--reply T] TEXT|-
   thread decide ID --verdict resolve|open|none [--reply T]   your MR threads (viewer: R)
-  prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F] [--approve]
+  prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F]
+          [--approve] [--partial]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
                        and print that dir (--dir: only print it)
   mark-published       after the agent posted the export to the MR

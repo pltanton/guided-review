@@ -245,6 +245,14 @@ before leaving a step. You only hear about what needs you.
    `gr comment resolve ID` when it is addressed; otherwise keep it open. `gr say` a
    summary: resolved, still open, new questions.
 3. Then plan and walk only the round diff as usual.
+4. "carried, not reviewed in an earlier round: r1-s7 …" lists steps the last round left
+   pending (a `--partial` finish, or stale after a blocker). gr appends them after your
+   plan with their ids, titles, messages and hotspots; `gr step show` marks them
+   "carried". Do not plan them again, and do not reuse their ids. A file the round
+   touched loses its line ranges and notes there and is shown whole, so read it fresh
+   when the human reaches that step. With carried steps, files changed in the round show
+   their whole patch against the base, as after a rebase. If the round diff itself is
+   empty, `echo 'steps: []' | gr plan set` starts the carried steps.
 
 ## Your threads on the MR (`gr init` printed "your threads: …")
 
@@ -287,8 +295,10 @@ line, say whether the code answers it.
 
 ## Wrap-up
 
-1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them or
-   skip each with a reason.
+1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them,
+   skip each with a reason, or send what is reviewed so far — then add `--partial` to
+   `gr prepare` in step 3: the result lists the rest as not reviewed yet, and the next
+   round brings those steps back.
 2. `gr say` the verdict in one line — approve / changes requested / blocked — then
    blockers and majors, one line each, the nit count, and the coverage line.
 3. Prepare the result. Write the decisions taken during the review and why (what was

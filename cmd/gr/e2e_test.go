@@ -333,6 +333,7 @@ func TestReReviewFixup(t *testing.T) {
 		"return an error",
 	)
 	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
 
 	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
 	h.repo.Commit("fixup")
@@ -372,6 +373,8 @@ func TestReReviewRebase(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("", "init")
 	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
 
 	h.repo.Git("checkout", "-q", "main")
 	h.repo.Write("other.go", "package api\n")
@@ -725,6 +728,53 @@ func TestNewSelfRoundDropsOldExport(t *testing.T) {
 	}
 	if _, err := h.run("", "export"); err == nil {
 		t.Fatal("a new self session starts unprepared")
+	}
+}
+
+func TestPartialReviewCarriesTheRest(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+		"--severity", "minor", "zero is negative too")
+	h.mustRun("", "step", "next")
+	if _, err := h.run("", "prepare", "--verdict", "changes"); err == nil ||
+		!strings.Contains(err.Error(), "--partial") {
+		t.Fatalf("prepare with s2 pending must point at --partial, got %v", err)
+	}
+	h.mustRun("", "prepare", "--verdict", "changes", "--partial")
+	assertContains(t, h.mustRun("", "export", "--dry-run"),
+		"Not reviewed yet, comes in the next round: s2 Guard follow-up.")
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	data, err := os.ReadFile(filepath.Join(dir, "fixes.json"))
+	if err != nil || !strings.Contains(string(data), `"unreviewed": [`+"\n"+`    "s2 Guard follow-up"`) {
+		t.Fatalf("fixes.json must list the unreviewed steps: %s %v", data, err)
+	}
+
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	out := h.mustRun("", "init", "--self")
+	assertContains(t, out, "round 2: fixups since", "carried, not reviewed in an earlier round: r1-s2",
+		"wire.go  [added]  1-4")
+	if strings.Contains(out, "api/transfer.go  [") {
+		t.Fatalf("carried files are not part of the round plan:\n%s", out)
+	}
+	assertContains(t, h.mustRun("", "status"), "carried, not reviewed in an earlier round: r1-s2")
+
+	out = h.mustRun("steps:\n  - id: n1\n    title: fixup\n    kind: logic\n    hunks: [{file: wire.go}]\n",
+		"plan", "set")
+	assertContains(t, out, "plan accepted: 2 steps, the last 1 carried from earlier rounds")
+	h.mustRun("", "step", "next")
+	out = h.mustRun("", "step", "show")
+	assertContains(t, out, "r1-s2 2/2 [pending] logic · Guard follow-up",
+		"carried: not reviewed in round 1", "hunk: api/transfer.go 7-8")
+	if _, err := h.run("", "status", "--gate"); err == nil {
+		t.Fatal("a carried step is part of the gate")
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	if out := h.mustRun("", "export", "--dry-run"); strings.Contains(out, "Not reviewed yet") {
+		t.Fatalf("everything is reviewed now:\n%s", out)
 	}
 }
 

@@ -71,6 +71,7 @@ type Review struct {
 	Files        []File       `yaml:"files"`
 	Summary      string       `yaml:"summary,omitempty"`
 	Steps        []Step       `yaml:"steps,omitempty"`
+	Carried      []Step       `yaml:"carried,omitempty"`
 	Current      string       `yaml:"current,omitempty"`
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
@@ -173,6 +174,7 @@ type Step struct {
 	Status      StepStatus   `yaml:"status,omitempty"`
 	MayChange   bool         `yaml:"may_change,omitempty"`
 	SkipReason  string       `yaml:"skip_reason,omitempty"`
+	FromRound   int          `yaml:"from_round,omitempty"`
 }
 
 type StepHunk struct {
@@ -229,6 +231,13 @@ func (r *Review) DiffBase() string {
 		return r.RoundBaseSHA
 	}
 	return r.BaseSHA
+}
+
+func (r *Review) InRound(path string) bool {
+	if !r.RoundRebased && len(r.Carried) == 0 {
+		return true
+	}
+	return slices.Contains(r.RoundFiles, path)
 }
 
 func (r *Review) Step(id string) *Step {

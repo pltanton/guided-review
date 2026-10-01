@@ -147,7 +147,11 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
-	e.printf("plan accepted: %d steps\n\n", len(r.Steps))
+	e.printf("plan accepted: %d steps", len(r.Steps))
+	if len(r.Carried) > 0 {
+		e.printf(", the last %d carried from earlier rounds", len(r.Carried))
+	}
+	e.printf("\n\n")
 	printStep(e, r, r.Step(r.Current))
 	return nil
 }

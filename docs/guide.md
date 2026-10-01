@@ -79,6 +79,10 @@ threads come first with the author's replies. The agent checks each reply agains
 new code and suggests resolve or keep open with a reply; you decide. Approve is refused
 while any of your threads stays open.
 
+On a large change you can finish early: `gr prepare --partial` sends what you reviewed
+so far and lists the rest as not reviewed yet; the next round brings those steps back
+after the round's own changes.
+
 </details>
 
 <details>

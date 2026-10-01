@@ -47,6 +47,8 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	decisions := fs.String("decisions", "", "decisions taken during the review and why (markdown)")
 	decisionsFile := fs.String("decisions-file", "", "read decisions from a file (- for stdin)")
 	approve := fs.Bool("approve", false, "the agent also approves the MR when publishing")
+	partial := fs.Bool("partial", false, "allow pending steps: they are listed as not reviewed "+
+		"yet and carried into the next round")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -69,9 +71,9 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	case len(r.Steps) == 0:
 		return errors.New("no plan yet: nothing reviewed")
 	}
-	if pending := plan.Gate(r); len(pending) > 0 {
-		return fmt.Errorf("gate not passed, pending: %s (review or skip them first)",
-			strings.Join(pending, " "))
+	if pending := plan.Gate(r); len(pending) > 0 && !*partial {
+		return fmt.Errorf("gate not passed, pending: %s (review or skip them first, "+
+			"or --partial to send what is reviewed so far)", strings.Join(pending, " "))
 	}
 	if ids := undecidedThreads(r); len(ids) > 0 {
 		return fmt.Errorf("answered threads without the reviewer's decision: %s "+
@@ -347,10 +349,16 @@ type fix struct {
 func exportFixes(e env, r *state.Review, dir string, dryRun bool) error {
 	p := r.Publish
 	x := struct {
-		Verdict   string `json:"verdict"`
-		Decisions string `json:"decisions"`
-		Fixes     []fix  `json:"fixes"`
+		Verdict    string   `json:"verdict"`
+		Decisions  string   `json:"decisions"`
+		Fixes      []fix    `json:"fixes"`
+		Unreviewed []string `json:"unreviewed,omitempty"`
 	}{Verdict: p.Verdict, Decisions: p.Decisions}
+	for _, st := range r.Steps {
+		if st.Status == state.StatusPending {
+			x.Unreviewed = append(x.Unreviewed, st.ID+" "+st.Title)
+		}
+	}
 	var md strings.Builder
 	for _, c := range r.Comments {
 		if c.Resolved {
@@ -490,9 +498,11 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	if len(resolved) > 0 {
 		w("Resolved since the last round: %s.\n", strings.Join(resolved, ", "))
 	}
-	var skipped []string
+	var skipped, pending []string
 	for _, st := range r.Steps {
 		switch st.Status {
+		case state.StatusPending:
+			pending = append(pending, st.ID+" "+st.Title)
 		case state.StatusSkipped:
 			skipped = append(skipped, fmt.Sprintf("%s (%s)", st.Title, st.SkipReason))
 		case state.StatusStale:
@@ -501,6 +511,9 @@ func summaryMarkdown(r *state.Review, verdict, decisions string) string {
 	}
 	if len(skipped) > 0 {
 		w("Not reviewed: %s.\n", strings.Join(skipped, "; "))
+	}
+	if len(pending) > 0 {
+		w("Not reviewed yet, comes in the next round: %s.\n", strings.Join(pending, "; "))
 	}
 	return b.String()
 }

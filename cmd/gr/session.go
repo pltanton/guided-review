@@ -135,6 +135,9 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 func printStep(e env, r *state.Review, st *state.Step) {
 	pos := r.StepIndex(st.ID) + 1
 	e.printf("%s %d/%d [%s] %s · %s\n", st.ID, pos, len(r.Steps), st.Status, st.Kind, st.Title)
+	if st.FromRound > 0 {
+		e.printf("carried: not reviewed in round %d\n", st.FromRound)
+	}
 	if st.Note != "" {
 		e.printf("note: %s\n", st.Note)
 	}
