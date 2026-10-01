@@ -65,7 +65,7 @@ func (s Store) Load(id string) (*Review, error) {
 }
 
 func (s Store) Save(r *Review) error {
-	if err := os.MkdirAll(s.ReviewDir(r.ID), 0o755); err != nil {
+	if err := os.MkdirAll(s.ReviewDir(r.ID), 0o700); err != nil {
 		return err
 	}
 	unlock, err := s.lock(r.ID)
@@ -105,7 +105,7 @@ func (s Store) UpdateCurrent(apply func(*Review) error) error {
 
 // flock is held per open file, not per process: Update calls save, not Save, or waits on itself.
 func (s Store) lock(id string) (unlock func(), err error) {
-	f, err := os.OpenFile(filepath.Join(s.ReviewDir(id), "lock"), os.O_RDWR|os.O_CREATE, 0o644)
+	f, err := os.OpenFile(filepath.Join(s.ReviewDir(id), "lock"), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (s Store) LoadCurrent() (*Review, error) {
 }
 
 func writeAtomic(path string, data []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
@@ -182,9 +182,6 @@ func writeAtomic(path string, data []byte) error {
 	}
 	defer func() { _ = os.Remove(f.Name()) }()
 	_, err = f.Write(data)
-	if err == nil {
-		err = f.Chmod(0o644)
-	}
 	if err == nil {
 		err = f.Sync()
 	}

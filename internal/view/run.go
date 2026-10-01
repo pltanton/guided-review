@@ -13,7 +13,7 @@ import (
 
 func Run(ctx context.Context, o Options) error {
 	store := o.Store
-	if err := os.MkdirAll(store.Dir, 0o755); err != nil {
+	if err := os.MkdirAll(store.Dir, 0o700); err != nil {
 		return err
 	}
 	w, err := fsnotify.NewWatcher()

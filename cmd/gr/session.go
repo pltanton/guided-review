@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -41,7 +43,23 @@ func openSession(ctx context.Context, dir string) (session, error) {
 		Dir: filepath.Join(common, "guided-review"),
 		Key: hex.EncodeToString(key[:])[:12],
 	}
+	for _, dir := range []string{store.Dir, filepath.Join(store.Dir, "exports")} {
+		if err := narrow(dir); err != nil {
+			return session{}, err
+		}
+	}
 	return session{repo: repo, store: store, cfg: cfg}, nil
+}
+
+func narrow(dir string) error {
+	fi, err := os.Stat(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil || fi.Mode().Perm()&0o077 == 0 {
+		return err
+	}
+	return os.Chmod(dir, 0o700)
 }
 
 func loadReview(ctx context.Context, dir string) (session, *state.Review, error) {

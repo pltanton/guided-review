@@ -401,7 +401,7 @@ func (f exportFiles) json(name string, v any) error {
 
 func writeExport(e env, dir string, files exportFiles) error {
 	parent := filepath.Dir(dir)
-	if err := os.MkdirAll(parent, 0o755); err != nil {
+	if err := os.MkdirAll(parent, 0o700); err != nil {
 		return err
 	}
 	tmp, err := os.MkdirTemp(parent, "."+filepath.Base(dir)+"-")
@@ -409,15 +409,12 @@ func writeExport(e env, dir string, files exportFiles) error {
 		return err
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
-	if err := os.Chmod(tmp, 0o755); err != nil {
-		return err
-	}
 	for name, data := range files {
 		path := filepath.Join(tmp, name)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return err
 		}
-		if err := os.WriteFile(path, data, 0o644); err != nil {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			return err
 		}
 	}

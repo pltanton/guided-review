@@ -70,10 +70,10 @@ func Append(dir string, e Event) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, FileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(filepath.Join(dir, FileName), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
@@ -96,10 +96,10 @@ func Wait(ctx context.Context, dir string, timeout, poll time.Duration) ([]Event
 	}
 	marker := filepath.Join(dir, waitingFile)
 	stamp := []byte(time.Now().Format(time.RFC3339Nano))
-	if err := os.WriteFile(filepath.Join(dir, lastWaitFile), stamp, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, lastWaitFile), stamp, 0o600); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(marker, stamp, 0o644); err != nil {
+	if err := os.WriteFile(marker, stamp, 0o600); err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.Remove(marker) }()
@@ -168,7 +168,7 @@ func writeOffset(dir string, offset int64) error {
 	return os.WriteFile(
 		filepath.Join(dir, offsetFile),
 		[]byte(strconv.FormatInt(offset, 10)),
-		0o644,
+		0o600,
 	)
 }
 
@@ -190,13 +190,13 @@ func readStamp(path string) (time.Time, bool) {
 }
 
 func MarkIdle(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 	return os.WriteFile(
 		filepath.Join(dir, idleFile),
 		[]byte(time.Now().Format(time.RFC3339Nano)),
-		0o644,
+		0o600,
 	)
 }
 

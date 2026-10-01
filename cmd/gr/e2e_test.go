@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -279,6 +280,40 @@ func TestStepSkip(t *testing.T) {
 	assertContains(t, out, "s2 2/2 [pending]")
 	out = h.mustRun("", "step", "show", "s1")
 	assertContains(t, out, "[skipped]", "skipped: trivial")
+}
+
+func TestStateAndExportArePrivate(t *testing.T) {
+	h := newHarness(t)
+	store := filepath.Join(h.repo.Dir, ".git", "guided-review")
+	if err := os.MkdirAll(filepath.Join(store, "exports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	h.mustRun("", "export")
+	err := filepath.WalkDir(store, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		fi, err := d.Info()
+		if err != nil {
+			return err
+		}
+		want := fs.FileMode(0o600)
+		if d.IsDir() {
+			want = 0o700
+		}
+		if fi.Mode().Perm() != want {
+			t.Errorf("%s: %v, want %v", path, fi.Mode().Perm(), want)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestParallelCommentsAllKept(t *testing.T) {
