@@ -94,9 +94,12 @@ type Message struct {
 const MaxMessages = 50
 
 type PublishPlan struct {
-	Verdict   string `yaml:"verdict"`
-	Decisions string `yaml:"decisions,omitempty"`
-	Approve   bool   `yaml:"approve,omitempty"`
+	Verdict     string `yaml:"verdict"`
+	Decisions   string `yaml:"decisions,omitempty"`
+	Approve     bool   `yaml:"approve,omitempty"`
+	Export      string `yaml:"export,omitempty"`
+	Approved    bool   `yaml:"approved,omitempty"`
+	VerdictSent bool   `yaml:"verdict_sent,omitempty"`
 }
 
 type Progress struct {
@@ -116,6 +119,7 @@ type Discussion struct {
 	Resolvable bool   `yaml:"resolvable,omitempty"`
 	Notes      []Note `yaml:"notes,omitempty"`
 	ReplyTo    int64  `yaml:"reply_to,omitempty"`
+	Comment    int    `yaml:"comment,omitempty"`
 }
 
 type Note struct {
@@ -124,19 +128,25 @@ type Note struct {
 }
 
 const (
-	VerdictResolve = "resolve"
-	VerdictOpen    = "open"
+	VerdictResolve  = "resolve"
+	VerdictOpen     = "open"
+	VerdictNone     = "none"
+	DecidedByViewer = "viewer"
 )
 
 type Thread struct {
-	ID            string `yaml:"id"`
-	Notes         int    `yaml:"notes"`
-	Assessment    string `yaml:"assessment,omitempty"`
-	Proposed      string `yaml:"proposed,omitempty"`
-	ProposedReply string `yaml:"proposed_reply,omitempty"`
-	Verdict       string `yaml:"verdict,omitempty"`
-	Reply         string `yaml:"reply,omitempty"`
-	Published     bool   `yaml:"published,omitempty"`
+	ID            string    `yaml:"id"`
+	Notes         int       `yaml:"notes"`
+	Assessment    string    `yaml:"assessment,omitempty"`
+	Proposed      string    `yaml:"proposed,omitempty"`
+	ProposedReply string    `yaml:"proposed_reply,omitempty"`
+	Verdict       string    `yaml:"verdict,omitempty"`
+	Reply         string    `yaml:"reply,omitempty"`
+	DecidedAt     time.Time `yaml:"decided_at,omitempty"`
+	DecidedBy     string    `yaml:"decided_by,omitempty"`
+	Resolves      int       `yaml:"resolves,omitempty"`
+	ReplyPosted   bool      `yaml:"reply_posted,omitempty"`
+	Published     bool      `yaml:"published,omitempty"`
 }
 
 type MR struct {
@@ -208,17 +218,19 @@ type Annotation struct {
 }
 
 type Comment struct {
-	ID         int      `yaml:"id"`
-	Step       string   `yaml:"step"`
-	File       string   `yaml:"file"`
-	Lines      string   `yaml:"lines"`
-	SHA        string   `yaml:"sha"`
-	Severity   Severity `yaml:"severity"`
-	Body       string   `yaml:"body"`
-	Suggestion string   `yaml:"suggestion,omitempty"`
-	Round      int      `yaml:"round,omitempty"`
-	Resolved   bool     `yaml:"resolved,omitempty"`
-	Published  bool     `yaml:"published,omitempty"`
+	ID            int      `yaml:"id"`
+	Step          string   `yaml:"step"`
+	File          string   `yaml:"file"`
+	Lines         string   `yaml:"lines"`
+	SHA           string   `yaml:"sha"`
+	Severity      Severity `yaml:"severity"`
+	Body          string   `yaml:"body"`
+	Suggestion    string   `yaml:"suggestion,omitempty"`
+	Round         int      `yaml:"round,omitempty"`
+	Resolved      bool     `yaml:"resolved,omitempty"`
+	Published     bool     `yaml:"published,omitempty"`
+	ThreadID      string   `yaml:"thread_id,omitempty"`
+	ResolvedRound int      `yaml:"resolved_round,omitempty"`
 }
 
 func (r *Review) CodeDir(repoDir string) string {

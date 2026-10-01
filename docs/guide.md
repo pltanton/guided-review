@@ -73,10 +73,11 @@ definitions, references, implementations, callers, and a call flow for the step.
 summary (verdict, decisions, what was skipped and why) to
 `<git common dir>/guided-review/exports/<id>/` (`gr export --dir` prints it).
 You review and edit it (in the preview `v` cycles the verdict and `a` turns approve on
-or off), then the agent posts it: GitLab draft notes in one batch or one
-GitHub review. A `guided-review-notify` skill, if present, then tells the author. A
-local branch without an MR ends in `fixes.json` instead, which the agent applies right
-away or leaves for later (`gr list` shows where it is).
+or off; approve goes only with the approve verdict), then the agent posts it: GitLab
+draft notes in one batch or one GitHub review. If posting stops halfway, the next
+attempt sends only what did not go out. A `guided-review-notify` skill, if present, then
+tells the author. A local branch without an MR ends in `fixes.json` instead, which the
+agent applies right away or leaves for later (`gr list` shows where it is).
 
 </details>
 
@@ -85,7 +86,8 @@ away or leaves for later (`gr list` shows where it is).
 
 Run the same command after the author pushes: you see only what changed. Your open
 threads come first with the author's replies. The agent checks each reply against the
-new code and suggests resolve or keep open with a reply; you decide. Approve is refused
+new code and suggests resolve or keep open with a reply; you decide with `R` in the
+viewer, and only there: the agent has no command to decide for you. Approve is refused
 while any of your threads stays open.
 
 On a large change you can finish early: `gr prepare --partial` sends what you reviewed

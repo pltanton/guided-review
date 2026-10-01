@@ -1,9 +1,12 @@
 package state
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func (r *Review) MyThreads() []Discussion {
@@ -74,13 +77,92 @@ func ThreadSeverity(d Discussion) Severity {
 	return ""
 }
 
+var commentMarker = regexp.MustCompile(`<!-- gr:comment (\d+) -->`)
+
+func CommentMarker(id int) string {
+	return fmt.Sprintf("<!-- gr:comment %d -->", id)
+}
+
+func MarkedComment(body string) int {
+	m := commentMarker.FindStringSubmatch(body)
+	if m == nil {
+		return 0
+	}
+	id, _ := strconv.Atoi(m[1])
+	return id
+}
+
+func WithoutMarker(body string) string {
+	return strings.TrimSpace(commentMarker.ReplaceAllString(body, ""))
+}
+
 func (r *Review) CommentFor(d Discussion) *Comment {
+	if i := slices.IndexFunc(r.Comments, func(c Comment) bool { return c.ThreadID == d.ID }); i >= 0 {
+		return &r.Comments[i]
+	}
+	if r.MR == nil || d.Author != r.MR.Me {
+		return nil
+	}
+	if d.Comment > 0 {
+		i := slices.IndexFunc(r.Comments, func(c Comment) bool {
+			return c.ID == d.Comment && c.Published && c.ThreadID == ""
+		})
+		if i < 0 {
+			return nil
+		}
+		return &r.Comments[i]
+	}
+	text := strings.TrimSpace(severityPrefix.ReplaceAllString(d.Body, ""))
+	text, _, _ = strings.Cut(text, "\n\n```suggestion")
+	var found *Comment
 	for i := range r.Comments {
 		c := &r.Comments[i]
-		if c.Published && c.Body != "" && strings.Contains(d.Body, c.Body) &&
-			(d.File == "" || d.File == c.File) {
-			return c
+		if !c.Published || c.ThreadID != "" || strings.TrimSpace(c.Body) != text ||
+			d.File != "" && d.File != c.File {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = c
+	}
+	return found
+}
+
+func (r *Review) LinkComments() {
+	for _, d := range r.Discussions {
+		if c := r.CommentFor(d); c != nil {
+			c.ThreadID = d.ID
 		}
 	}
+}
+
+func (t Thread) Decided() bool {
+	return t.Verdict != "" && t.DecidedBy == DecidedByViewer && !t.DecidedAt.IsZero()
+}
+
+func (r *Review) Decide(id, verdict, reply string, now time.Time) error {
+	d := r.Discussion(id)
+	if d == nil {
+		return fmt.Errorf("no thread %q", id)
+	}
+	t := r.ThreadState(*d)
+	if i := slices.IndexFunc(r.Comments, func(c Comment) bool { return c.ID == t.Resolves }); i >= 0 {
+		r.Comments[i].Resolved, r.Comments[i].ResolvedRound = false, 0
+	}
+	t.Resolves = 0
+	switch verdict {
+	case VerdictResolve, VerdictOpen:
+		t.Verdict, t.Reply = verdict, strings.TrimSpace(reply)
+		t.DecidedAt, t.DecidedBy = now, DecidedByViewer
+	case VerdictNone:
+		t.Verdict, t.Reply, t.DecidedAt, t.DecidedBy = "", "", time.Time{}, ""
+	default:
+		return fmt.Errorf("verdict %q: want resolve, open or none", verdict)
+	}
+	if c := r.CommentFor(*d); c != nil && verdict == VerdictResolve && !c.Resolved {
+		c.Resolved, c.ResolvedRound, t.Resolves = true, max(r.Round, 1), c.ID
+	}
+	r.SetThread(t)
 	return nil
 }

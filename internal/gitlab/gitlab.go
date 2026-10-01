@@ -213,6 +213,9 @@ func CurrentUser(ctx context.Context, run Runner, host string) (string, error) {
 	if err := json.Unmarshal(out, &u); err != nil {
 		return "", fmt.Errorf("decode user: %w", err)
 	}
+	if u.Username == "" {
+		return "", errors.New("no user in the reply: run glab auth login")
+	}
 	return u.Username, nil
 }
 

@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -23,7 +24,7 @@ func (m *model) myThreads() []state.Discussion {
 func (m *model) pendingThreads() int {
 	n := 0
 	for _, d := range m.myThreads() {
-		if m.review.Answered(d) && m.review.ThreadState(d).Verdict == "" {
+		if m.review.Answered(d) && !m.review.ThreadState(d).Decided() {
 			n++
 		}
 	}
@@ -96,7 +97,7 @@ func (m *model) threadBody(w int) (lines []string, starts []int) {
 		}
 		if t.Assessment != "" {
 			say("agent", agentTone, verdictWord(t.Proposed)+": "+t.Assessment)
-			if t.ProposedReply != "" && t.Verdict == "" {
+			if t.ProposedReply != "" && !t.Decided() {
 				say("", agentTone, "reply: "+t.ProposedReply)
 			}
 		}
@@ -109,9 +110,9 @@ func (m *model) threadBody(w int) (lines []string, starts []int) {
 
 func threadStatus(r *state.Review, d state.Discussion, t state.Thread) string {
 	switch {
-	case t.Verdict == state.VerdictResolve:
+	case t.Decided() && t.Verdict == state.VerdictResolve:
 		return addStyle.Bold(true).Render("✔ resolve")
-	case t.Verdict == state.VerdictOpen:
+	case t.Decided() && t.Verdict == state.VerdictOpen:
 		return delStyle.Bold(true).Render("✖ keep open")
 	case t.Proposed != "":
 		return agentTone.fg().Render("agent: " + verdictWord(t.Proposed) + "?")
@@ -141,7 +142,7 @@ func (m *model) threadsView() string {
 		if r.Answered(d) {
 			answered++
 		}
-		if r.ThreadState(d).Verdict != "" {
+		if r.ThreadState(d).Decided() {
 			decided++
 		}
 	}
@@ -224,7 +225,7 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "u":
 		if ok {
-			m.decideThread(d.ID, "none", "")
+			m.decideThread(d.ID, state.VerdictNone, "")
 		}
 	case "c", "enter":
 		if ok {
@@ -237,16 +238,13 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 }
 
 func (m *model) decideThread(id, verdict, reply string) {
-	args := []string{"thread", "decide", id, "--verdict", verdict}
-	if reply != "" {
-		args = append(args, "--reply", reply)
-	}
-	if out, err := m.runGr(args...); err != nil {
-		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+	err := m.store.UpdateCurrent(func(r *state.Review) error {
+		return r.Decide(id, verdict, reply, time.Now())
+	})
+	if err != nil {
+		m.err = err
 		return
 	}
-	if m.store.Dir != "" {
-		m.reload()
-	}
+	m.reload()
 	m.status = "thread " + verdictWord(verdict)
 }

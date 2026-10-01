@@ -34,6 +34,8 @@ and the rest happens in the terminal chat.
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
    - "commit … not found locally": run the fetch commands it names and retry.
+   - "who you are on …": glab or gh is not logged in; ask the user to run
+     `glab auth login` / `gh auth login`, then retry.
    - "already exists, resuming": `gr step show`, then continue the step loop. If it also
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.
@@ -270,12 +272,14 @@ human decides each one; you prepare the decision. Before planning:
    wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
    author asked something; keep it to the style of a review comment.
 2. `gr say` one line per answered thread (`d1 a.go:5: не исправлено, предлагаю оставить`)
-   and ask them to press `R` to decide. Never run `gr thread decide` yourself.
+   and ask them to press `R` to decide. Decisions are the human's: the viewer records
+   them itself and there is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
    if your view changed, assess it again.
 
-`gr prepare` refuses while an answered thread has no decision, and refuses `approve` while
-any of your threads stays open. A decided resolve also resolves the matching gr comment.
+`gr prepare` refuses while an answered thread has no decision from the viewer, and refuses
+`approve` while any of your threads stays open. A decided resolve also resolves the matching
+gr comment; undoing the decision (`u`) takes that back.
 
 ## Self mode (`gr init` printed "mode: self")
 
@@ -310,7 +314,7 @@ line, say whether the code answers it.
    accepted as is, what was left for later, why steps were skipped) as a few bullet
    lines, then:
    `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
-   (add `--approve` only if they asked to approve). The viewer now shows `finish · P`:
+   (add `--approve` only if they asked to approve; it goes only with `--verdict approve`). The viewer now shows `finish · P`:
    `P` previews the result, `P` again writes it to the review's export dir
    (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
    returning the human to your pane.
@@ -331,56 +335,24 @@ line, say whether the code answers it.
    the review is open), so any agent in this repo can pick it up later. Then step 7.
 5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
-   goes out — N comments, thread replies and resolves, the summary, the verdict, approve or not — and ask «публикую?».
-   Only on a clear yes, run the block for the provider as one Bash call: shell variables
-   do not survive between calls. Each block posts the review, then replies to and
-   resolves your threads (`threads` in `review.json`), and runs `gr mark-published` only
-   if everything went out.
-
-   **GitHub** — one request carries the summary, the verdict and every comment; a thread
-   reply goes to its first comment, a resolve takes the thread's node id:
-   ```bash
-   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
-   ok=1
-   gh api --hostname "$host" -X POST "$api" --input "$dir/review-request.json" >/dev/null || ok=0
-   while [ $ok = 1 ] && read -r t; do
-     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
-     if [ -n "$reply" ]; then gh api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
-     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
-       gh api --hostname "$host" graphql -f id="$(jq -r .id <<<"$t")" \
-         -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' >/dev/null || ok=0
-     fi
-   done < <(jq -c '.threads[]?' "$dir/review.json")
-   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
-   ```
-   GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set `"event": "COMMENT"`
-   in `review-request.json` and post again.
-
-   **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last; a
-   thread reply goes to `reply_api`, a resolve to the discussion's `api`:
-   ```bash
-   dir=$(gr export --dir); host=$(jq -r .host "$dir/review.json"); api=$(jq -r .api "$dir/review.json")
-   glab api --hostname "$host" "$api/draft_notes" | jq length   # must be 0; otherwise stop and ask
-   ok=1
-   for f in $(jq -r '.drafts[]' "$dir/review.json"); do
-     glab api --hostname "$host" -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" >/dev/null || { ok=0; break; }
-   done
-   [ $ok = 1 ] && { glab api --hostname "$host" -X POST "$api/draft_notes/bulk_publish" >/dev/null || ok=0; }
-   if [ $ok = 1 ] && [ "$(jq -r .approve "$dir/review.json")" = true ]; then
-     glab api --hostname "$host" -X POST "$api/approve" >/dev/null || ok=0
-   fi
-   while [ $ok = 1 ] && read -r t; do
-     reply=$(jq -r '.reply // ""' <<<"$t"); ra=$(jq -r '.reply_api // ""' <<<"$t")
-     if [ -n "$reply" ]; then glab api --hostname "$host" -X POST "$ra" -f body="$reply" >/dev/null || ok=0; fi
-     if [ $ok = 1 ] && [ "$(jq -r .resolve <<<"$t")" = true ]; then
-       glab api --hostname "$host" -X PUT "$(jq -r .api <<<"$t")" -f resolved=true >/dev/null || ok=0
-     fi
-   done < <(jq -c '.threads[]?' "$dir/review.json")
-   [ $ok = 1 ] && gr mark-published || echo "stopped: nothing marked published"
-   ```
-   If a block stops, say the error and what already went out (on GitLab, drafts created
-   before a failed POST sit unpublished on the MR); do not retry blindly, and do not run
-   `gr mark-published` by hand. After success give the link.
+   goes out — N comments, thread replies and resolves, the summary, the verdict, approve or
+   not — and ask «публикую?». Only on a clear yes, run the script for the provider from
+   this skill's `scripts/` directory, in the repository:
+   `bash <this skill's dir>/scripts/publish-gitlab.sh` or `…/publish-github.sh`.
+   It posts the review (GitLab: draft notes, then one bulk publish, then approve; GitHub:
+   one review request with the summary, the verdict and every comment), then replies to and
+   resolves your threads, logs each write that went through to `<dir>/published.jsonl`, and
+   ends with `gr mark-published`, which marks exactly what is logged and prints
+   `not published: …` for the rest.
+   If it stops, say the error and what went out. Once the cause is fixed (a login, the
+   network), run `gr export` and the script again: the new export holds only what did not
+   go out, and on GitLab the script reuses drafts that already sit on the MR instead of
+   posting them twice. If the MR holds draft notes that are not from this export, the
+   script stops before publishing, because bulk publish would post them too: ask the
+   reviewer what to do with them. Never write `published.jsonl` or run `gr mark-published`
+   by hand. GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set
+   `"event": "COMMENT"` in `review-request.json` and run the script again without
+   `gr export`. After success give the link.
 6. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the

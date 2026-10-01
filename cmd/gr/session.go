@@ -108,6 +108,11 @@ func (s session) diff(ctx context.Context, base, head string) ([]diff.File, erro
 	return s.repo.Files(ctx, algo, base, head)
 }
 
+// GitLab and GitHub check comment positions against their own Myers diff of the MR.
+func (s session) serverDiff(ctx context.Context, base, head string) ([]diff.File, error) {
+	return s.repo.Files(ctx, "myers", base, head)
+}
+
 func (s session) reviewDiff(ctx context.Context, r *state.Review) ([]diff.File, error) {
 	return s.diff(ctx, r.DiffBase(), r.HeadSHA)
 }

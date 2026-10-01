@@ -149,3 +149,15 @@ func TestDraftJSON(t *testing.T) {
 		t.Fatalf("old_line must be omitted for an added line: %s", data)
 	}
 }
+
+func TestCurrentUser(t *testing.T) {
+	reply := `{"username":"alice"}`
+	run := func(context.Context, ...string) ([]byte, error) { return []byte(reply), nil }
+	if me, err := gitlab.CurrentUser(context.Background(), run, "h"); err != nil || me != "alice" {
+		t.Fatalf("CurrentUser = %q, %v", me, err)
+	}
+	reply = `{}`
+	if _, err := gitlab.CurrentUser(context.Background(), run, "h"); err == nil {
+		t.Fatal("a reply without a username is an error")
+	}
+}

@@ -267,7 +267,8 @@ func (m *model) publishPlan() *state.PublishPlan {
 func (m *model) cycleVerdict() {
 	if p := m.publishPlan(); p != nil {
 		i := slices.Index(verdictCycle, p.Verdict)
-		m.prepare(verdictCycle[(i+1)%len(verdictCycle)], p.Approve)
+		next := verdictCycle[(i+1)%len(verdictCycle)]
+		m.prepare(next, p.Approve && next == "approve")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/inbox"
@@ -292,6 +294,9 @@ func TestInitMR(t *testing.T) {
 		"position":{"new_path":"api/transfer.go","new_line":5,"old_path":"api/transfer.go"}}]},
 		{"id":"d2","notes":[{"body":"please add a test","author":{"username":"bob"},"system":false,"resolvable":true}]}]`
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(discussions), nil
 		}
@@ -726,6 +731,9 @@ func TestDiscussionsFull(t *testing.T) {
 	base := h.repo.Git("rev-parse", "main")
 	head := h.repo.Git("rev-parse", "HEAD")
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(
 				`[{"id":"d1","notes":[{"body":"## ci-report\nline two\nline three","author":{"username":"ci"},"system":false,"resolvable":true},
@@ -793,12 +801,22 @@ func TestCommentEdit(t *testing.T) {
 
 func mrHarness(t *testing.T) (*harness, *[]string) {
 	h := newHarness(t)
+	calls := h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.mustRun(goodPlan, "plan", "set")
+	return h, calls
+}
+
+func (h *harness) stubGitLab() *[]string {
 	base := h.repo.Git("rev-parse", "main")
 	head := h.repo.Git("rev-parse", "HEAD")
 	var calls []string
 	h.glab = func(_ context.Context, args ...string) ([]byte, error) {
 		path := args[len(args)-1]
 		calls = append(calls, path)
+		if path == "user" {
+			return []byte(`{"username":"me"}`), nil
+		}
 		if strings.Contains(path, "/discussions") {
 			return []byte(`[]`), nil
 		}
@@ -806,9 +824,44 @@ func mrHarness(t *testing.T) (*harness, *[]string) {
 			"source_branch":"feature","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
 			base, base, head), nil
 	}
-	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
-	h.mustRun(goodPlan, "plan", "set")
-	return h, &calls
+	return &calls
+}
+
+func (h *harness) stubGitHub() {
+	base := h.repo.Git("rev-parse", "main")
+	head := h.repo.Git("rev-parse", "HEAD")
+	h.gh = func(_ context.Context, args ...string) ([]byte, error) {
+		switch {
+		case args[len(args)-1] == "user":
+			return []byte(`{"login":"me"}`), nil
+		case slices.Contains(args, "graphql"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]},
+				"comments":{"nodes":[]}}}}}`), nil
+		}
+		return fmt.Appendf(nil, `{"title":"T","html_url":"https://github.com/o/r/pull/7",
+			"head":{"ref":"feature","sha":%q},"base":{"sha":%q}}`, head, base), nil
+	}
+}
+
+func fileHarness(t *testing.T, path, before, after string) *harness {
+	tr := testrepo.New(t)
+	tr.Write(path, before)
+	tr.Commit("base")
+	tr.Git("checkout", "-q", "-b", "feature")
+	tr.Write(path, after)
+	tr.Commit("change")
+	return &harness{t: t, repo: tr, cache: t.TempDir()}
+}
+
+func (h *harness) reviewWhole(path string, comments ...[]string) {
+	h.t.Helper()
+	h.mustRun("steps:\n  - {id: s1, title: all, kind: logic, hunks: [{file: "+path+"}]}\n",
+		"plan", "set")
+	for _, c := range comments {
+		h.mustRun("", append([]string{"comment", "add", "--file", path}, c...)...)
+	}
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes")
 }
 
 func TestExport(t *testing.T) {
@@ -828,6 +881,12 @@ func TestExport(t *testing.T) {
 	h.mustRun("", "step", "next")
 	h.mustRun("", "step", "next")
 	*calls = nil
+	for _, v := range []string{"changes", "blocked"} {
+		if _, err := h.run("", "prepare", "--verdict", v, "--approve"); err == nil ||
+			!strings.Contains(err.Error(), "--approve only goes with --verdict approve") {
+			t.Fatalf("--approve with %s must be refused, got %v", v, err)
+		}
+	}
 	h.mustRun("", prepare...)
 
 	out := h.mustRun("", "export", "--dry-run")
@@ -855,7 +914,7 @@ func TestExport(t *testing.T) {
 		!slices.Equal(x.Comments, []int{1, 2}) || !x.Summary || len(x.Drafts) != 3 {
 		t.Fatalf("review.json: %+v", x)
 	}
-	first, err := os.ReadFile(filepath.Join(dir, x.Drafts[0]))
+	first, err := os.ReadFile(filepath.Join(dir, x.Drafts[0].File))
 	if err != nil || !strings.Contains(string(first), `"new_line": 6`) {
 		t.Fatalf("first draft must sit on line 6: %s %v", first, err)
 	}
@@ -865,6 +924,7 @@ func TestExport(t *testing.T) {
 		}
 	}
 
+	h.sendAll()
 	assertContains(t, h.mustRun("", "mark-published"), "marked 2 comments and 0 threads published")
 	if _, err := h.run("", "export", "--dry-run"); err == nil {
 		t.Fatal("mark-published must clear the prepared result")
@@ -1200,6 +1260,9 @@ func TestGitHubPR(t *testing.T) {
 	var calls []string
 	h.gh = func(_ context.Context, args ...string) ([]byte, error) {
 		calls = append(calls, strings.Join(args, " "))
+		if args[len(args)-1] == "user" {
+			return []byte(`{"login":"me"}`), nil
+		}
 		if slices.Contains(args, "graphql") {
 			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[
 				{"id":"t1","isResolved":false,"path":"api/transfer.go","line":5,"diffSide":"RIGHT",
@@ -1227,7 +1290,7 @@ func TestGitHubPR(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := github.ReviewComment{Path: "api/transfer.go", Line: 6, Side: "RIGHT", StartLine: 4,
-		StartSide: "RIGHT", Body: "**major** zero is negative too\n\n```suggestion\n\tif a <= 0 {\n```"}
+		StartSide: "RIGHT", Body: "**major** zero is negative too\n\n```suggestion\n\tif a <= 0 {\n```\n\n<!-- gr:comment 1 -->"}
 	if req.Event != "REQUEST_CHANGES" || req.CommitID != head || len(req.Comments) != 1 ||
 		req.Comments[0] != want || !strings.Contains(req.Body, "Guided review: changes requested") {
 		t.Fatalf("review request: %s", data)
@@ -1241,6 +1304,26 @@ func TestGitHubPR(t *testing.T) {
 			t.Fatalf("gr must not write to GitHub: %v", calls)
 		}
 	}
+}
+
+func (h *harness) edit(apply func(*state.Review)) {
+	h.t.Helper()
+	_, _, err := updateReview(context.Background(), h.repo.Dir, func(_ session, r *state.Review) error {
+		apply(r)
+		return nil
+	})
+	if err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *harness) decide(id, verdict, reply string) {
+	h.t.Helper()
+	h.edit(func(r *state.Review) {
+		if err := r.Decide(id, verdict, reply, time.Now()); err != nil {
+			h.t.Fatal(err)
+		}
+	})
 }
 
 func TestMissingCommitsNameEveryFetch(t *testing.T) {
@@ -1308,7 +1391,16 @@ func TestThreads(t *testing.T) {
 	h.mustRun("", "thread", "assess", "d1", "--propose", "open", "--reply", "callers can't tell",
 		"the", "reply", "does", "not", "address", "it")
 	assertContains(t, h.mustRun("", "thread", "list"), "agent (open): the reply does not address it")
-	h.mustRun("", "thread", "decide", "d1", "--verdict", "open", "--reply", "callers can't tell")
+	if _, err := h.run("", "thread", "decide", "d1", "--verdict", "resolve"); err == nil {
+		t.Fatal("only the viewer decides a thread: gr thread decide must not exist")
+	}
+	h.edit(func(r *state.Review) {
+		r.SetThread(state.Thread{ID: "d1", Notes: 2, Verdict: state.VerdictResolve})
+	})
+	if _, err := h.run("", changes...); err == nil || !strings.Contains(err.Error(), "d1") {
+		t.Fatalf("a verdict the viewer did not write is no decision, got %v", err)
+	}
+	h.decide("d1", state.VerdictOpen, "callers can't tell")
 	approve := []string{"prepare", "--verdict", "approve"}
 	if _, err := h.run("", approve...); err == nil || !strings.Contains(err.Error(), "still open") {
 		t.Fatalf("approve with open threads must fail, got %v", err)
@@ -1329,6 +1421,7 @@ func TestThreads(t *testing.T) {
 	if len(x.Threads) != 1 || x.Threads[0] != want {
 		t.Fatalf("threads = %+v, want %+v", x.Threads, want)
 	}
+	h.sendAll()
 	assertContains(t, h.mustRun("", "mark-published"), "1 threads published")
 	if out := h.mustRun("", "thread", "list"); strings.Contains(out, "d1") {
 		t.Fatalf("a published decision leaves the list until someone answers:\n%s", out)
@@ -1338,4 +1431,217 @@ func TestThreads(t *testing.T) {
 	h.mustRun("", "discussions")
 	assertContains(t, h.mustRun("", "thread", "list"),
 		"thread d1  api/transfer.go:5  answered, undecided")
+}
+
+func TestInitNeedsTheCurrentUser(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.edit(func(r *state.Review) { r.MR.Me = "" })
+	if _, err := h.run("", "prepare", "--verdict", "approve"); err == nil ||
+		!strings.Contains(err.Error(), "your login") {
+		t.Fatalf("approve without knowing who you are must be refused, got %v", err)
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+
+	login := h.glab
+	h.glab = func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[len(args)-1] == "user" {
+			return nil, errors.New("glab api user: 401 (not logged in? run: glab auth login)")
+		}
+		return login(ctx, args...)
+	}
+	if _, err := h.run("", "discussions"); err == nil ||
+		!strings.Contains(err.Error(), "glab auth login") {
+		t.Fatalf("a failed user lookup must surface with its hint, got %v", err)
+	}
+}
+
+func TestPositionsFollowTheServerDiff(t *testing.T) {
+	h := fileHarness(t, "flow.go", "return nil\ny\n}\n}\n", "}\n}\ny\n")
+	h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.reviewWhole("flow.go",
+		[]string{"--lines", "3", "--severity", "nit", "y moved down"},
+		[]string{"--lines", "1", "--severity", "nit", "brace"})
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	for name, want := range map[string]gitlabPosition{
+		"drafts/01.json": {NewLine: 3},
+		"drafts/02.json": {NewLine: 1, OldLine: 3},
+	} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var note struct{ Position gitlabPosition }
+		if err := json.Unmarshal(data, &note); err != nil {
+			t.Fatal(err)
+		}
+		if note.Position != want {
+			t.Fatalf("%s: position %+v, want %+v as in a myers diff", name, note.Position, want)
+		}
+	}
+}
+
+type gitlabPosition struct {
+	NewLine int `json:"new_line"`
+	OldLine int `json:"old_line"`
+}
+
+func TestGitHubCommentsStayInOneHunk(t *testing.T) {
+	var before, after strings.Builder
+	for i := 1; i <= 20; i++ {
+		fmt.Fprintf(&before, "l%d\n", i)
+		if i == 3 || i == 15 {
+			fmt.Fprintf(&after, "L%d\n", i)
+		} else {
+			fmt.Fprintf(&after, "l%d\n", i)
+		}
+	}
+	h := fileHarness(t, "g.go", before.String(), after.String())
+	h.stubGitHub()
+	h.mustRun("", "init", "https://github.com/o/r/pull/7")
+	h.reviewWhole("g.go",
+		[]string{"--lines", "3-15", "--severity", "minor", "--suggestion", "x", "two hunks"},
+		[]string{"--lines", "1-3", "--severity", "nit", "--suggestion", "y", "one hunk"},
+		[]string{"--lines", "9", "--severity", "nit", "outside"})
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+	data, err := os.ReadFile(filepath.Join(dir, "review-request.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req github.Review
+	if err := json.Unmarshal(data, &req); err != nil {
+		t.Fatal(err)
+	}
+	want := []github.ReviewComment{
+		{Path: "g.go", Line: 15, Side: "RIGHT",
+			Body: "`g.go:3-15` **minor** two hunks\n\n<!-- gr:comment 1 -->"},
+		{Path: "g.go", Line: 3, Side: "RIGHT", StartLine: 1, StartSide: "RIGHT",
+			Body: "**nit** one hunk\n\n```suggestion\ny\n```\n\n<!-- gr:comment 2 -->"},
+	}
+	if !slices.Equal(req.Comments, want) || !strings.Contains(req.Body, "`g.go:9` **nit** outside") {
+		t.Fatalf("review request: %s", data)
+	}
+}
+
+func (h *harness) publishAll() {
+	h.t.Helper()
+	h.mustRun("", "export")
+	h.sendAll()
+	h.mustRun("", "mark-published")
+}
+
+func (h *harness) sendAll() {
+	h.t.Helper()
+	dir := strings.TrimSpace(h.mustRun("", "export", "--dir"))
+	data, err := os.ReadFile(filepath.Join(dir, "review.json"))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	var x export
+	if err := json.Unmarshal(data, &x); err != nil {
+		h.t.Fatal(err)
+	}
+	all := x.Review
+	for _, d := range x.Drafts {
+		all = append(all, d.sent)
+	}
+	if x.Approve {
+		all = append(all, sent{Kind: "approve"})
+	}
+	for _, a := range x.Threads {
+		if a.Reply != "" {
+			all = append(all, sent{Kind: "thread", ID: a.ID, Part: "reply"})
+		}
+		if a.Resolve {
+			all = append(all, sent{Kind: "thread", ID: a.ID, Part: "resolve"})
+		}
+	}
+	var log bytes.Buffer
+	for _, x := range all {
+		line, _ := json.Marshal(x)
+		log.Write(append(line, '\n'))
+	}
+	if err := os.WriteFile(filepath.Join(dir, publishedLog), log.Bytes(), 0o600); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+func (h *harness) nextRound(content string) {
+	h.t.Helper()
+	h.repo.Write("wire.go", content)
+	h.repo.Commit("fixup")
+	h.stubGitLab()
+	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	h.mustRun("steps:\n  - {id: r1, title: fixup, kind: logic, hunks: [{file: wire.go}]}\n",
+		"plan", "set")
+	h.mustRun("", "step", "next")
+}
+
+func TestResolvedCommentsInTheSummary(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "major", "return an error")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "7",
+		"--severity", "nit", "spacing")
+	h.mustRun("", "comment", "resolve", "2")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "changes")
+	out := h.mustRun("", "export", "--dry-run")
+	if strings.Contains(out, "--- #2") || strings.Contains(out, "Resolved since") {
+		t.Fatalf("a comment resolved before it was published is not sent or mentioned:\n%s", out)
+	}
+	assertContains(t, out, "--- #1", "Comments: 1 major, inline.")
+	h.publishAll()
+
+	h.nextRound("package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.mustRun("", "comment", "resolve", "1")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	assertContains(t, h.mustRun("", "export", "--dry-run"), "Resolved since the last round: #1.")
+	h.publishAll()
+
+	h.nextRound("package api\n\nvar _ = Transfer\nvar _ = 2\n")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	if out := h.mustRun("", "export", "--dry-run"); strings.Contains(out, "Resolved since") {
+		t.Fatalf("round 3 resolved nothing:\n%s", out)
+	}
+}
+
+func TestGitHubBodyWithoutSummary(t *testing.T) {
+	h := newHarness(t)
+	h.stubGitHub()
+	h.mustRun("", "init", "https://github.com/o/r/pull/7")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.edit(func(r *state.Review) { r.SummaryRound = 1 })
+	request := func() github.Review {
+		t.Helper()
+		dir := strings.TrimSpace(h.mustRun("", "export"))
+		data, err := os.ReadFile(filepath.Join(dir, "review-request.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var req github.Review
+		if err := json.Unmarshal(data, &req); err != nil {
+			t.Fatal(err)
+		}
+		return req
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+	if req := request(); req.Event != "REQUEST_CHANGES" || req.Body != "Changes still requested." {
+		t.Fatalf("no comments and no summary: %+v", req)
+	}
+	h.mustRun("", "prepare", "--verdict", "approve", "--approve")
+	if req := request(); req.Event != "APPROVE" || req.Body != "" {
+		t.Fatalf("an approve needs no text: %+v", req)
+	}
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "nit", "x")
+	h.mustRun("", "prepare", "--verdict", "changes")
+	if req := request(); req.Body != "See the inline comments." {
+		t.Fatalf("inline comments get the pointer: %+v", req)
+	}
 }
