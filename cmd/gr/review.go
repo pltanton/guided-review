@@ -29,6 +29,9 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	printHeader(e, s, r)
+	if path := s.exported(r.ID); path != "" {
+		e.printf("export: %s\n", path)
+	}
 	if len(r.Steps) == 0 {
 		e.println("no plan yet: pipe a plan to gr plan set")
 		if *gate {
@@ -418,6 +421,9 @@ func cmdList(ctx context.Context, e env, _ []string) error {
 		}
 		cov := plan.CoverageOf(r)
 		e.printf("%s %s  %d/%d steps  %s\n", marker, id, cov.Done+cov.Skipped, cov.Total, title)
+		if path := s.exported(id); path != "" {
+			e.printf("    export: %s\n", path)
+		}
 	}
 	return nil
 }

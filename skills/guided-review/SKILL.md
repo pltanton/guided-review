@@ -155,9 +155,10 @@ steps:
 ## Parallel planning
 
 1. Write the route yourself: `summary` and `boilerplate` to
-   `/tmp/guided-review/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
+   `/tmp/gr-plan/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
    `kind`, `chapter`, `hunks`, `depends_on`, nothing else — to
-   `/tmp/guided-review/<id>/chapter-N.yaml` as a top-level `steps:` list.
+   `/tmp/gr-plan/<id>/chapter-N.yaml` as a top-level `steps:` list. These are scratch
+   files for you and the subagents only; gr reads them just through `gr plan set -f`.
 2. In one message start one general-purpose subagent per chapter, so they run at once.
    Give each: the code path, base and head, the task in two lines, its chapter file, and
    the path of this skill's `references/` directory. Its job: read `style.md`,
@@ -279,8 +280,6 @@ stranger would. Do not look for or ask about how it was written.
   as a subagent, reply with the export dir as your final answer; in a window, just end
   your turn (the author's agent closes it). No publishing, no notifying.
 
-
-
 `gr init` and `gr status` list unresolved discussions of other reviewers by their first
 line; `gr discussions` refreshes them from the MR and prints them in full. The viewer
 marks the ones on lines. Mention them in intake, and on a step that touches a discussed
@@ -297,8 +296,9 @@ line, say whether the code answers it.
    lines, then:
    `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
    (add `--approve` only if they asked to approve). The viewer now shows `finish · P`:
-   `P` previews the result, `P` again writes it to `/tmp/guided-review/<id>/`, sends you
-   `[finished] sN: <dir>` and closes the viewer, returning the human to your pane.
+   `P` previews the result, `P` again writes it to the review's export dir
+   (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
+   returning the human to your pane.
    `gr say` «готово: P во вьювере» and `gr wait`. While the human reads the result they
    can message you from it — `re #N …` about one comment (`gr comment edit N`), or about
    the summary or decisions (run `gr prepare` again with the new text); the viewer
@@ -306,14 +306,22 @@ line, say whether the code answers it.
    instead, run `gr export` yourself: it prints the same dir.
    From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
    `gr say` / `gr wait` — and ending your turn with a question is fine.
-4. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
+4. A local branch without an MR (`gr init` without a URL, not self mode): there is
+   nothing to publish. The dir holds `fixes.json` (`verdict`, `decisions`, `fixes` with
+   `id`, `severity`, `file`, `lines`, `body`, `suggestion`) and `review.md`. Tell them the
+   counts and ask «применить сейчас / оставить». Apply now: every fix was agreed during
+   the review, `suggestion` is the exact replacement, lines refer to the reviewed commit
+   (find the spot by content if the file changed); report one line per fix and run the
+   tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
+   the review is open), so any agent in this repo can pick it up later. Then step 7.
+5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or not — and ask «публикую?».
    Only on a clear yes, by provider:
 
    **GitHub** — one request carries the summary, the verdict and every comment:
    ```bash
-   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
+   dir=$(gr export --dir); host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
    gh api --hostname $host -X POST "$api" --input "$dir/review-request.json"
    gr mark-published
    ```
@@ -322,7 +330,7 @@ line, say whether the code answers it.
 
    **GitLab** — `drafts/NN.json` are the exact draft-note bodies, the summary last:
    ```bash
-   dir=/tmp/guided-review/<id>; host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
+   dir=$(gr export --dir); host=$(jq -r .host $dir/review.json); api=$(jq -r .api $dir/review.json)
    glab api --hostname $host "$api/draft_notes" | jq length   # must be 0; otherwise ask first
    for f in $(jq -r '.drafts[]' $dir/review.json); do
      glab api --hostname $host -X POST "$api/draft_notes" -H 'Content-Type: application/json' --input "$dir/$f" || break
@@ -347,9 +355,9 @@ line, say whether the code answers it.
      # gh api graphql -f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' -f id="$id"
    done
    ```
-5. Tell the author. If a `guided-review-notify` skill is available, follow it with the
+6. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
    human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
-6. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
+7. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

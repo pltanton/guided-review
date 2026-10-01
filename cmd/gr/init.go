@@ -84,6 +84,12 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if *self {
 		r.Mode = modeSelf
 	}
+	if files != nil || *self {
+		if err := os.RemoveAll(s.exportDir(r.ID)); err != nil {
+			return err
+		}
+		r.Publish = nil
+	}
 	if err := syncDiscussions(ctx, e, r); err != nil {
 		return err
 	}

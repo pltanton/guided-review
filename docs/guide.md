@@ -62,9 +62,12 @@ definitions, references, implementations, callers, and a call flow for the step.
 <summary>Publishing</summary>
 
 `gr` never writes to GitLab or GitHub. At the end it writes inline comments and a
-summary (verdict, decisions, what was skipped and why) to `/tmp/guided-review/<id>/`.
+summary (verdict, decisions, what was skipped and why) to
+`<git common dir>/guided-review/exports/<id>/` (`gr export --dir` prints it).
 You review and edit it, then the agent posts it: GitLab draft notes in one batch or one
-GitHub review. A `guided-review-notify` skill, if present, then tells the author.
+GitHub review. A `guided-review-notify` skill, if present, then tells the author. A
+local branch without an MR ends in `fixes.json` instead, which the agent applies right
+away or leaves for later (`gr list` shows where it is).
 
 </details>
 

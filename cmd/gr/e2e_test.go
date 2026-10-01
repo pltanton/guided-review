@@ -52,13 +52,12 @@ func (h *harness) run(stdin string, args ...string) (string, error) {
 	err := run(
 		context.Background(),
 		env{
-			dir:       h.repo.Dir,
-			cacheDir:  h.cache,
-			exportDir: filepath.Join(h.cache, "export"),
-			stdin:     strings.NewReader(stdin),
-			stdout:    &out,
-			glab:      h.glab,
-			gh:        h.gh,
+			dir:      h.repo.Dir,
+			cacheDir: h.cache,
+			stdin:    strings.NewReader(stdin),
+			stdout:   &out,
+			glab:     h.glab,
+			gh:       h.gh,
 		},
 		args,
 	)
@@ -72,6 +71,15 @@ func (h *harness) mustRun(stdin string, args ...string) string {
 		h.t.Fatalf("gr %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return out
+}
+
+func (h *harness) exportDir(id string) string {
+	h.t.Helper()
+	dir := strings.TrimSpace(h.mustRun("", "export", "--dir"))
+	if want := filepath.Join(h.repo.Dir, ".git", "guided-review", "exports", id); dir != want {
+		h.t.Fatalf("export dir %q, want %q", dir, want)
+	}
+	return dir
 }
 
 func assertContains(t *testing.T, out string, wants ...string) {
@@ -554,7 +562,7 @@ func TestExport(t *testing.T) {
 	assertContains(t, out, "api/transfer.go:6", "**major** return an error instead",
 		"```suggestion:-0+0", "**Guided review: changes requested**", "zero is a silent reject",
 		"Comments: 1 major, 1 nit, inline.")
-	dir := filepath.Join(h.cache, "export", "mr-7")
+	dir := h.exportDir("mr-7")
 	if _, err := os.Stat(dir); err == nil {
 		t.Fatal("dry run must not write the export")
 	}
@@ -638,7 +646,7 @@ func TestSelfReview(t *testing.T) {
 
 	assertContains(t, h.mustRun("", "export", "--dry-run"),
 		"--- #1 api/transfer.go:4", "**minor** zero is negative too", "```suggestion", "--- summary")
-	dir := filepath.Join(h.cache, "export", "self-feature")
+	dir := h.exportDir("self-feature")
 	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
 		t.Fatalf("export printed %q, want %q", out, dir)
 	}
@@ -660,6 +668,63 @@ func TestSelfReview(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "review.json")); err == nil {
 		t.Fatal("a self review must not produce GitLab drafts")
+	}
+}
+
+func TestLocalReviewFinishes(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4",
+		"--severity", "minor", "zero is negative too")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	if _, err := h.run("", "prepare", "--verdict", "approve", "--approve"); err == nil {
+		t.Fatal("--approve without an MR must fail")
+	}
+	h.mustRun("", "prepare", "--verdict", "changes")
+	dir := h.exportDir("feature")
+	if out := strings.TrimSpace(h.mustRun("", "export")); out != dir {
+		t.Fatalf("export printed %q, want %q", out, dir)
+	}
+	for _, name := range []string{"fixes.json", "review.md"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries, _ := os.ReadDir(filepath.Dir(dir))
+	if len(entries) != 1 {
+		t.Fatalf("exports must hold only the finished dir, got %v", entries)
+	}
+	assertContains(t, h.mustRun("", "status"), "export: "+filepath.Join(dir, "fixes.json"))
+	assertContains(t, h.mustRun("", "list"), "export: "+filepath.Join(dir, "fixes.json"))
+	if _, err := h.run("", "mark-published"); err == nil {
+		t.Fatal("a local review has nothing to mark published")
+	}
+
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	assertContains(t, h.mustRun("", "init"), "round 2")
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("a new round must drop the old export: %v", err)
+	}
+}
+
+func TestNewSelfRoundDropsOldExport(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init", "--self")
+	h.mustRun(goodPlan, "plan", "set")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "step", "next")
+	h.mustRun("", "prepare", "--verdict", "approve")
+	dir := strings.TrimSpace(h.mustRun("", "export"))
+
+	h.mustRun("", "init", "--self")
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("a new self session must drop the old export: %v", err)
+	}
+	if _, err := h.run("", "export"); err == nil {
+		t.Fatal("a new self session starts unprepared")
 	}
 }
 
