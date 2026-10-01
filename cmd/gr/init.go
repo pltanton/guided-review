@@ -94,8 +94,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	if files == nil {
-		e.printf("review %s already exists, resuming (--force to start over)\ncode: %s\n",
-			r.ID, r.CodeDir(s.repo.Dir))
+		e.printf("review %s already exists, resuming (--force to start over)\n", r.ID)
 		if planOutdated(r) {
 			e.println("plan outdated: made without chapters and step messages, nothing reviewed " +
 				"yet — build a new plan and pipe it to `gr plan set`")
@@ -338,6 +337,18 @@ func changedPatches(prev, cur []diff.File) []string {
 }
 
 func printIntro(e env, s session, r *state.Review, files []diff.File) {
+	printHeader(e, s, r)
+	e.println()
+	printHunks(e, r, files)
+	next := "pipe a plan (YAML) to `gr plan set`"
+	if r.Round > 1 {
+		next = "check open comments against the new code, " +
+			"then pipe a plan for this round to `gr plan set`"
+	}
+	e.printf("\nnext: %s\n", next)
+}
+
+func printHeader(e env, s session, r *state.Review) {
 	e.printf(
 		"review %s  %s..%s\ncode: %s\n",
 		r.ID,
@@ -354,7 +365,6 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 	if r.Mode == modeSelf {
 		e.println("mode: self — the author's own change; the result goes back to their agent")
 	}
-	next := "pipe a plan (YAML) to `gr plan set`"
 	if r.Round > 1 {
 		if r.RoundRebased {
 			e.printf(
@@ -367,7 +377,7 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 		}
 		var open []state.Comment
 		for _, c := range r.Comments {
-			if !c.Resolved {
+			if !c.Resolved && c.Round < r.Round {
 				open = append(open, c)
 			}
 		}
@@ -375,13 +385,8 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 		for _, c := range open {
 			e.printf("  #%d %s %s:%s  %s\n", c.ID, c.Severity, c.File, c.Lines, c.Body)
 		}
-		next = "check open comments against the new code, " +
-			"then pipe a plan for this round to `gr plan set`"
 	}
 	printDiscussions(e, r, false)
-	e.println()
-	printHunks(e, r, files)
-	e.printf("\nnext: %s\n", next)
 }
 
 func syncDiscussions(ctx context.Context, e env, r *state.Review) error {

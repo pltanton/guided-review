@@ -663,6 +663,33 @@ func TestSelfReview(t *testing.T) {
 	}
 }
 
+func TestResumeShowsModeDomainAndOpenComments(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Write(".review.yaml", "domain: finance\n")
+	h.repo.Commit("domain")
+	assertContains(t, h.mustRun("", "init", "--self"), "domain: finance", "mode: self")
+	h.mustRun(strings.Replace(goodPlan, "[wire.go]", "[wire.go, .review.yaml]", 1),
+		"plan", "set")
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
+		"--severity", "major", "return an error")
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	h.mustRun("", "init", "--self")
+
+	for _, args := range [][]string{{"init", "--self"}, {"status"}} {
+		out := h.mustRun("", args...)
+		assertContains(t, out, "domain: finance", "mode: self", "round 2: fixups since",
+			"open comments from earlier rounds: 1", "#1 major api/transfer.go:5  return an error")
+	}
+	h.mustRun("steps:\n  - id: r1\n    title: fixup\n    kind: logic\n    hunks: [{file: wire.go}]\n",
+		"plan", "set")
+	h.mustRun("", "comment", "add", "--file", "wire.go", "--lines", "4",
+		"--severity", "nit", "new in round 2")
+	if out := h.mustRun("", "status"); strings.Contains(out, "new in round 2") {
+		t.Fatalf("a comment of this round is not from an earlier one:\n%s", out)
+	}
+}
+
 func TestNoteDetail(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("", "init")

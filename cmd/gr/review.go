@@ -28,15 +28,7 @@ func cmdStatus(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	e.printf("review %s  %s..%s\n", r.ID, short(r.BaseSHA), short(r.HeadSHA))
-	if r.MR != nil {
-		e.printf("%s %s\n", r.MR.Label(), r.MR.Title)
-	}
-	e.printf("code: %s\n", r.CodeDir(s.repo.Dir))
-	if r.Round > 1 {
-		e.printf("round %d\n", r.Round)
-	}
-	printDiscussions(e, r, false)
+	printHeader(e, s, r)
 	if len(r.Steps) == 0 {
 		e.println("no plan yet: pipe a plan to gr plan set")
 		if *gate {
