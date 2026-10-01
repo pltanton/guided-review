@@ -32,7 +32,8 @@ mentions, written during planning, so it opens instantly.
 <details>
 <summary>Talking to the agent</summary>
 
-Point at a line or a selection and write. The agent writes the comment with a severity
+Point at a line or a selection and write: Enter sends, Alt+Enter or Ctrl+J starts a new
+line (so does Shift+Enter in a terminal that sends it as Alt+Enter). The agent writes the comment with a severity
 and, for an obvious fix, a suggestion. You can also just ask about code without leaving
 a comment, or save a comment exactly as typed. When the agent needs a decision, it
 offers answers you pick with one key.

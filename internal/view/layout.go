@@ -418,12 +418,11 @@ func (m *model) promptLines(width int) []string {
 	var last string
 	switch {
 	case m.composing && m.cmdMode != 0:
-		pos := min(m.inputPos, len(m.input))
-		last = cursorStyle.Render(string(m.cmdMode)) + m.inputWithCursor(pos)
+		hint := ""
 		if m.status != "" {
-			last += "   " + dimStyle.Render(m.status)
+			hint = "   " + dimStyle.Render(m.status)
 		}
-		return wrapInput(last, width)
+		return m.inputLines(cursorStyle.Render(string(m.cmdMode)), hint, width)
 	case m.composing:
 		prompt := "› "
 		switch {
@@ -466,9 +465,8 @@ func (m *model) promptLines(width int) []string {
 		if m.anchorFile != "" {
 			hints = append(hints, "⌫ no line")
 		}
-		pos := min(m.inputPos, len(m.input))
-		last = lead + m.inputWithCursor(pos) + dimStyle.Render("   "+strings.Join(hints, " · "))
-		return wrapInput(last, width)
+		hints = append(hints, "alt+enter new line")
+		return m.inputLines(lead, dimStyle.Render("   "+strings.Join(hints, " · ")), width)
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
@@ -612,11 +610,6 @@ func (m *model) paintRow(i int, line string) string {
 		return paint(line, delLineTone)
 	}
 	return line
-}
-
-func wrapInput(s string, width int) []string {
-	lines := strings.Split(ansi.Wrap(s, max(width, 10), ""), "\n")
-	return lines[max(len(lines)-5, 0):]
 }
 
 func fit(s string, w int) string {
@@ -1069,12 +1062,12 @@ func (m *model) animate(r Row) Row {
 	return r
 }
 
-func (m *model) inputWithCursor(pos int) string {
-	if pos >= len(m.input) {
-		return string(m.input) + "█"
+func withCursor(rs []rune, pos int) string {
+	if pos >= len(rs) || rs[pos] == '\n' {
+		return string(rs[:min(pos, len(rs))]) + "█"
 	}
-	under := lipgloss.NewStyle().Reverse(true).Render(string(m.input[pos]))
-	return string(m.input[:pos]) + under + string(m.input[pos+1:])
+	under := lipgloss.NewStyle().Reverse(true).Render(string(rs[pos]))
+	return string(rs[:pos]) + under + string(rs[pos+1:])
 }
 
 func (m *model) keyHints(prefix string) []string {

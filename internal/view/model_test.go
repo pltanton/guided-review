@@ -1808,10 +1808,10 @@ func TestFinishScreenEdits(t *testing.T) {
 func TestInputCursorKeepsText(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.input, m.inputPos = []rune("проблемы"), 4
-	if got := ansi.Strip(m.inputWithCursor(4)); got != "проблемы" {
+	if got := ansi.Strip(withCursor(m.input, 4)); got != "проблемы" {
 		t.Fatalf("a cursor inside the text must not add a character: %q", got)
 	}
-	if got := ansi.Strip(m.inputWithCursor(8)); got != "проблемы█" {
+	if got := ansi.Strip(withCursor(m.input, 8)); got != "проблемы█" {
 		t.Fatalf("at the end the cursor is a block: %q", got)
 	}
 }
