@@ -35,6 +35,10 @@ Then, in tmux inside the repository:
 
 Also reviews your own branch before you send it: `/guided-selfreview`.
 
+Update or remove it the same way: ask your agent to update or uninstall guided-review
+following its INSTALL.md, or see [Updating](INSTALL.md#updating) and
+[Uninstalling](INSTALL.md#uninstalling).
+
 ## More
 
 - [How it works and settings](docs/guide.md)

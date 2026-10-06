@@ -3,7 +3,8 @@
 Written for a coding agent asked to "install guided-review from
 https://github.com/pltanton/guided-review". Run the steps in order, check each one, and
 report what was installed and what the human still has to do. Do not use `sudo` or change
-shell profiles without asking.
+shell profiles without asking. Asked to update or uninstall instead, go straight to
+[Updating](#updating) or [Uninstalling](#uninstalling).
 
 ## 1. Prerequisites
 
@@ -91,3 +92,35 @@ Tell the human how to start: in tmux, inside a repository,
 ```
 
 and that `?` in the viewer lists every key.
+
+## Updating
+
+```bash
+go install github.com/pltanton/guided-review/cmd/gr@latest
+claude plugin marketplace update guided-review
+claude plugin update guided-review@guided-review
+```
+
+For Codex, `git -C ~/.local/share/guided-review pull`. Restart the agent afterwards; an
+open viewer picks up the new `gr` after `q` and `gr open`.
+
+## Uninstalling
+
+Run what applies and report what was removed:
+
+```bash
+claude plugin uninstall guided-review@guided-review
+claude plugin marketplace remove guided-review
+rm -f ~/.codex/skills/guided-review ~/.codex/skills/guided-selfreview
+rm -rf ~/.local/share/guided-review
+rm -f "$(go env GOPATH)/bin/gr"
+```
+
+What `gr` left behind — ask before deleting, it holds review history:
+
+- `.git/guided-review/` in each reviewed repository: review state, comments, exports.
+- Worktrees of reviewed MRs under the user cache dir (`~/Library/Caches/guided-review` on
+  macOS, `~/.cache/guided-review` on Linux). Remove them with
+  `git worktree remove <path>` from the repository, or delete the folder and run
+  `git worktree prune` there.
+- `~/.config/guided-review/` if `gr config init` was run.
