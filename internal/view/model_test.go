@@ -899,9 +899,9 @@ func TestLSPFlow(t *testing.T) {
 	if out := ansi.Strip(m.View()); !strings.Contains(out, "L9") {
 		t.Fatalf("peek must show the target line:\n%s", out)
 	}
-	m.Update(key("esc"))
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.popup == nil || m.popup.kind != "references" {
-		t.Fatal("esc in peek must return to the list")
+		t.Fatal("ctrl+o in peek must return to the list")
 	}
 	m.Update(key("esc"))
 	if m.popup != nil {
@@ -1583,10 +1583,19 @@ func TestLSPFromPeek(t *testing.T) {
 	if m.popup == first || m.popup.loc.Path != "c.go" || len(m.popupStack) != 1 {
 		t.Fatalf("a result from the peek opens on top of it: stack %d, %+v", len(m.popupStack), m.popup)
 	}
-	m.Update(key("esc"))
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.popup != first {
-		t.Fatal("esc must go back to the previous peek")
+		t.Fatal("ctrl+o must go back to the previous peek")
 	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.popup == first || m.popup.loc.Path != "c.go" {
+		t.Fatalf("tab must go forward again: %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	if m.popup != nil || len(m.popupStack) != 0 || len(m.popupForward) != 0 {
+		t.Fatalf("esc closes every popup at once: %+v stack %d", m.popup, len(m.popupStack))
+	}
+	m.popup = first
 	for _, k := range []string{"esc"} {
 		m.Update(key(k))
 	}
@@ -1854,9 +1863,9 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	if m.popup.kind != "peek" || m.popup.loc.Line != 7 {
 		t.Fatalf("1 must peek a.go:7: %+v", m.popup)
 	}
-	m.Update(key("esc"))
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.popup == nil || m.popup.kind != "detail" {
-		t.Fatalf("esc must return to the details: %+v", m.popup)
+		t.Fatalf("ctrl+o must return to the details: %+v", m.popup)
 	}
 }
 
@@ -1957,5 +1966,22 @@ func TestHelpSwallowsClicks(t *testing.T) {
 	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	if m.helpTop == 0 {
 		t.Fatal("the wheel must scroll the help")
+	}
+}
+
+func TestPeekGHint(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.openPeek(lspLoc{Path: "b.go", Line: 5})
+	m.Update(key("g"))
+	out := ansi.Strip(m.View())
+	for _, want := range []string{"g…", "d  definition", "r  references", "c  callers"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("g in a peek must show what can follow (%q):\n%s", want, out)
+		}
+	}
+	m.Update(key("x"))
+	if strings.Contains(ansi.Strip(m.View()), "d  definition") {
+		t.Fatal("the hint goes away after the second key")
 	}
 }

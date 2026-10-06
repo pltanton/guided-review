@@ -110,23 +110,24 @@ type model struct {
 	chatCursor, chatAnchor          int
 	chatFrom                        int
 
-	col        int
-	hscroll    int
-	nowrap     bool
-	pendingKey string
-	count      string
-	km         *keymap
-	help       bool
-	helpTop    int
-	baseCtx    int
-	popup      *popup
-	popupStack []*popup
-	lspDo      func(kind, file string, line, col int) tea.Cmd
-	peekFile   func(path string) []string
-	lspBusy    string
-	lsp        *lspManager
-	lspServers map[string][]string
-	reveal     map[string][][2]int
+	col          int
+	hscroll      int
+	nowrap       bool
+	pendingKey   string
+	count        string
+	km           *keymap
+	help         bool
+	helpTop      int
+	baseCtx      int
+	popup        *popup
+	popupStack   []*popup
+	popupForward []*popup
+	lspDo        func(kind, file string, line, col int) tea.Cmd
+	peekFile     func(path string) []string
+	lspBusy      string
+	lsp          *lspManager
+	lspServers   map[string][]string
+	reveal       map[string][][2]int
 
 	composing   bool
 	composeKind string

@@ -1261,6 +1261,10 @@ func (m *model) keyHints(prefix string) []string {
 		}
 	}
 	slices.SortFunc(rows, func(a, b [2]string) int { return strings.Compare(a[0], b[0]) })
+	return hintBox(prefix, rows)
+}
+
+func hintBox(prefix string, rows [][2]string) []string {
 	lines := []string{boldStyle.Render(prefix + "…")}
 	for _, r := range rows {
 		lines = append(lines, cursorStyle.Render(r[0])+"  "+r[1])

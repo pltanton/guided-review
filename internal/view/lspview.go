@@ -66,6 +66,7 @@ type popup struct {
 	cursor int
 	col    int
 	gKey   bool
+	added  map[int]bool
 	refs   []lspLoc
 }
 
@@ -356,7 +357,7 @@ func (m *model) handleLSP(msg lspMsg) {
 		return
 	}
 	if m.popup != nil {
-		m.popupStack = append(m.popupStack, m.popup)
+		m.popupStack, m.popupForward = append(m.popupStack, m.popup), nil
 	}
 	switch {
 	case msg.kind == "hover":
@@ -411,7 +412,7 @@ func (m *model) refPreview(p *popup, loc lspLoc, width, rows int) []string {
 	}
 	target := loc.Line - 1
 	top := max(0, min(target-rows/2, len(lines)-rows))
-	out := codeLines(lines, top, target, rows)
+	out := markedCodeLines(lines, top, target, rows, m.addedLines(loc.Path), width)
 	for i := range out {
 		out[i] = ansi.Truncate(out[i], width, "")
 	}
@@ -419,13 +420,52 @@ func (m *model) refPreview(p *popup, loc lspLoc, width, rows int) []string {
 }
 
 func codeLines(lines []string, top, target, rows int) []string {
+	return markedCodeLines(lines, top, target, rows, nil, 0)
+}
+
+func markedCodeLines(lines []string, top, target, rows int, added map[int]bool, width int) []string {
 	var out []string
 	for i := top; i < len(lines) && len(out) < rows; i++ {
 		num := dimStyle.Render(fmt.Sprintf("%4d │ ", i+1))
+		if added[i+1] {
+			num = addStyle.Render(fmt.Sprintf("%4d + ", i+1))
+		}
 		if i == target {
 			num = hotStyle.Render(fmt.Sprintf("%4d ▶ ", i+1))
 		}
-		out = append(out, num+lines[i])
+		l := num + lines[i]
+		if added[i+1] && width > 0 {
+			l = paint(fit(l, width), addLineTone)
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
+func (m *model) addedLines(path string) map[int]bool {
+	if m.src == nil {
+		return nil
+	}
+	if rel, err := filepath.Rel(m.codeDir(), path); filepath.IsAbs(path) && err == nil {
+		path = rel
+	}
+	f, err := m.src.FileDiff(path)
+	if err != nil {
+		return nil
+	}
+	out := map[int]bool{}
+	for _, h := range f.Hunks {
+		n := h.NewStart
+		for _, l := range h.Lines {
+			switch l.Kind {
+			case '+':
+				out[n] = true
+				n++
+			case '-':
+			default:
+				n++
+			}
+		}
 	}
 	return out
 }
@@ -457,7 +497,7 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 		p.top = max(p.top-10, 0)
 	case "enter":
 		if isList && len(p.items) > 0 {
-			m.popupStack = append(m.popupStack, p)
+			m.popupStack, m.popupForward = append(m.popupStack, p), nil
 			m.openPeek(p.items[p.sel])
 		}
 	case "e":
@@ -471,11 +511,19 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 		if i := int(msg.String()[0] - '1'); i < len(p.refs) {
-			m.popupStack = append(m.popupStack, p)
+			m.popupStack, m.popupForward = append(m.popupStack, p), nil
 			m.openPeek(p.refs[i])
 		}
-	case "esc", "q", "ctrl+o":
+	case "tab", "ctrl+i":
+		if n := len(m.popupForward); n > 0 {
+			m.popupStack = append(m.popupStack, p)
+			m.popup, m.popupForward = m.popupForward[n-1], m.popupForward[:n-1]
+		}
+	case "esc", "q":
+		m.popup, m.popupStack, m.popupForward = nil, nil, nil
+	case "ctrl+o":
 		if n := len(m.popupStack); n > 0 {
+			m.popupForward = append(m.popupForward, p)
 			m.popup, m.popupStack = m.popupStack[n-1], m.popupStack[:n-1]
 		} else {
 			m.popup = nil
@@ -493,7 +541,7 @@ func (m *model) popupLines(width, height int) []string {
 		"symbols", "workspace":
 		hint = "j/k select · enter peek · e editor · esc close"
 	case "peek":
-		hint = "j/k w/b move · gd gr gi gy gc K · e editor · esc back"
+		hint = "j/k w/b move · g… K lsp · e editor · ctrl+o back · tab forward · esc close"
 	case "detail":
 		hint = "j/k or wheel scroll · esc close"
 		if len(p.refs) > 0 {
@@ -538,7 +586,10 @@ func (m *model) popupLines(width, height int) []string {
 		}
 	case p.kind == "peek":
 		p.top = max(0, min(p.top, p.cursor), p.cursor-rows+1)
-		for i, l := range codeLines(p.lines, p.top, p.target, rows) {
+		if p.added == nil {
+			p.added = m.addedLines(p.loc.Path)
+		}
+		for i, l := range markedCodeLines(p.lines, p.top, p.target, rows, p.added, width-2) {
 			if p.top+i == p.cursor {
 				from, to := wordBounds(ansi.Strip(p.lines[p.cursor]), p.col)
 				l = paint(fit(underline(l, peekGutter+from, peekGutter+to), width-2), cursorTone)
@@ -553,7 +604,15 @@ func (m *model) popupLines(width, height int) []string {
 	for len(out) <= rows {
 		out = append(out, border)
 	}
+	if p.kind == "peek" && p.gKey {
+		overlayRight(out[1:], hintBox("g", peekGHints), width)
+	}
 	return out
+}
+
+var peekGHints = [][2]string{
+	{"c", "callers"}, {"d", "definition"}, {"i", "implementations"},
+	{"r", "references"}, {"y", "type definition"},
 }
 
 // Styled spans end with a full SGR reset, so the underline is re-armed after each escape.
