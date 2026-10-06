@@ -1,5 +1,7 @@
 # <img src="docs/logo.svg" height="30" alt=""> guided-review
 
+[![ci](https://github.com/pltanton/guided-review/actions/workflows/ci.yml/badge.svg)](https://github.com/pltanton/guided-review/actions/workflows/ci.yml)
+[![coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/pltanton/guided-review/badges/coverage.json)](https://github.com/pltanton/guided-review/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/pltanton/guided-review)](go.mod)
 
 **Review agent-sized merge requests without skimming.**

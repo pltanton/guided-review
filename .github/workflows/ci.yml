@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test -race -coverprofile=cover.out ./...
+      - name: Publish the coverage badge
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          pct=$(go tool cover -func=cover.out | awk '/^total:/ { sub("%", "", $3); print $3 }')
+          color=red
+          awk "BEGIN { exit !($pct >= 60) }" && color=yellow
+          awk "BEGIN { exit !($pct >= 75) }" && color=green
+          awk "BEGIN { exit !($pct >= 90) }" && color=brightgreen
+          mkdir badges && cd badges
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' \
+            "$pct" "$color" > coverage.json
+          git init -q -b badges
+          git add coverage.json
+          git -c user.name=github-actions \
+            -c user.email=41898282+github-actions[bot]@users.noreply.github.com \
+            commit -qm "coverage $pct%"
+          git push -qf "https://x-access-token:$GITHUB_TOKEN@github.com/$GITHUB_REPOSITORY.git" badges
