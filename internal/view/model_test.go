@@ -1160,7 +1160,7 @@ func TestRawComment(t *testing.T) {
 		m.Update(k)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "› -x stays, exactly") ||
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ -x stays, exactly") ||
 		!strings.Contains(v, " RAW nit a.go:2 ") {
 		t.Fatalf("raw prompt missing:\n%s", v)
 	}
@@ -1189,7 +1189,7 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 	m.cursor = 2
 	m.Update(key("A"))
 	typeText(m, "why 1?")
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "› why 1?") || !strings.Contains(v, " ASK a.go:2 ") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ why 1?") || !strings.Contains(v, " ASK a.go:2 ") {
 		t.Fatalf("ask prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))
@@ -1221,16 +1221,17 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 
 }
 
-func TestBackspaceDetachesLine(t *testing.T) {
+func TestCtrlXDetachesLine(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.cursor = 2
 	m.Update(key("c"))
 	typeText(m, "x")
 	m.Update(key("backspace"))
-	if m.anchorFile == "" {
-		t.Fatal("backspace that deletes text must keep the line")
-	}
 	m.Update(key("backspace"))
+	if m.anchorFile == "" {
+		t.Fatal("backspace on an empty input must keep the line")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	typeText(m, "general")
 	m.Update(key("enter"))
 	want := inbox.Event{Kind: inbox.KindMessage, Step: "s1", Text: "general"}
@@ -1381,8 +1382,8 @@ func TestSideChatInput(t *testing.T) {
 	if strings.Contains(last, "hello there") {
 		t.Fatalf("input must move into the side chat, bottom line is %q", last)
 	}
-	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "› hello there") })
-	if i < 0 || strings.Index(lines[i], "› hello there") < m.width-m.chatWidth() {
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "▌ hello there") })
+	if i < 0 || strings.Index(lines[i], "▌ hello there") < m.width-m.chatWidth() {
 		t.Fatalf("input must sit in the right column:\n%s", v)
 	}
 	m.Update(key("esc"))

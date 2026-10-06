@@ -461,7 +461,15 @@ func (m *model) promptLines(width int) []string {
 		}
 		return m.inputLines(cursorStyle.Render(string(m.cmdMode)), hint, width)
 	case m.composing:
-		return append(m.inputLines(cursorStyle.Render("› "), "", width), m.composeStatus(width))
+		bar := accentTone
+		if m.rawMode() {
+			bar = badTone
+		}
+		lines := m.inputLines(bar.fg().Render("▌")+" ", "", width)
+		for i, l := range lines {
+			lines[i] = paint(fit(l, width), surfaceTone)
+		}
+		return append(lines, m.composeStatus(width))
 	case m.err != nil:
 		last = delStyle.Render(m.err.Error())
 	default:
@@ -507,10 +515,7 @@ func (m *model) composeMode() (
 		}
 		hints = append(hints, composeHint{"ctrl+r", "raw"})
 	}
-	hints = append(hints, composeHint{"alt+enter", "line"})
-	if m.anchorFile != "" {
-		hints = append(hints, composeHint{"⌫", "drops line"})
-	}
+	hints = append(hints, composeHint{"alt+enter", "new line"})
 	return badge, style, anchor, append(hints, composeHint{"esc", "cancel"})
 }
 
