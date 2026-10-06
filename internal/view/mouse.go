@@ -9,6 +9,24 @@ import (
 const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
+	switch {
+	case m.help && msg.Button == tea.MouseButtonWheelUp:
+		m.helpTop = max(m.helpTop-wheelStep, 0)
+		return nil
+	case m.help && msg.Button == tea.MouseButtonWheelDown:
+		m.helpTop += wheelStep
+		return nil
+	case m.help:
+		return nil
+	case m.threads && msg.Button == tea.MouseButtonWheelUp:
+		m.threadTop = max(m.threadTop-wheelStep, 0)
+		return nil
+	case m.threads && msg.Button == tea.MouseButtonWheelDown:
+		m.threadTop += wheelStep
+		return nil
+	case m.threads:
+		return nil
+	}
 	if m.preview == "" && m.popup == nil && m.chatMouse(msg) {
 		return nil
 	}

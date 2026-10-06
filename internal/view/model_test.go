@@ -1940,3 +1940,21 @@ func TestThreadsScreen(t *testing.T) {
 		t.Fatal("esc must close the threads screen")
 	}
 }
+
+func TestHelpSwallowsClicks(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key("?"))
+	if !m.help {
+		t.Fatal("? must open the help")
+	}
+	m.Update(tea.MouseMsg{X: m.planWidth() + 5, Y: len(m.header()) + 4,
+		Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if m.cursor != 0 || m.visual || !m.help {
+		t.Fatalf("a click under the help moved the code: cursor %d visual %v help %v",
+			m.cursor, m.visual, m.help)
+	}
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
+	if m.helpTop == 0 {
+		t.Fatal("the wheel must scroll the help")
+	}
+}
