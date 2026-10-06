@@ -101,7 +101,7 @@ func cmdHunks(ctx context.Context, e env, _ []string) error {
 
 func cmdPlan(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 || args[0] != "set" && args[0] != "fill" {
-		return errors.New("usage: gr plan set [--route] [-f FILE]... | gr plan fill [-f FILE]...")
+		return errors.New("usage: gr plan set [--route] [-f FILE] | gr plan fill [-f FILE] (repeat -f to join parts)")
 	}
 	fs := e.flags("plan " + args[0])
 	route := fs.Bool("route", false, "steps without explanations yet; they follow with gr plan fill")
