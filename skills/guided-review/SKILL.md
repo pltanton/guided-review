@@ -29,13 +29,18 @@ and the rest happens in the terminal chat.
 
 ## Setup — no questions
 
+Before the first `gr` call run `type gr`. If it is an alias or a function (oh-my-zsh's git
+plugin defines `gr` as `git remote`), write `command gr` everywhere this skill says `gr`.
+
 1. `gr init <what the user gave>` — pass the MR or PR URL verbatim when they gave one; no
    argument only when they gave nothing (current branch against the default
    branch). Never ask about branches: gr checks the MR out into its own worktree
    when HEAD is elsewhere and prints `code: <path>`. Read code under that path.
    - "commit … not found locally": run the fetch commands it names and retry.
-   - "who you are on …": glab or gh is not logged in; ask the user to run
-     `glab auth login` / `gh auth login`, then retry.
+   - "glab is not available" / "gh is not available … Reviewing !N from git": go on, it
+     is a full review of the MR's code. Tell the human in one line that without glab/gh
+     there are no MR discussions and the result is a local review.md to post by hand, and
+     that installing glab/gh and logging in gives the full flow — do not install it unasked.
    - "already exists, resuming": `gr step show`, then continue the step loop. If it also
      printed "plan outdated", build the plan again from scratch (Plan below) — the old
      one predates chapters and step messages and nothing has been reviewed yet.
@@ -45,17 +50,10 @@ and the rest happens in the terminal chat.
    - "state of review … is unreadable": show the human the error as gr printed it (here
      in the terminal, the viewer is not open yet) and offer «начать заново (--force)» or
      «разберусь сам». Run `gr init --force` only after they chose it.
-2. If `$TMUX` is set, open the viewer full screen in a window named after the review id
-   gr printed (`review-<id>`, e.g. `review-mr-521`). If that window already exists it may
-   run an old binary or show another review, so restart it instead of skipping:
-   ```bash
-   w=review-<id>
-   if tmux list-windows -F '#{window_name}' | grep -qx "$w"; then
-     tmux respawn-window -k -t "$w" -c "$PWD" "gr view --return $TMUX_PANE"; tmux select-window -t "$w"
-   else
-     tmux new-window -n "$w" -c "$PWD" "gr view --return $TMUX_PANE"
-   fi
-   ```
+2. `gr open` — opens the viewer full screen in a tmux window `review-<id>` next to you,
+   restarting it if it is already there. It finds your tmux pane by itself, also when
+   `$TMUX` is not set in your shell. If it prints "not in tmux", give the human the
+   command it printed to run the viewer in another terminal and go on.
    `a` in the viewer brings the user back to you, and closing it (or `gr done`) returns
    them to your pane automatically.
 
@@ -288,8 +286,8 @@ by their coding agent — as a subagent or in its own window — with a fresh co
 stranger would. Do not look for or ask about how it was written.
 
 - The prompt that started you gives the review id, the task (ticket, spec, a line or
-  two) and the pane of the author's agent. Open the viewer with `--return <that pane>`
-  instead of `$TMUX_PANE`, so finishing lands the human back in their coding session.
+  two) and the pane of the author's agent. Open the viewer with
+  `gr open --return <that pane>`, so finishing lands the human back in their coding session.
 - `gr init --self` was already run for you; `gr init --self` again just resumes.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
 - Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes

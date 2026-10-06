@@ -39,6 +39,8 @@ review
   list
 
 viewer channel
+  open [--return PANE]   open the viewer in a tmux window next to the agent
+  pane                   print the tmux pane this agent runs in
   view [--return PANE]
   wait [--timeout 9m]
   say [--option ANSWER]... TEXT... | -   options become answer buttons in the viewer
@@ -69,6 +71,8 @@ func init() {
 		"done":           cmdDone,
 		"list":           cmdList,
 		"view":           cmdView,
+		"open":           cmdOpen,
+		"pane":           cmdPane,
 		"wait":           cmdWait,
 		"say":            cmdSay,
 		"progress":       cmdProgress,
@@ -84,6 +88,7 @@ type env struct {
 	stdout   io.Writer
 	glab     gitlab.Runner
 	gh       github.Runner
+	tmux     tmuxRunner
 }
 
 func (e env) printf(format string, a ...any) {

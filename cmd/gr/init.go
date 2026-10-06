@@ -28,6 +28,7 @@ type target struct {
 	base, start, head string
 	branch            string
 	mr                *state.MR
+	note              string
 }
 
 var unsafeID = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
@@ -48,6 +49,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	t, err := resolveTarget(ctx, e, s.repo, fs.Arg(0), *base)
 	if err != nil {
 		return err
+	}
+	if t.note != "" {
+		e.printf("%s\n\n", t.note)
 	}
 	switch {
 	case *self && t.mr != nil:
@@ -171,7 +175,10 @@ func resolveTarget(
 		}
 		mr, err := gitlab.FetchMR(ctx, e.glab, ref)
 		if err != nil {
-			return target{}, err
+			return gitFallback(ctx, repo, gitRef{
+				arg: arg, id: fmt.Sprintf("mr-%d", ref.IID), label: fmt.Sprintf("!%d", ref.IID),
+				ref: fmt.Sprintf("merge-requests/%d/head", ref.IID), tool: "glab", base: base,
+			}, err)
 		}
 		refs := mr.DiffRefs
 		if err := needCommits(ctx, repo,
@@ -592,7 +599,10 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 	}
 	pr, err := github.FetchPR(ctx, e.gh, ref)
 	if err != nil {
-		return target{}, err
+		return gitFallback(ctx, repo, gitRef{
+			arg: arg, id: fmt.Sprintf("pr-%d", ref.Number), label: fmt.Sprintf("#%d", ref.Number),
+			ref: fmt.Sprintf("pull/%d/head", ref.Number), tool: "gh",
+		}, err)
 	}
 	if err := needCommits(ctx, repo,
 		[2]string{pr.Base.SHA, "git fetch origin"},
@@ -643,4 +653,35 @@ func planOutdated(r *state.Review) bool {
 		}
 	}
 	return true
+}
+
+type gitRef struct {
+	arg, id, label, ref, tool, base string
+}
+
+func gitFallback(ctx context.Context, repo gitx.Repo, g gitRef, cause error) (target, error) {
+	if _, err := repo.Run(ctx, "fetch", "origin", g.ref); err != nil {
+		return target{}, fmt.Errorf("%w\n(also tried git fetch origin %s: %v)", cause, g.ref, err)
+	}
+	head, err := repo.Commit(ctx, "FETCH_HEAD")
+	if err != nil {
+		return target{}, err
+	}
+	base := g.base
+	if base == "" {
+		if base, err = defaultBase(ctx, repo); err != nil {
+			return target{}, err
+		}
+	}
+	baseSHA, err := repo.MergeBase(ctx, base, head)
+	if err != nil {
+		return target{}, err
+	}
+	why, _, _ := strings.Cut(cause.Error(), "\n")
+	note := fmt.Sprintf("%s is not available (%s).\n"+
+		"Reviewing %s from git: %s against %s. Without %s there are no MR title and "+
+		"discussions, and the result stays local (review.md) to post by hand.\n"+
+		"For the full flow install %s and run `%s auth login`, then gr init again.",
+		g.tool, why, g.label, g.ref, base, g.tool, g.tool, g.tool)
+	return target{id: g.id, source: g.arg, base: baseSHA, head: head, branch: g.label, note: note}, nil
 }

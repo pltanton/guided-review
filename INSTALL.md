@@ -16,12 +16,17 @@ Check each; install the missing ones with the system package manager (`brew` on 
 | git       | `git --version`    | everything                                    |
 | tmux      | `tmux -V`          | the viewer; reviews run inside a tmux session |
 | jq        | `jq --version`     | the publish recipes in the skill              |
-| glab      | `glab auth status` | GitLab merge requests                         |
-| gh        | `gh auth status`   | GitHub pull requests                          |
+| glab      | `glab auth status` | GitLab MR title, discussions, publishing (recommended) |
+| gh        | `gh auth status`   | GitHub PR title, discussions, publishing (recommended) |
 
-Only one of `glab` and `gh` is required — ask which host the human reviews on. If it is
+`glab` and `gh` are optional: without them gr fetches the MR or PR from git and the review
+result stays a local review.md. Recommend the one for the host the human reviews on. If it is
 installed but not logged in, the human runs `glab auth login` or `gh auth login`
 themselves (it is interactive); suggest they type `! glab auth login` in the prompt.
+
+If `type gr` shows an alias (oh-my-zsh's git plugin maps `gr` to `git remote`), tell the
+human: the skill copes with it, and they can run `unalias gr` in their shell config to use
+`gr` by hand.
 
 ## 2. The `gr` CLI
 

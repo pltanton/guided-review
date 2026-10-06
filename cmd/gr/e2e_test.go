@@ -28,6 +28,7 @@ type harness struct {
 	gitconfig string
 	glab      func(context.Context, ...string) ([]byte, error)
 	gh        func(context.Context, ...string) ([]byte, error)
+	tmux      tmuxRunner
 }
 
 func newHarness(t *testing.T) *harness {
@@ -72,6 +73,7 @@ func (h *harness) run(stdin string, args ...string) (string, error) {
 			stdout:   &out,
 			glab:     h.glab,
 			gh:       h.gh,
+			tmux:     h.tmux,
 		},
 		args,
 	)
@@ -1651,5 +1653,25 @@ func TestGitHubBodyWithoutSummary(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "changes")
 	if req := request(); req.Body != "See the inline comments." {
 		t.Fatalf("inline comments get the pointer: %+v", req)
+	}
+}
+
+func TestInitWithoutGlabReviewsTheMRFromGit(t *testing.T) {
+	h := newHarness(t)
+	head := h.repo.Git("rev-parse", "HEAD")
+	origin := t.TempDir()
+	h.repo.Git("init", "-q", "--bare", origin)
+	h.repo.Git("push", "-q", origin, "HEAD:refs/merge-requests/7/head")
+	h.repo.Git("remote", "add", "origin", origin)
+	h.repo.Git("checkout", "-q", "main")
+	h.glab = func(context.Context, ...string) ([]byte, error) {
+		return nil, fmt.Errorf("glab not found: install it from https://gitlab.com/gitlab-org/cli")
+	}
+	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	assertContains(t, out, "glab is not available (glab not found",
+		"Reviewing !7 from git: merge-requests/7/head against main", "review mr-7",
+		"api/transfer.go")
+	if !strings.Contains(out, head[:8]) {
+		t.Fatalf("the review must end at the MR head %s:\n%s", head[:8], out)
 	}
 }

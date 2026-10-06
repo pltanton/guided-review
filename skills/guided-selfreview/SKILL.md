@@ -19,7 +19,7 @@ through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
 3. Write the reviewer's prompt:
    ```
    Guided review, self mode. Use the guided-review skill.
-   Review id: <id>. Author agent pane: <your $TMUX_PANE>.
+   Review id: <id>. Author agent pane: <what `gr pane` prints>.
    Task: <one to three lines: what the change must do, where the ticket or spec is>
    ```
    Only the goal. Not how you implemented it and not what you think is fragile: the
