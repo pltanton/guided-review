@@ -83,35 +83,50 @@ step's question. Then `gr wait` (below). Read code only after they confirm.
 
 ## Plan
 
+The human waits in the viewer while you plan, so give them the route first and write the
+explanations while they read.
+
 1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
    Generated files are excluded; one the human wants to see goes into a step like any
    other file. Decide which remaining files are boilerplate.
 2. Group into chapters and steps per references/ordering.md: intent first, one chapter
-   per behaviour, mechanics last; step titles are the claims to check. Mark hotspots per
-   references/hotspots.md, with `line` so the viewer marks them (and `file` when the step
-   has several files).
-   A large MR (three or more chapters, or over ~600 changed lines) goes faster in
-   parallel when you can start subagents (Claude Code's Agent tool); see "Parallel
-   planning" below. Otherwise continue here.
-3. Read every step's code now, with enough surrounding code to be sure of what it does,
-   and look for problems per references/checklist.md: the viewer moves between steps
-   without you, so all per-step work happens here.
-4. Give the first step of each chapter an `intro`: two to four lines on how the
-   behaviour was before and how it is after, and, when it helps, the path the request
-   takes (`Handler → reserve() → ledger.Put → outbox`). For each step write its `message` (references/style.md: at most three lines, what
-   the code does, a spec mismatch, the one question) and its `annotations` where an
-   explanation saves the reader real effort: what a non-obvious call does and why,
-   where the spec disagrees (`kind: spec`). Full sentences, not fragments. One to three
-   annotations per step; none is fine. Give every annotation and every hotspot a
-   `detail` in three short paragraphs, one or two sentences each — `**Problem.** …`,
-   `**When it bites.** …` (the scenario), `**What to do.** …` — plus a short code excerpt
-   in a fenced block when it helps. Name other code as `path:line` (`UserIdentityService.kt:88`), never
-   by bare name: the viewer shows a snippet of each under the detail and opens it on 1–9. You have all of it in context now; `i` in the viewer shows it at once
-   instead of asking you again.
-5. Pipe the plan to `gr plan set`. If gr rejects it, fix exactly what it lists. It posts
-   s1's message itself.
-6. `gr say` the plan: one line per chapter with its steps (`Переводы: s1 s2 ⚑`) plus a line for
-   boilerplate and generated files.
+   per behaviour, mechanics last; step titles are the claims to check. Pipe this route —
+   `summary`, `boilerplate`, and per step `id`, `title`, `kind`, `chapter`, `hunks`,
+   `depends_on`, `why_big` — to `gr plan set --route`. If gr rejects it, fix exactly what
+   it lists. The viewer shows the steps at once; `gr say` the plan: one line per chapter
+   with its steps (`Переводы: s1 s2`) plus a line for boilerplate and generated files.
+3. Fill s1 now: read its code with enough surrounding code to be sure of what it does,
+   look for problems per references/checklist.md, write its explanations (below) and pipe
+   them to `gr plan fill`. It posts s1's message.
+4. Fill the rest in reading order. With subagents (Claude Code's Agent tool) start them
+   in the background, one per chapter, as in "Parallel filling" below, and go to the step
+   loop while they work. Without subagents fill one step at a time with `gr plan fill`,
+   and between steps run `gr wait --timeout 1s` to answer the human if they wrote;
+   once all are filled, go to the step loop.
+
+Explanations of a step, all in one `gr plan fill` entry with its `id`:
+- `intro` on the first step of each chapter: two to four lines on how the behaviour was
+  before and how it is after, and, when it helps, the path the request takes
+  (`Handler → reserve() → ledger.Put → outbox`).
+- `message` (references/style.md): at most three lines — what the code does, a spec
+  mismatch, the one question.
+- `hotspots` per references/hotspots.md, with `line` so the viewer marks them (and `file`
+  when the step has several files).
+- `annotations` where an explanation saves the reader real effort: what a non-obvious
+  call does and why, where the spec disagrees (`kind: spec`). Full sentences, not
+  fragments. One to three per step; none is fine.
+- A `detail` on every annotation and hotspot in three short paragraphs, one or two
+  sentences each — `**Problem.** …`, `**When it bites.** …` (the scenario),
+  `**What to do.** …` — plus a short code excerpt in a fenced block when it helps. Name
+  other code as `path:line` (`UserIdentityService.kt:88`), never by bare name: the viewer
+  shows a snippet of each under the detail and opens it on 1–9. `i` in the viewer shows
+  it at once instead of asking you again.
+
+A step the human opens before it is filled shows "agent is writing notes"; its notes
+appear when its fill lands. `gr plan set` without `--route` still takes a whole plan with
+explanations at once.
+
+The full shape, route and explanations together:
 
 ```yaml
 summary: "task → how it is solved"
@@ -157,24 +172,20 @@ steps:
     depends_on: [s1]
 ```
 
-## Parallel planning
+## Parallel filling
 
-1. Write the route yourself: `summary` and `boilerplate` to
-   `/tmp/gr-plan/<id>/route.yaml`, and each chapter's steps — `id`, `title`,
-   `kind`, `chapter`, `hunks`, `depends_on`, nothing else — to
-   `/tmp/gr-plan/<id>/chapter-N.yaml` as a top-level `steps:` list. These are scratch
-   files for you and the subagents only; gr reads them just through `gr plan set -f`.
-2. In one message start one general-purpose subagent per chapter, so they run at once.
-   Give each: the code path, base and head, the task in two lines, its chapter file, and
-   the path of this skill's `references/` directory. Its job: read `style.md`,
-   `hotspots.md` and `checklist.md` there, read its steps' code, and rewrite its chapter
-   file with the same steps (ids, titles, hunks and depends_on unchanged) plus the first
-   step's `intro`, each step's `message`,
-   `hotspots` (`file`, `line`, `q`, `detail`) and `annotations` (`file`, `line`, `to`,
-   `kind`, `text`, `detail`); reply with one line when done.
-3. `gr plan set -f route.yaml -f chapter-1.yaml -f chapter-2.yaml …` in chapter order. If
-   gr rejects something, fix it in that chapter's file yourself, then go on with step 6
-   of Plan.
+1. Write each chapter's route steps — `id`, `title`, `kind`, `chapter`, `hunks` — to
+   `/tmp/gr-plan/<id>/chapter-N.yaml` as a top-level `steps:` list (leave out s1, already
+   filled). These are scratch files for you and the subagents.
+2. In one message start one general-purpose subagent per chapter in the background, so
+   they run at once. Give each: the code path, base and head, the task in two lines, its
+   chapter file, and the path of this skill's `references/` directory. Its job: read
+   `style.md`, `hotspots.md` and `checklist.md` there, read its steps' code, rewrite its
+   chapter file with the same ids plus the explanations (see Plan), run
+   `gr plan fill -f <its file>` from the code path, fix whatever gr rejects, and reply
+   with one line when done.
+3. Go to the step loop right away. When a subagent reports a failure, fill its steps
+   yourself.
 
 ## Step loop
 

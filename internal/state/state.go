@@ -78,6 +78,7 @@ type Review struct {
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
 	Threads      []Thread     `yaml:"threads,omitempty"`
+	Filling      bool         `yaml:"filling,omitempty"`
 	Messages     []Message    `yaml:"messages,omitempty"`
 	Progress     *Progress    `yaml:"progress,omitempty"`
 	SummaryRound int          `yaml:"summary_round,omitempty"`

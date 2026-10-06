@@ -1675,3 +1675,50 @@ func TestInitWithoutGlabReviewsTheMRFromGit(t *testing.T) {
 		t.Fatalf("the review must end at the MR head %s:\n%s", head[:8], out)
 	}
 }
+
+func TestPlanRouteThenFill(t *testing.T) {
+	h := newHarness(t)
+	h.mustRun("", "init")
+	h.mustRun(goodPlan, "plan", "set", "--route")
+	r := h.load()
+	if !r.Filling || len(r.Messages) != 0 {
+		t.Fatalf("a route has no messages yet and marks the review as filling: %+v", r.Messages)
+	}
+	fill := `steps:
+  - id: s1
+    message: "s1/2 · the guard returns 0 for a negative amount"
+    annotations:
+      - {file: api/transfer.go, line: 4, kind: note, text: "the guard runs before the sum"}
+`
+	assertContains(t, h.mustRun(fill, "plan", "fill"), "filled s1; still without a message: s2")
+	r = h.load()
+	s1 := r.Step("s1")
+	if s1.Title != "Transfer guard" || len(s1.Hunks) != 1 || len(s1.Annotations) != 1 ||
+		len(s1.Hotspots) != 1 {
+		t.Fatalf("fill keeps the route and adds the notes: %+v", s1)
+	}
+	if n := len(r.Messages); n != 1 || r.Messages[0].Text != s1.Message {
+		t.Fatalf("filling the current step posts its message: %+v", r.Messages)
+	}
+	for _, bad := range []string{
+		"steps:\n  - id: s9\n    message: x\n",
+		"steps:\n  - id: s2\n    annotations: [{file: nope.go, line: 1, kind: note, text: x}]\n",
+	} {
+		if _, err := h.run(bad, "plan", "fill"); err == nil || !strings.Contains(err.Error(), "fill rejected") {
+			t.Fatalf("plan fill %q must be rejected, got %v", bad, err)
+		}
+	}
+}
+
+func (h *harness) load() *state.Review {
+	h.t.Helper()
+	s, err := openSession(context.Background(), h.repo.Dir)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	r, err := s.store.LoadCurrent()
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return r
+}

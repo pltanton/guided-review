@@ -679,8 +679,8 @@ func (m *model) next() {
 }
 
 func (m *model) localSteps() bool {
-	return m.review != nil && m.runGr != nil && m.step != nil &&
-		slices.ContainsFunc(m.review.Steps, func(s state.Step) bool { return s.Message != "" })
+	return m.review != nil && m.runGr != nil && m.step != nil && (m.review.Filling ||
+		slices.ContainsFunc(m.review.Steps, func(s state.Step) bool { return s.Message != "" }))
 }
 
 func (m *model) moveStep(args ...string) {

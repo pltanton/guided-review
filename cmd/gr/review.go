@@ -100,10 +100,11 @@ func cmdHunks(ctx context.Context, e env, _ []string) error {
 }
 
 func cmdPlan(ctx context.Context, e env, args []string) error {
-	if len(args) == 0 || args[0] != "set" {
-		return errors.New("usage: gr plan set [-f FILE] (repeat -f to join parts)")
+	if len(args) == 0 || args[0] != "set" && args[0] != "fill" {
+		return errors.New("usage: gr plan set [--route] [-f FILE]... | gr plan fill [-f FILE]...")
 	}
-	fs := e.flags("plan set")
+	fs := e.flags("plan " + args[0])
+	route := fs.Bool("route", false, "steps without explanations yet; they follow with gr plan fill")
 	var paths []string
 	addPath := func(v string) error {
 		paths = append(paths, v)
@@ -130,6 +131,9 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 		p.Boilerplate = append(p.Boilerplate, part.Boilerplate...)
 		p.Steps = append(p.Steps, part.Steps...)
 	}
+	if args[0] == "fill" {
+		return fillPlan(ctx, e, p)
+	}
 	_, r, err := updateReview(ctx, e.dir, func(s session, r *state.Review) error {
 		files, err := s.reviewDiff(ctx, r)
 		if err != nil {
@@ -143,6 +147,7 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 			return fmt.Errorf("plan rejected:\n  - %s", strings.Join(msgs, "\n  - "))
 		}
 		plan.Apply(r, p)
+		r.Filling = *route
 		r.Progress = nil
 		announce(r, r.Step(r.Current))
 		return nil
@@ -156,6 +161,43 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 	}
 	e.printf("\n\n")
 	printStep(e, r, r.Step(r.Current))
+	return nil
+}
+
+func fillPlan(ctx context.Context, e env, p plan.Plan) error {
+	var filled []string
+	_, r, err := updateReview(ctx, e.dir, func(s session, r *state.Review) error {
+		files, err := s.reviewDiff(ctx, r)
+		if err != nil {
+			return err
+		}
+		if errs := plan.Fill(r, p, files); len(errs) > 0 {
+			msgs := make([]string, len(errs))
+			for i, err := range errs {
+				msgs[i] = err.Error()
+			}
+			return fmt.Errorf("fill rejected:\n  - %s", strings.Join(msgs, "\n  - "))
+		}
+		for _, ps := range p.Steps {
+			filled = append(filled, ps.ID)
+		}
+		announce(r, r.Step(r.Current))
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	var waiting []string
+	for _, st := range r.Steps {
+		if st.Message == "" {
+			waiting = append(waiting, st.ID)
+		}
+	}
+	e.printf("filled %s", strings.Join(filled, " "))
+	if len(waiting) > 0 {
+		e.printf("; still without a message: %s", strings.Join(waiting, " "))
+	}
+	e.println()
 	return nil
 }
 
