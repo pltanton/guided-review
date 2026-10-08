@@ -25,6 +25,7 @@ func (m *model) startCompose(kind string) {
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
+	defer m.placeInline()
 	switch kind {
 	case inbox.KindMessage:
 		m.anchorFile, m.anchorLines, m.composeRef = m.anchorAt()
@@ -34,6 +35,42 @@ func (m *model) startCompose(kind string) {
 			m.status = "nothing to ask about here: put the cursor on code"
 		}
 	}
+}
+
+func (m *model) placeInline() {
+	m.inlineAt = m.cursor
+	if m.visual {
+		m.inlineAt = max(m.anchor, m.cursor)
+	}
+	if m.inlineCompose() {
+		m.offset = max(m.offset, m.topFor(m.inlineAt, m.bodyHeight()))
+	}
+}
+
+func (m *model) inlineCompose() bool {
+	if !m.composing || m.cmdMode != 0 || m.step == nil || m.preview != "" || m.threads ||
+		m.composeThread != "" {
+		return false
+	}
+	switch m.composeKind {
+	case inbox.KindMessage, inbox.KindAsk:
+		return m.anchorFile != ""
+	case inbox.KindEdit:
+		return true
+	}
+	return false
+}
+
+func (m *model) composerRows(w int) []string {
+	bar := accentTone
+	if m.rawMode() {
+		bar = badTone
+	}
+	lines := m.inputLines("       "+bar.fg().Render("▌")+" ", "", w)
+	for i, l := range lines {
+		lines[i] = paint(fit(l, w), surfaceTone)
+	}
+	return append(lines, "        "+m.composeStatus(max(w-8, 8)))
 }
 
 func (m *model) anchorAt() (file, lines string, ref int) {
@@ -61,6 +98,7 @@ func (m *model) startEdit() {
 			m.anchorFile, m.anchorLines = "", ""
 			m.input = []rune(c.Body)
 			m.inputPos = len(m.input)
+			m.placeInline()
 			return
 		}
 	}
@@ -121,9 +159,14 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyCtrlR:
 		m.raw = !m.raw
 	case tea.KeyTab:
-		if m.rawMode() {
+		switch {
+		case m.rawMode():
 			i := slices.Index(state.Severities, m.severity())
 			m.rawSeverity = state.Severities[(i+1)%len(state.Severities)]
+		case m.inlineCompose() && m.composeKind == inbox.KindMessage:
+			m.composeKind = inbox.KindAsk
+		case m.inlineCompose() && m.composeKind == inbox.KindAsk:
+			m.composeKind = inbox.KindMessage
 		}
 	case tea.KeyCtrlX:
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0

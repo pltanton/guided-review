@@ -118,6 +118,14 @@ func (m *model) splitWidths(w int) (left, right int) {
 }
 
 func (m *model) lineHeight(i int) int {
+	h := m.rowsHeight(i)
+	if i == m.inlineAt && m.inlineCompose() {
+		h += len(m.composerRows(m.mainWidth()))
+	}
+	return h
+}
+
+func (m *model) rowsHeight(i int) int {
 	if m.nowrap || i < 0 || i >= len(m.lines) {
 		return 1
 	}

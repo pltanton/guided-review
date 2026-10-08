@@ -66,10 +66,10 @@ func TestComposeStatusline(t *testing.T) {
 	}{
 		{"message", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindMessage, "internal/a.go", "2-4"
-		}, " MSG a.go:2-4    enter send · ctrl+r raw", "alt+enter new line · esc cancel"},
+		}, " COMMENT a.go:2-4   enter send · tab ask", "alt+enter new line · esc cancel"},
 		{"reply to a comment", func(m *model) {
 			m.composeKind, m.composeRef, m.anchorFile, m.anchorLines = inbox.KindMessage, 7, "a.go", "2"
-		}, " MSG re #7 a.go:2             enter send",
+		}, " COMMENT re #7 a.go:2         enter send",
 			"ctrl+r raw · alt+enter new line · esc cancel"},
 		{"general", func(m *model) { m.composeKind = inbox.KindMessage },
 			" MSG             enter send · ctrl+r raw", "alt+enter new line · esc cancel"},
@@ -78,7 +78,7 @@ func TestComposeStatusline(t *testing.T) {
 		{"ask", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindAsk, "a.go", "2"
 		}, " ASK a.go:2                   enter send",
-			"enter alone explains · alt+enter new line · esc cancel"},
+			"enter alone explains · tab comment · alt+enter new line · esc cancel"},
 		{"raw", func(m *model) {
 			m.composeKind, m.raw, m.anchorFile, m.anchorLines = inbox.KindMessage, true, "a.go", "2"
 		}, " RAW minor a.go:2             enter save",
@@ -119,11 +119,11 @@ func TestComposeStatusline(t *testing.T) {
 func TestComposeStatuslinePlacement(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.cursor = 2
-	m.Update(key("c"))
+	m.Update(key("C"))
 	typeText(m, "hello there")
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	if n := len(lines); n != m.height || strings.TrimSpace(lines[n-2]) != "▌ hello there█" ||
-		!strings.HasPrefix(lines[n-1], " MSG a.go:2 ") ||
+		!strings.HasPrefix(lines[n-1], " MSG ") ||
 		!strings.HasSuffix(lines[n-1], "esc cancel") {
 		t.Fatalf("bottom: the text has its line, the statusline sits below:\n%s",
 			strings.Join(lines, "\n"))
@@ -136,7 +136,7 @@ func TestComposeStatuslinePlacement(t *testing.T) {
 	}
 	n := len(lines)
 	if n != m.height || side(lines[n-3]) != "▌ hello there█" ||
-		!strings.HasPrefix(side(lines[n-2]), "MSG a.go:2 ") {
+		!strings.HasPrefix(side(lines[n-2]), "MSG ") {
 		t.Fatalf("side chat: same input and statusline:\n%s", strings.Join(lines, "\n"))
 	}
 
@@ -235,5 +235,36 @@ func TestInputKeepsCursorInView(t *testing.T) {
 		if ansi.StringWidth(l) > 30 {
 			t.Fatalf("a long line wraps within the width: %q", l)
 		}
+	}
+}
+
+func TestInlineComposer(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.cursor = 2
+	m.Update(key("enter"))
+	typeText(m, "why x")
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	at := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "x := 1") })
+	if at < 0 || at+2 >= len(lines) || !strings.Contains(lines[at+1], "▌ why x█") ||
+		!strings.Contains(lines[at+2], "COMMENT a.go:2") || !strings.Contains(lines[at+2], "tab ask") {
+		t.Fatalf("the composer sits under its line:\n%s", strings.Join(lines, "\n"))
+	}
+	if strings.Contains(lines[len(lines)-1], "COMMENT") {
+		t.Fatal("the bottom prompt stays the footer while composing inline")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.composeKind != inbox.KindAsk ||
+		!strings.Contains(ansi.Strip(m.View()), "ASK a.go:2") {
+		t.Fatal("tab switches to ask")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.composeKind != inbox.KindMessage {
+		t.Fatal("tab switches back to a comment")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(key("enter"))
+	want := inbox.Event{Kind: inbox.KindAsk, Step: "s1", File: "a.go", Lines: "2", Text: "why x"}
+	if len(*sent) != 1 || (*sent)[0] != want {
+		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
 }

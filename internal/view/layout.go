@@ -202,7 +202,7 @@ func (m *model) sideChatLines(h, w int) []string {
 }
 
 func (m *model) inputInSideChat() bool {
-	return m.chatWidth() > 0 && m.composing && m.cmdMode == 0
+	return m.chatWidth() > 0 && m.composing && m.cmdMode == 0 && !m.inlineCompose()
 }
 
 func (m *model) bodyHeight() int {
@@ -437,7 +437,7 @@ func (m *model) promptLines(width int) []string {
 			hint = "   " + dimStyle.Render(m.status)
 		}
 		return m.inputLines(cursorStyle.Render(string(m.cmdMode)), hint, width)
-	case m.composing:
+	case m.composing && !m.inlineCompose():
 		bar := accentTone
 		if m.rawMode() {
 			bar = badTone
@@ -475,6 +475,9 @@ func (m *model) composeMode() (
 		badge, anchor = "THREAD", m.threadLabel()
 	case m.composeKind == inbox.KindAsk:
 		badge, hints = "ASK", append(hints, composeHint{"enter", "alone explains"})
+		if m.inlineCompose() {
+			hints = append(hints, composeHint{"tab", "comment"})
+		}
 	case m.rawMode():
 		style, hints[0].desc = delStyle.Bold(true).Background(surfaceTone.color()), "save"
 		if m.composeKind == inbox.KindEdit {
@@ -489,6 +492,9 @@ func (m *model) composeMode() (
 	default:
 		if m.composeRef > 0 {
 			anchor = strings.TrimSpace(fmt.Sprintf("re #%d %s", m.composeRef, loc))
+		}
+		if m.inlineCompose() {
+			badge, hints = "COMMENT", append(hints, composeHint{"tab", "ask"})
 		}
 		hints = append(hints, composeHint{"ctrl+r", "raw"})
 	}
@@ -596,14 +602,18 @@ func (m *model) View() string {
 				m.underlineWord(rows, from, to, mw)
 			}
 		}
+		for k, row := range rows {
+			rows[k] = m.paintRow(i, fit(row, mw))
+		}
+		if i == m.inlineAt && m.inlineCompose() {
+			rows = append(rows, m.composerRows(mw)...)
+		}
 		if room := bodyH - 1 - len(main); len(rows) <= room {
 			shown = i + 1
 		} else {
 			rows = rows[:room]
 		}
-		for _, row := range rows {
-			main = append(main, m.paintRow(i, fit(row, mw)))
-		}
+		main = append(main, rows...)
 	}
 	below := ""
 	if rest := len(m.lines) - shown; rest > 0 {

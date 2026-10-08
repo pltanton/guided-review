@@ -637,7 +637,7 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.relist()
 	m.cursor = 1
 	m.Update(key("c"))
-	if out := ansi.Strip(m.View()); !strings.Contains(out, " MSG a.go:1 ") {
+	if out := ansi.Strip(m.View()); !strings.Contains(out, " COMMENT a.go:1 ") {
 		t.Fatalf("prompt must show the anchor:\n%s", out)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})

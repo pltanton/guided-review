@@ -151,6 +151,7 @@ type model struct {
 	rawSeverity state.Severity
 	anchorFile  string
 	anchorLines string
+	inlineAt    int
 
 	send   func(inbox.Event) error
 	status string
