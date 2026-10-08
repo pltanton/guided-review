@@ -1093,8 +1093,6 @@ func (m *model) changedKeys() []string {
 	return keys
 }
 
-func (m *model) changedRows() int { return len(m.changedKeys()) }
-
 func (m *model) unseen() int {
 	n := 0
 	for _, k := range m.changedKeys() {

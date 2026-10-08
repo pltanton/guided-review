@@ -134,7 +134,7 @@ func verdictWord(v string) string {
 }
 
 func (m *model) threadsView() string {
-	x, w, inner := m.cardFrame(finishWidth)
+	_, w, _ := m.cardFrame(finishWidth)
 	r := m.review
 	title := "replies"
 	if r.MR != nil {
@@ -154,34 +154,19 @@ func (m *model) threadsView() string {
 		len(ds), answered, decided)
 	top := []string{dimStyle.Render(facts), ""}
 	body, starts := m.threadBody(w)
-	h := max(inner-len(top)-1, 1)
-	if m.threadFollow && m.threadSel < len(starts) {
-		line := starts[m.threadSel]
-		end := len(body)
+	from, to := 0, 0
+	if m.threadSel < len(starts) {
+		from, to = starts[m.threadSel], len(body)
 		if m.threadSel+1 < len(starts) {
-			end = starts[m.threadSel+1] - 1
+			to = starts[m.threadSel+1] - 1
 		}
-		m.threadTop = min(max(m.threadTop, end-h), line-1)
-		m.threadFollow = false
-	}
-	m.threadTop = max(0, min(m.threadTop, len(body)-h))
-	lines := append(top, body[m.threadTop:min(len(body), m.threadTop+h)]...)
-	for len(lines) < inner-1 {
-		lines = append(lines, "")
 	}
 	hint := "j/k thread · r resolve · o keep open + reply · a take the agent's · u undo" +
 		" · c ask the agent · esc back"
-	bottom := []string{hotStyle.Render(hint)}
-	switch {
-	case m.composing:
-		bottom = m.promptLines(w)
-	case m.err != nil:
-		bottom = []string{delStyle.Render(m.err.Error())}
-	case m.status != "":
-		bottom = []string{dimStyle.Render(m.status)}
-	}
-	lines = append(lines[:max(inner-len(bottom), 0)], bottom...)
-	return m.card(x, w, title, lines)
+	return m.scrollCard(cardLayout{
+		title: title, top: top, body: body, hint: hint,
+		scroll: &m.threadTop, follow: &m.threadFollow, from: from, to: to,
+	})
 }
 
 func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {

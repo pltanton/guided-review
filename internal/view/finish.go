@@ -119,7 +119,7 @@ func markdownLines(text string, w int) []string {
 }
 
 func (m *model) finishView() string {
-	x, w, inner := m.cardFrame(finishWidth)
+	_, w, _ := m.cardFrame(finishWidth)
 	r := m.review
 	title := "finish"
 	if r.MR != nil {
@@ -149,26 +149,47 @@ func (m *model) finishView() string {
 		strings.Join(facts, dimStyle.Render(" · ")) + hotStyle.Render("   "+keys), "",
 	}
 	body, cards := m.finishBody(w)
-	h := max(inner-len(top)-1, 1)
-	if m.previewFollow && m.previewSel < len(cards) {
-		line := cards[m.previewSel].line
-		m.previewTop = max(min(m.previewTop, line-1), line+3-h)
-		m.previewFollow = false
-	}
-	m.previewTop = max(0, min(m.previewTop, len(body)-h))
-	shown := body[m.previewTop:min(len(body), m.previewTop+h)]
-	lines := append(top, shown...)
-	for len(lines) < inner-1 {
-		lines = append(lines, "")
+	from, to := 0, 0
+	if m.previewSel < len(cards) {
+		from, to = cards[m.previewSel].line, cards[m.previewSel].line+3
 	}
 	km := m.keys()
 	del := km.key("delete-comment")
 	hint := fmt.Sprintf("%s hand to the agent · j/k comment · %s edit · %s%s delete · %s severity"+
 		" · %s ask the agent · esc back", km.key("finish"), km.key("edit-comment"), del, del,
 		km.key("severity"), km.key("message"))
-	if len(body) > h {
-		at := fmt.Sprintf("%d–%d of %d · ", m.previewTop+1, m.previewTop+len(shown), len(body))
-		hint = at + hint
+	return m.scrollCard(cardLayout{
+		title: title, top: top, body: body, hint: hint,
+		scroll: &m.previewTop, follow: &m.previewFollow, from: from, to: to,
+	})
+}
+
+type cardLayout struct {
+	title     string
+	top, body []string
+	hint      string
+	scroll    *int
+	follow    *bool
+	from, to  int
+}
+
+// scrollCard draws a full-height card; with follow set it scrolls body[from:to] into view.
+func (m *model) scrollCard(c cardLayout) string {
+	x, w, inner := m.cardFrame(finishWidth)
+	h := max(inner-len(c.top)-1, 1)
+	if *c.follow && c.to > c.from {
+		*c.scroll = min(max(*c.scroll, c.to-h), c.from-1)
+		*c.follow = false
+	}
+	*c.scroll = max(0, min(*c.scroll, len(c.body)-h))
+	shown := c.body[*c.scroll:min(len(c.body), *c.scroll+h)]
+	lines := append(c.top, shown...)
+	for len(lines) < inner-1 {
+		lines = append(lines, "")
+	}
+	hint := c.hint
+	if len(c.body) > h {
+		hint = fmt.Sprintf("%d–%d of %d · ", *c.scroll+1, *c.scroll+len(shown), len(c.body)) + hint
 	}
 	bottom := []string{hotStyle.Render(hint)}
 	switch {
@@ -180,7 +201,7 @@ func (m *model) finishView() string {
 		bottom = []string{dimStyle.Render(m.status)}
 	}
 	lines = append(lines[:max(inner-len(bottom), 0)], bottom...)
-	return m.card(x, w, title, lines)
+	return m.card(x, w, c.title, lines)
 }
 
 func verdictStyle(v string) string {
@@ -242,8 +263,6 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-var verdictCycle = []string{"approve", "changes", "blocked"}
-
 func (m *model) publishPlan() *state.PublishPlan {
 	if m.preview == "" || m.review == nil || m.review.Publish == nil || m.runGr == nil {
 		m.status = "open the finish preview first (" + m.keys().key("finish") + ")"
@@ -255,8 +274,8 @@ func (m *model) publishPlan() *state.PublishPlan {
 func (m *model) cycleVerdict() {
 	if p := m.publishPlan(); p != nil {
 		m.autoVerdict = false
-		i := slices.Index(verdictCycle, p.Verdict)
-		next := verdictCycle[(i+1)%len(verdictCycle)]
+		i := slices.Index(plan.Verdicts, p.Verdict)
+		next := plan.Verdicts[(i+1)%len(plan.Verdicts)]
 		m.prepare(next, p.Approve && next == "approve")
 	}
 }

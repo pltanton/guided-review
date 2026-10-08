@@ -2,11 +2,25 @@
 
 ## Unreleased
 
+- A "keep open" after the author's new reply left the comment of an earlier "resolve"
+  resolved for good; a published "keep open" no longer counts as closed for approve.
+- `gr prepare` after a partial publish forgot what already went out, so the next export
+  approved or posted the verdict twice.
+- A new round refuses to drop an export that is published but not yet marked.
+- `diff.submodule=log` in the git config broke every diff with a submodule bump.
+- Plans: steps without a chapter are accepted between chapters; the 300-line limit
+  counts deleted files.
+- A language server that stopped answering made every request wait 90 s; it is now
+  restarted at once.
 - An agent killed while `gr wait` ran left the viewer on "your turn" for good; the marker
   now expires with the wait.
 - A key conflict or an unknown theme in the config shows in the viewer on start, not only
   in `gr config`.
-- `gr help` lists `plan set --route` and `plan fill`.
+- Viewer: `esc` drops a half-written suggestion, an empty chat message closes the chat
+  again, the selection survives a switch to split view, `?` is ignored where no overlay
+  can draw, cards close when the review or step disappears.
+- Gone: `:sym` (workspace symbol search), `ctrl+r` in the composer (`tab` does it); `:skip`
+  runs `gr step skip` like `S` does. `gr help` lists `plan set --route` and `plan fill`.
 
 ## v0.1.1
 

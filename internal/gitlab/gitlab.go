@@ -28,10 +28,9 @@ type DiffRefs struct {
 }
 
 type MR struct {
-	Title        string   `json:"title"`
-	WebURL       string   `json:"web_url"`
-	SourceBranch string   `json:"source_branch"`
-	DiffRefs     DiffRefs `json:"diff_refs"`
+	Title    string   `json:"title"`
+	WebURL   string   `json:"web_url"`
+	DiffRefs DiffRefs `json:"diff_refs"`
 }
 
 type Runner func(ctx context.Context, args ...string) ([]byte, error)

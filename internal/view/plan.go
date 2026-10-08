@@ -188,7 +188,7 @@ func (m *model) sideWheel(x, y, d int) bool {
 		return false
 	}
 	side := m.sideFiles(m.height-len(m.bottomLines()), cw)
-	if y < 0 || y >= len(side) || side[y].zone != zoneFiles {
+	if y < 0 || y >= len(side) || !side[y].files {
 		return false
 	}
 	m.fileTop += d

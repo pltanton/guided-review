@@ -303,7 +303,7 @@ func (m *model) stepTitle(st *state.Step) string {
 	if m.review.Filling && st.Message == "" && !isExtra(st.ID) {
 		left += hotStyle.Render("  " + m.spin() + " agent is writing notes")
 	}
-	if total, unseen := m.changedRows(), m.unseen(); total > 0 && unseen == 0 {
+	if total, unseen := len(m.changedKeys()), m.unseen(); total > 0 && unseen == 0 {
 		left += addStyle.Render("  ✓ seen")
 	} else if total > 0 {
 		left += dimStyle.Render(fmt.Sprintf("  seen %d/%d", total-unseen, total))
@@ -394,14 +394,6 @@ type chatRow struct {
 	text      string
 	msg, hard int
 	source    string
-}
-
-func (m *model) chatLines(width int, all bool) []string {
-	var out []string
-	for _, r := range m.chatRows(width, all) {
-		out = append(out, r.text)
-	}
-	return out
 }
 
 func (m *model) chatRows(width int, all bool) []chatRow {
@@ -744,20 +736,10 @@ func fit(s string, w int) string {
 	return s
 }
 
-type sideZone int
-
-const (
-	zoneNone sideZone = iota
-	zonePlan
-	zoneFiles
-)
-
 type sideEntry struct {
-	text    string
-	step    string
-	file    string
-	chapter string
-	zone    sideZone
+	text  string
+	file  string
+	files bool
 }
 
 type rowFunc func(left, right string) string
@@ -811,7 +793,7 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 	}
 	count := fmt.Sprint(len(m.stepFiles())) + " · " + m.step.ID
 	title := plain(row(label, dimStyle.Render(scrollMarks(top, shown, len(files))+count)))
-	out := append([]sideEntry{{text: title, zone: zoneFiles}}, files[top:top+shown]...)
+	out := append([]sideEntry{{text: title, files: true}}, files[top:top+shown]...)
 	if len(out)+len(flow)+1 <= limit {
 		out = append(out, flow...)
 	}
@@ -820,7 +802,7 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 
 func (m *model) planEntries(
 	items []planItem, row rowFunc, plain, selected func(string) string,
-) []sideEntry {
+) []string {
 	idW := 0
 	for _, st := range m.review.Steps {
 		idW = max(idW, len(st.ID))
@@ -829,7 +811,7 @@ func (m *model) planEntries(
 	if m.viewStep != "" && m.step != nil {
 		viewed = m.step.ID
 	}
-	out := make([]sideEntry, 0, len(items))
+	out := make([]string, 0, len(items))
 	for i, it := range items {
 		cursor := m.focusPlan && i == m.planCursor
 		st := it.st
@@ -848,7 +830,7 @@ func (m *model) planEntries(
 			if cursor || !m.focusPlan && it.current && !it.open {
 				line = selected(row(left, stat))
 			}
-			out = append(out, sideEntry{text: line, chapter: it.chapter, zone: zonePlan})
+			out = append(out, line)
 		case it.extra:
 			glyph, style := "◇", dimStyle
 			if m.step != nil && st.ID == m.step.ID {
@@ -860,7 +842,7 @@ func (m *model) planEntries(
 			if cursor {
 				line = selected(row(left, n))
 			}
-			out = append(out, sideEntry{text: line, step: st.ID, zone: zonePlan})
+			out = append(out, line)
 		default:
 			glyph, glyphStyle, style := st.Status.Glyph(), dimStyle, dimStyle
 			switch st.Status {
@@ -892,7 +874,7 @@ func (m *model) planEntries(
 			if cursor || !m.focusPlan && current {
 				line = selected(row(left, flag))
 			}
-			out = append(out, sideEntry{text: line, step: st.ID, zone: zonePlan})
+			out = append(out, line)
 		}
 	}
 	return out
@@ -912,7 +894,7 @@ func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([
 		if dir != "." {
 			if dir != prevDir {
 				text := plain(row(dimStyle.Render(dir+"/"), ""))
-				out = append(out, sideEntry{text: text, zone: zoneFiles})
+				out = append(out, sideEntry{text: text, files: true})
 			}
 			indent = "  "
 		}
@@ -927,7 +909,7 @@ func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([
 			line = selected(row(boldStyle.Render(indent+base), stat))
 			at = len(out)
 		}
-		out = append(out, sideEntry{text: line, file: f, zone: zoneFiles})
+		out = append(out, sideEntry{text: line, file: f, files: true})
 	}
 	return out, at
 }

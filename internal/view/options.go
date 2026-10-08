@@ -66,7 +66,7 @@ func (m *model) pillsAt() (x, y, w int, ok bool) {
 	case m.chatWidth() > 0:
 		w = m.chatWidth() - 2
 		return m.width - m.chatWidth() + 2, m.height - len(m.bottomLines()) - block(w), w, true
-	case len(m.chatLines(m.width, false)) == 0:
+	case len(m.chatRows(m.width, false)) == 0:
 		return 0, 0, 0, false
 	}
 	return 0, m.height - 1 - block(m.width), m.width, true

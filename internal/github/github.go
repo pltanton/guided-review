@@ -61,7 +61,6 @@ type PR struct {
 	Title string `json:"title"`
 	URL   string `json:"html_url"`
 	Head  struct {
-		Ref string `json:"ref"`
 		SHA string `json:"sha"`
 	} `json:"head"`
 	Base struct {

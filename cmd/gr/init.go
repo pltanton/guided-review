@@ -26,7 +26,6 @@ import (
 type target struct {
 	id, source        string
 	base, start, head string
-	branch            string
 	mr                *state.MR
 	note              string
 }
@@ -191,7 +190,6 @@ func resolveTarget(
 		return target{
 			id:     fmt.Sprintf("mr-%d", ref.IID),
 			source: arg,
-			branch: mr.SourceBranch,
 			base:   refs.BaseSHA,
 			start:  refs.StartSHA,
 			head:   refs.HeadSHA,
@@ -223,12 +221,11 @@ func resolveTarget(
 	if err != nil {
 		return target{}, err
 	}
-	branch := repo.BranchName(ctx, rev)
-	id := strings.Trim(unsafeID.ReplaceAllString(branch, "-"), "-")
+	id := strings.Trim(unsafeID.ReplaceAllString(repo.BranchName(ctx, rev), "-"), "-")
 	if id == "" {
 		id = short(headSHA)
 	}
-	return target{id: id, source: rev, base: baseSHA, head: headSHA, branch: branch}, nil
+	return target{id: id, source: rev, base: baseSHA, head: headSHA}, nil
 }
 
 func rangeTarget(ctx context.Context, repo gitx.Repo, arg string) (target, error) {
@@ -256,7 +253,6 @@ func rangeTarget(ctx context.Context, repo gitx.Repo, arg string) (target, error
 		source: arg,
 		base:   baseSHA,
 		head:   headSHA,
-		branch: repo.BranchName(ctx, cmp.Or(b, "HEAD")),
 	}, nil
 }
 
@@ -585,7 +581,6 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 	return target{
 		id:     fmt.Sprintf("pr-%d", ref.Number),
 		source: arg,
-		branch: pr.Head.Ref,
 		base:   base,
 		start:  base,
 		head:   pr.Head.SHA,
@@ -639,5 +634,5 @@ func gitFallback(ctx context.Context, repo gitx.Repo, g gitRef, cause error) (ta
 		"discussions, and the result stays local (review.md) to post by hand.\n"+
 		"For the full flow install %s and run `%s auth login`, then gr init again.",
 		g.tool, why, g.label, g.ref, base, g.tool, g.tool, g.tool)
-	return target{id: g.id, source: g.arg, base: baseSHA, head: head, branch: g.label, note: note}, nil
+	return target{id: g.id, source: g.arg, base: baseSHA, head: head, note: note}, nil
 }

@@ -20,9 +20,9 @@ import (
 )
 
 var verdicts = map[string]string{
-	"approve": "approve ✅",
-	"changes": "changes requested",
-	"blocked": "blocked ⛔",
+	plan.VerdictApprove: "approve ✅",
+	plan.VerdictChanges: "changes requested",
+	plan.VerdictBlocked: "blocked ⛔",
 }
 
 func cmdDiscussions(ctx context.Context, e env, _ []string) error {

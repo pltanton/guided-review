@@ -324,11 +324,8 @@ func (c *Client) Locate(
 	return parseLocations(raw)
 }
 
-func (c *Client) IncomingCalls(
-	ctx context.Context,
-	path string,
-	line, char int,
-) ([]Location, error) {
+// callItem prepares the call hierarchy at a position; nil when there is no callable there.
+func (c *Client) callItem(ctx context.Context, path string, line, char int) (map[string]any, error) {
 	raw, err := c.call(ctx, "textDocument/prepareCallHierarchy", position(path, line, char))
 	if err != nil {
 		return nil, err
@@ -337,7 +334,19 @@ func (c *Client) IncomingCalls(
 	if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
 		return nil, nil
 	}
-	raw, err = c.call(ctx, "callHierarchy/incomingCalls", map[string]any{"item": items[0]})
+	return map[string]any{"item": items[0]}, nil
+}
+
+func (c *Client) IncomingCalls(
+	ctx context.Context,
+	path string,
+	line, char int,
+) ([]Location, error) {
+	item, err := c.callItem(ctx, path, line, char)
+	if err != nil || item == nil {
+		return nil, err
+	}
+	raw, err := c.call(ctx, "callHierarchy/incomingCalls", item)
 	if err != nil {
 		return nil, err
 	}
@@ -577,13 +586,9 @@ func (c *Client) Calls(
 	path string,
 	line, char int,
 ) (in, out []Call, err error) {
-	raw, err := c.call(ctx, "textDocument/prepareCallHierarchy", position(path, line, char))
-	if err != nil {
+	params, err := c.callItem(ctx, path, line, char)
+	if err != nil || params == nil {
 		return nil, nil, err
-	}
-	var items []json.RawMessage
-	if err := json.Unmarshal(raw, &items); err != nil || len(items) == 0 {
-		return nil, nil, nil
 	}
 	type end struct {
 		Name string `json:"name"`
@@ -595,7 +600,7 @@ func (c *Client) Calls(
 	var outgoing []struct {
 		To end `json:"to"`
 	}
-	params := map[string]any{"item": items[0]}
+	var raw json.RawMessage
 	if raw, err = c.call(ctx, "callHierarchy/incomingCalls", params); err == nil {
 		err = json.Unmarshal(raw, &incoming)
 	}

@@ -1368,8 +1368,8 @@ func TestChatGutter(t *testing.T) {
 	}
 	m.lastWait = t0.Add(time.Minute)
 	got := make([]string, 0)
-	for _, l := range m.chatLines(60, true) {
-		got = append(got, strings.TrimRight(ansi.Strip(l), " "))
+	for _, r := range m.chatRows(60, true) {
+		got = append(got, strings.TrimRight(ansi.Strip(r.text), " "))
 	}
 	want := []string{
 		"── s1 first ──",
@@ -1384,7 +1384,10 @@ func TestChatGutter(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("chat\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
-	compact := m.chatLines(60, false)
+	var compact []string
+	for _, r := range m.chatRows(60, false) {
+		compact = append(compact, r.text)
+	}
 	got = []string{ansi.Strip(compact[len(compact)-1])}
 	if got[0] != "claude │ and more" || slices.Contains(compact, "") {
 		t.Fatalf("compact chat must name speaker changes without blank lines: %q", got[0])

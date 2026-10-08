@@ -60,10 +60,9 @@ func TestFetchMR(t *testing.T) {
 		t.Fatalf("args = %v, want %v", gotArgs, wantArgs)
 	}
 	want := gitlab.MR{
-		Title:        "Add guard",
-		WebURL:       "https://h/g/p/-/merge_requests/7",
-		SourceBranch: "feature",
-		DiffRefs:     gitlab.DiffRefs{BaseSHA: "b", StartSHA: "s", HeadSHA: "h"},
+		Title:    "Add guard",
+		WebURL:   "https://h/g/p/-/merge_requests/7",
+		DiffRefs: gitlab.DiffRefs{BaseSHA: "b", StartSHA: "s", HeadSHA: "h"},
 	}
 	if mr != want {
 		t.Fatalf("mr = %+v", mr)

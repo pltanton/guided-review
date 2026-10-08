@@ -14,6 +14,8 @@ const (
 	VerdictBlocked = "blocked"
 )
 
+var Verdicts = []string{VerdictApprove, VerdictChanges, VerdictBlocked}
+
 func SuggestVerdict(r *state.Review) (verdict, why string) {
 	round := max(r.Round, 1)
 	var blockers, majors []string

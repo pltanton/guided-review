@@ -243,10 +243,7 @@ func (m *model) planModal(w, h int) modalContent {
 	entries := m.planEntries(items, row, plain, selected)
 	key := fmt.Sprint(h, " ", m.planCursor)
 	top := scrollWindow(&m.planTop, &m.planFollow, key, true, m.planCursor, h, len(entries))
-	var body []string
-	for _, e := range entries[top:] {
-		body = append(body, e.text)
-	}
+	body := entries[top:]
 	reviewed := 0
 	for _, st := range m.review.Steps {
 		if st.Status != state.StatusPending {
