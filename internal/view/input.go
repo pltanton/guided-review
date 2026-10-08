@@ -25,6 +25,7 @@ func (m *model) startCompose(kind string) {
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
+	m.raw, m.rawSeverity = false, ""
 	defer m.placeInline()
 	switch kind {
 	case inbox.KindMessage:
@@ -35,6 +36,11 @@ func (m *model) startCompose(kind string) {
 			m.status = "nothing to ask about here: put the cursor on code"
 		}
 	}
+}
+
+func (m *model) startComment() {
+	m.startCompose(inbox.KindMessage)
+	m.raw = m.inlineCompose()
 }
 
 func (m *model) placeInline() {
@@ -98,6 +104,7 @@ func (m *model) startEdit() {
 			m.anchorFile, m.anchorLines = "", ""
 			m.input = []rune(c.Body)
 			m.inputPos = len(m.input)
+			m.raw = true
 			m.placeInline()
 			return
 		}
@@ -169,13 +176,20 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		m.raw = !m.raw
 	case tea.KeyTab:
 		switch {
-		case m.rawMode():
+		case !m.inlineCompose():
+		case m.composeKind == inbox.KindEdit:
+			m.raw = !m.raw
+		case m.composeKind == inbox.KindMessage && m.raw:
+			m.raw = false
+		case m.composeKind == inbox.KindMessage:
+			m.composeKind = inbox.KindAsk
+		case m.composeKind == inbox.KindAsk:
+			m.composeKind, m.raw = inbox.KindMessage, true
+		}
+	case tea.KeyShiftTab:
+		if m.rawMode() && m.composeKind == inbox.KindMessage {
 			i := slices.Index(state.Severities, m.severity())
 			m.rawSeverity = state.Severities[(i+1)%len(state.Severities)]
-		case m.inlineCompose() && m.composeKind == inbox.KindMessage:
-			m.composeKind = inbox.KindAsk
-		case m.inlineCompose() && m.composeKind == inbox.KindAsk:
-			m.composeKind = inbox.KindMessage
 		}
 	case tea.KeyCtrlX:
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
@@ -343,6 +357,10 @@ func (m *model) saveRaw(text string) {
 			args = append(args, "--step", m.step.ID)
 		}
 		args = append(args, "--", text)
+	}
+	if m.runGr == nil {
+		m.err = errors.New("no gr to save the comment with")
+		return
 	}
 	out, err := m.runGr(args...)
 	out = strings.Join(strings.Split(strings.TrimSpace(out), "\n"), " · ")

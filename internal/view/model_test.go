@@ -349,7 +349,7 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"next · >", "comment · c", "ask · a", "skip · S"} {
+	for _, b := range []string{"next · >", "comment · enter", "ask · a", "skip · S"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
@@ -366,7 +366,7 @@ func TestButtons(t *testing.T) {
 	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
 		t.Fatalf("click on next: %+v", *sent)
 	}
-	x = ansi.StringWidth(last[:strings.Index(last, "comment · c")])
+	x = ansi.StringWidth(last[:strings.Index(last, "comment · enter")])
 	m.Update(
 		tea.MouseMsg{
 			X:      x + 2,
@@ -640,7 +640,7 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.relist()
 	m.cursor = 1
 	m.Update(key("c"))
-	if out := ansi.Strip(m.View()); !strings.Contains(out, " COMMENT a.go:1 ") {
+	if out := ansi.Strip(m.View()); !strings.Contains(out, " AI COMMENT a.go:1 ") {
 		t.Fatalf("prompt must show the anchor:\n%s", out)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
@@ -653,9 +653,10 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.Update(key("enter"))
 
 	m.Update(key("E"))
-	if string(m.input) != "rename x" {
-		t.Fatalf("edit must prefill the comment, got %q", string(m.input))
+	if string(m.input) != "rename x" || !m.raw {
+		t.Fatalf("edit must prefill the comment as written, got %q raw %v", string(m.input), m.raw)
 	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	typeText(m, "y")
 	m.Update(key("enter"))
@@ -1164,12 +1165,12 @@ func TestRawComment(t *testing.T) {
 		return "comment #4 nit a.go:2\n", nil
 	}
 	m.cursor = 2
-	for _, k := range []tea.KeyMsg{key("c"), {Type: tea.KeyCtrlR}, {Type: tea.KeyTab}} {
+	for _, k := range []tea.KeyMsg{key("c"), {Type: tea.KeyCtrlR}, {Type: tea.KeyShiftTab}} {
 		m.Update(k)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ -x stays, exactly") ||
-		!strings.Contains(v, " RAW nit a.go:2 ") {
+		!strings.Contains(v, " COMMENT nit a.go:2 ") {
 		t.Fatalf("raw prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))
@@ -1278,7 +1279,7 @@ func TestCursorHint(t *testing.T) {
 	m, _ := newTestModel(t)
 	footer := func() string { f, _ := m.footer(); return ansi.Strip(f) }
 	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "? keys") ||
-		!strings.Contains(f, "comment · c") {
+		!strings.Contains(f, "comment · enter") {
 		t.Fatalf("plain line footer: %q", f)
 	}
 	m.seek(func(l line) bool { return l.Kind == RowNote })

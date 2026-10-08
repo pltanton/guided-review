@@ -368,7 +368,7 @@ func (m *model) act() tea.Cmd {
 	cur := m.current()
 	switch {
 	case m.step == nil || len(m.lines) == 0 || m.visual:
-		m.startCompose(inbox.KindMessage)
+		m.startComment()
 	case cur.Kind == RowEnd && m.viewStep != "":
 		return m.back()
 	case cur.Kind == RowEnd:
@@ -380,7 +380,7 @@ func (m *model) act() tea.Cmd {
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
 		m.noteDetails()
 	default:
-		m.startCompose(inbox.KindMessage)
+		m.startComment()
 	}
 	return nil
 }

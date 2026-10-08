@@ -60,7 +60,7 @@ func (m *model) footerButtons() []button {
 	}
 	btns := []button{
 		b("next", "next", (*model).next),
-		b("comment", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
+		b("comment", "act", (*model).startComment),
 		b("ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
 		b("skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
@@ -488,25 +488,24 @@ func (m *model) composeMode() (
 		if m.inlineCompose() {
 			hints = append(hints, composeHint{"tab", "comment"})
 		}
-	case m.rawMode():
-		style, hints[0].desc = delStyle.Bold(true).Background(surfaceTone.color()), "save"
-		if m.composeKind == inbox.KindEdit {
-			badge = fmt.Sprintf("RAW EDIT #%d", m.composeRef)
-		} else {
-			badge, hints = "RAW "+string(m.severity()), append(hints, composeHint{"tab", "severity"})
-		}
-		hints = append(hints, composeHint{"ctrl+r", "via agent"})
-	case m.composeKind == inbox.KindEdit:
+	case m.rawMode() && m.composeKind == inbox.KindEdit:
 		badge, hints[0].desc = fmt.Sprintf("EDIT #%d", m.composeRef), "save"
-		hints = append(hints, composeHint{"ctrl+r", "raw"})
+		hints = append(hints, composeHint{"tab", "ai edit"})
+	case m.rawMode():
+		badge, hints[0].desc = "COMMENT "+string(m.severity()), "save"
+		hints = append(hints, composeHint{"tab", "ai comment"}, composeHint{"shift+tab", "severity"})
+	case m.composeKind == inbox.KindEdit:
+		badge = fmt.Sprintf("AI EDIT #%d", m.composeRef)
+		if m.inlineCompose() {
+			hints = append(hints, composeHint{"tab", "edit"})
+		}
 	default:
 		if m.composeRef > 0 {
 			anchor = strings.TrimSpace(fmt.Sprintf("re #%d %s", m.composeRef, loc))
 		}
 		if m.inlineCompose() {
-			badge, hints = "COMMENT", append(hints, composeHint{"tab", "ask"})
+			badge, hints = "AI COMMENT", append(hints, composeHint{"tab", "ask"})
 		}
-		hints = append(hints, composeHint{"ctrl+r", "raw"})
 	}
 	hints = append(hints, composeHint{"ctrl+j", "new line"})
 	return badge, style, anchor, append(hints, composeHint{"esc", "cancel"})

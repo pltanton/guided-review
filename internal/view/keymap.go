@@ -143,7 +143,7 @@ func DefaultActions() []Action {
 			run: do((*model).next)},
 		{Name: "act", Group: rev, Desc: "comment here · edit your comment · details of a note ·" +
 			" open ⋯ / ▸ · next step at the end", Keys: k("enter"), run: (*model).act},
-		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
+		{Name: "message", Group: rev, Desc: "ai comment: the agent writes it from your words",
 			Keys: k("c"), run: do((*model).messageOrOpen)},
 		{Name: "message-general", Group: rev, Desc: "message the agent without a line",
 			Keys: k("C"), run: do(func(m *model) {

@@ -66,25 +66,25 @@ func TestComposeStatusline(t *testing.T) {
 	}{
 		{"message", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindMessage, "internal/a.go", "2-4"
-		}, " COMMENT a.go:2-4   enter send · tab ask", "ctrl+j new line · esc cancel"},
+		}, " AI COMMENT a.go:2-4          enter send", "tab ask · ctrl+j new line · esc cancel"},
 		{"reply to a comment", func(m *model) {
 			m.composeKind, m.composeRef, m.anchorFile, m.anchorLines = inbox.KindMessage, 7, "a.go", "2"
-		}, " COMMENT re #7 a.go:2         enter send",
-			"ctrl+r raw · ctrl+j new line · esc cancel"},
+		}, " AI COMMENT re #7 a.go:2      enter send",
+			"enter send · tab ask · ctrl+j new line · esc cancel"},
 		{"general", func(m *model) { m.composeKind = inbox.KindMessage },
-			" MSG             enter send · ctrl+r raw", "ctrl+j new line · esc cancel"},
+			" MSG        enter send · ctrl+j new line", "enter send · ctrl+j new line · esc cancel"},
 		{"paused", func(m *model) { m.composeKind, m.interrupted = inbox.KindMessage, true },
-			" MSG paused      enter send · ctrl+r raw", "esc cancel"},
+			" MSG paused                   enter send", "esc cancel"},
 		{"ask", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindAsk, "a.go", "2"
 		}, " ASK a.go:2                   enter send",
 			"enter alone explains · tab comment · ctrl+j new line · esc cancel"},
 		{"raw", func(m *model) {
 			m.composeKind, m.raw, m.anchorFile, m.anchorLines = inbox.KindMessage, true, "a.go", "2"
-		}, " RAW minor a.go:2             enter save",
-			"tab severity · ctrl+r via agent · ctrl+j new line · esc cancel"},
+		}, " COMMENT minor a.go:2         enter save",
+			"tab ai comment · shift+tab severity · ctrl+j new line · esc cancel"},
 		{"edit", func(m *model) { m.composeKind, m.composeRef = inbox.KindEdit, 3 },
-			" EDIT #3         enter save · ctrl+r raw", "ctrl+j new line · esc cancel"},
+			" AI EDIT #3        enter send · tab edit", "tab edit · ctrl+j new line · esc cancel"},
 		{"skip", func(m *model) { m.composeKind = inbox.KindSkip },
 			" SKIP       enter skip · ctrl+j new line", "enter skip · ctrl+j new line · esc cancel"},
 		{"thread reply", func(m *model) {
@@ -240,31 +240,41 @@ func TestInputKeepsCursorInView(t *testing.T) {
 
 func TestInlineComposer(t *testing.T) {
 	m, sent := newTestModel(t)
+	var ran []string
+	m.runGr = func(args ...string) (string, error) {
+		ran = args
+		return "comment #1 major a.go:2", nil
+	}
 	m.cursor = 2
 	m.Update(key("enter"))
 	typeText(m, "why x")
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	at := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "x := 1") })
 	if at < 0 || at+2 >= len(lines) || !strings.Contains(lines[at+1], "▌ why x█") ||
-		!strings.Contains(lines[at+2], "COMMENT a.go:2") || !strings.Contains(lines[at+2], "tab ask") {
-		t.Fatalf("the composer sits under its line:\n%s", strings.Join(lines, "\n"))
+		!strings.Contains(lines[at+2], "COMMENT minor a.go:2") ||
+		!strings.Contains(lines[at+2], "tab ai comment") {
+		t.Fatalf("enter opens a plain comment under its line:\n%s", strings.Join(lines, "\n"))
 	}
 	if strings.Contains(lines[len(lines)-1], "COMMENT") {
 		t.Fatal("the bottom prompt stays the footer while composing inline")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.composeKind != inbox.KindAsk ||
-		!strings.Contains(ansi.Strip(m.View()), "ASK a.go:2") {
-		t.Fatal("tab switches to ask")
+	if m.raw || !strings.Contains(ansi.Strip(m.View()), "AI COMMENT a.go:2") {
+		t.Fatal("tab switches to an ai comment")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.composeKind != inbox.KindMessage {
-		t.Fatal("tab switches back to a comment")
+	if m.composeKind != inbox.KindAsk || !strings.Contains(ansi.Strip(m.View()), "ASK a.go:2") {
+		t.Fatal("tab again switches to ask")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if m.composeKind != inbox.KindMessage || !m.raw {
+		t.Fatal("tab again is back to a plain comment")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	m.Update(key("enter"))
-	want := inbox.Event{Kind: inbox.KindAsk, Step: "s1", File: "a.go", Lines: "2", Text: "why x"}
-	if len(*sent) != 1 || (*sent)[0] != want {
-		t.Fatalf("sent %+v, want %+v", *sent, want)
+	want := []string{"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "nit",
+		"--step", "s1", "--", "why x"}
+	if !slices.Equal(ran, want) || len(*sent) != 1 || (*sent)[0].Kind != inbox.KindComment {
+		t.Fatalf("a plain comment is saved as written: ran %q sent %+v", ran, *sent)
 	}
 }

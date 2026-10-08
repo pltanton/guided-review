@@ -22,8 +22,10 @@ The screen is the step's code on the left and, on the right, the step's files ab
 chat with the agent. `j`/`k` (or the mouse) move, `enter` acts on the line under the
 cursor, `esc` or `q` backs out (`Q` or `:q` quits the viewer):
 
-- on code it opens an input right under the line: write a comment, `tab` turns it into
-  a question (an empty question asks the agent to explain the line);
+- on code it opens an input right under the line for a comment, saved as you write it
+  (`shift+tab` sets its severity); `tab` makes it an ai comment, which the agent writes
+  from your words, and `tab` again a question (an empty one asks the agent to explain the
+  line);
 - on your own comment it edits it, on an agent's note it shows the longer explanation,
   on `⋯` or `▸` it opens the hidden lines;
 - on the last line of a step, `✓ end of s3`, it moves to the next step.
@@ -61,10 +63,10 @@ starts a new line. Alt+Enter and Shift+Enter do too where the terminal passes th
 in tmux Shift+Enter needs `set -g extended-keys on` in `~/.tmux.conf`
 (plus `set -as terminal-features 'xterm*:extkeys'` if the outer terminal does not
 announce them), otherwise tmux delivers it as plain Enter. The line under the input shows
-the mode (COMMENT, ASK, RAW, EDIT…), where the comment goes and the keys that work right
-now. The agent writes the comment with a severity
-and, for an obvious fix, a suggestion. You can also just ask about code without leaving
-a comment, or save a comment exactly as typed. When the agent needs a decision, it
+the mode (COMMENT, AI COMMENT, ASK, EDIT…), where the comment goes and the keys that work
+right now. A comment goes out exactly as you typed it; an ai comment is turned by the
+agent into a comment with a severity and, for an obvious fix, a suggestion. You can also
+just ask about code without leaving a comment. When the agent needs a decision, it
 offers answers you pick with one key. `t` moves into the chat, where `v` selects lines
 and `y` copies them; dragging the mouse over chat lines copies them too.
 
