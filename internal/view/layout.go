@@ -782,6 +782,9 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 	}
 	flow := m.flowEntries(row, plain)
 	limit := max(h/2, 4)
+	if !m.chatOpen() {
+		limit = max(h-collapsedChatRows-4, 4)
+	}
 	rows := min(len(files), limit-2)
 	key := fmt.Sprint(rows, " ", files[at].file)
 	top := scrollWindow(&m.fileTop, &m.fileFollow, key, m.focusFiles, at, rows, len(files))
