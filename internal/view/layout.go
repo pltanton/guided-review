@@ -139,19 +139,8 @@ func (m *model) cursorHint() string {
 	return ""
 }
 
-func (m *model) planWidth() int {
-	if !m.showPlan || m.width < minPlanWidth || m.review == nil ||
-		len(m.review.Steps) == 0 {
-		return 0
-	}
-	if m.planW > 0 {
-		return max(12, min(m.planW, m.width/2))
-	}
-	return min(maxPlanWidth, m.width/4)
-}
-
 func (m *model) mainWidth() int {
-	return m.width - m.planWidth() - m.chatWidth()
+	return m.width - m.chatWidth()
 }
 
 func (m *model) chatWidth() int {
@@ -159,7 +148,7 @@ func (m *model) chatWidth() int {
 	if m.sideW > 0 {
 		w = max(24, min(m.sideW, m.width*2/3))
 	}
-	if m.width-m.planWidth()-w < minCodeWidth {
+	if m.width-w < minCodeWidth {
 		return 0
 	}
 	return w
@@ -168,8 +157,6 @@ func (m *model) chatWidth() int {
 func (m *model) chatScrollHint() string {
 	return m.keys().key("chat-up") + "/" + m.keys().key("chat-down") + " scroll"
 }
-
-const sideChatTop = 3
 
 func (m *model) sidePrompt(w int) []string {
 	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
@@ -186,11 +173,15 @@ func (m *model) sidePrompt(w int) []string {
 }
 
 func (m *model) sideChatLines(h, w int) []string {
-	title, hint := labelStyle.Render("CHAT"), m.chatScrollHint()+" · drag │ to resize"
-	if m.chatFocus {
-		title, hint = chatStyle.Render("CHAT"), m.chatFocusHint()
+	var lines []string
+	for _, e := range m.sideFiles(h, w+2) {
+		lines = append(lines, e.text)
 	}
-	lines := []string{title, dimStyle.Render(hint), dimStyle.Render(strings.Repeat("─", max(w, 1)))}
+	title := labelStyle.Render("CHAT")
+	if m.chatFocus {
+		title = chatStyle.Render("CHAT") + "  " + dimStyle.Render(m.chatFocusHint())
+	}
+	lines = append(lines, title, dimStyle.Render(strings.Repeat("─", max(w, 1))))
 	prompt := m.sidePrompt(w)
 	chatH := max(h-len(lines)-len(prompt), 0)
 	lines = append(lines, m.chatWindow(m.chatRows(w, true), chatH, w)...)
@@ -199,6 +190,10 @@ func (m *model) sideChatLines(h, w int) []string {
 	}
 	lines = append(lines, prompt...)
 	return lines[max(len(lines)-h, 0):]
+}
+
+func (m *model) sideChatTop() int {
+	return len(m.sideFiles(m.height-len(m.bottomLines()), m.chatWidth())) + 2
 }
 
 func (m *model) inputInSideChat() bool {
@@ -628,13 +623,6 @@ func (m *model) View() string {
 		overlayRight(main[:len(main)-1], m.keyHints(m.pendingKey), mw)
 	}
 
-	pw := m.planWidth()
-	var plan []string
-	if pw > 0 {
-		for _, e := range m.sidebar(bodyH, pw) {
-			plan = append(plan, e.text)
-		}
-	}
 	var chat []string
 	if cw := m.chatWidth(); cw > 0 {
 		chat = m.sideChatLines(len(main), cw-2)
@@ -642,9 +630,6 @@ func (m *model) View() string {
 	out := make([]string, 0, m.height)
 	for i, line := range main {
 		line = fit(line, mw)
-		if pw > 0 {
-			line = fit(plan[i], pw-1) + faintTone.fg().Render("│") + line
-		}
 		if chat != nil {
 			line += faintTone.fg().Render("│") + " " + chat[i]
 		}
@@ -704,88 +689,57 @@ type sideEntry struct {
 
 type rowFunc func(left, right string) string
 
-func (m *model) sidebar(h, w int) []sideEntry {
+func sideRows(w int) (row rowFunc, plain, selected func(string) string) {
 	iw := max(w-3, 8)
-	row := func(left, right string) string {
+	row = func(left, right string) string {
 		left = ansi.Truncate(left, max(iw-ansi.StringWidth(right)-1, 1), "…")
 		gap := iw - ansi.StringWidth(left) - ansi.StringWidth(right)
 		return left + strings.Repeat(" ", max(gap, 1)) + right
 	}
-	plain := func(line string) string { return " " + line }
-	selected := func(line string) string {
+	plain = func(line string) string { return " " + line }
+	selected = func(line string) string {
 		return paint(fit(accentTone.fg().Render("▌")+line, w-2), cursorTone)
 	}
-	header := func(label string, focused bool, top, shown, n int, count string) string {
-		title := labelStyle.Render(label)
-		if focused {
-			title = cursorStyle.Render(label)
-		}
-		more := ""
-		if top > 0 {
-			more += fmt.Sprintf("↑%d ", top)
-		}
-		if rest := n - top - shown; rest > 0 {
-			more += fmt.Sprintf("↓%d ", rest)
-		}
-		return plain(row(title, dimStyle.Render(more+count)))
-	}
+	return row, plain, selected
+}
 
-	items := m.planItems()
-	if m.focusPlan {
-		m.planCursor = max(0, min(m.planCursor, len(items)-1))
+func scrollMarks(top, shown, n int) string {
+	more := ""
+	if top > 0 {
+		more += fmt.Sprintf("↑%d ", top)
 	}
-	plan := m.planEntries(items, row, plain, selected)
-	files, fileAt := m.fileEntries(row, plain, selected)
+	if rest := n - top - shown; rest > 0 {
+		more += fmt.Sprintf("↓%d ", rest)
+	}
+	return more
+}
 
-	filesNeed := 0
-	if len(files) > 0 {
-		filesNeed = len(files) + 2
+func (m *model) sideFiles(h, w int) []sideEntry {
+	if m.step == nil || m.review == nil {
+		return nil
 	}
-	planH := min(1+len(plan), max(h-filesNeed, h/2, 2))
-	filesH := min(filesNeed, h-planH)
-	if filesH < 3 {
-		filesH = 0
+	row, plain, selected := sideRows(w)
+	files, at := m.fileEntries(row, plain, selected)
+	if len(files) == 0 {
+		return nil
 	}
-
-	at := m.planAnchor(items)
-	if m.focusPlan {
-		at = m.planCursor
+	flow := m.flowEntries(row, plain)
+	limit := max(h/2, 4)
+	rows := min(len(files), limit-2)
+	key := fmt.Sprint(rows, " ", files[at].file)
+	top := scrollWindow(&m.fileTop, &m.fileFollow, key, m.focusFiles, at, rows, len(files))
+	shown := min(rows, len(files)-top)
+	label := labelStyle.Render("FILES")
+	if m.focusFiles {
+		label = cursorStyle.Render("FILES")
 	}
-	rows := max(planH-1, 0)
-	key := fmt.Sprint(rows, " ", plan[at].step, "#", plan[at].chapter)
-	top := scrollWindow(&m.planTop, &m.planFollow, key, m.focusPlan, at, rows, len(plan))
-	reviewed := 0
-	for _, st := range m.review.Steps {
-		if st.Status != state.StatusPending {
-			reviewed++
-		}
+	count := fmt.Sprint(len(m.stepFiles())) + " · " + m.step.ID
+	title := plain(row(label, dimStyle.Render(scrollMarks(top, shown, len(files))+count)))
+	out := append([]sideEntry{{text: title, zone: zoneFiles}}, files[top:top+shown]...)
+	if len(out)+len(flow)+1 <= limit {
+		out = append(out, flow...)
 	}
-	label := "PLAN"
-	if m.review.Round > 1 {
-		label += fmt.Sprintf(" · round %d", m.review.Round)
-	}
-	count := fmt.Sprintf("%d/%d", reviewed, len(m.review.Steps))
-	shown := min(rows, len(plan)-top)
-	title := header(label, m.focusPlan, top, shown, len(plan), count)
-	out := append([]sideEntry{{text: title, zone: zonePlan}}, plan[top:top+shown]...)
-	for len(out) < planH {
-		out = append(out, sideEntry{zone: zonePlan})
-	}
-
-	if filesH > 0 {
-		rows := filesH - 2
-		key := fmt.Sprint(rows, " ", files[fileAt].file)
-		top := scrollWindow(&m.fileTop, &m.fileFollow, key, m.focusFiles, fileAt, rows, len(files))
-		shown := min(rows, len(files)-top)
-		title := header("FILES", m.focusFiles, top, shown, len(files), fmt.Sprint(len(m.stepFiles())))
-		out = append(out, sideEntry{}, sideEntry{text: title, zone: zoneFiles})
-		out = append(out, files[top:top+shown]...)
-	}
-	out = append(out, m.flowEntries(row, plain)...)
-	for len(out) < h {
-		out = append(out, sideEntry{})
-	}
-	return out[:h]
+	return append(out, sideEntry{})
 }
 
 func (m *model) planEntries(

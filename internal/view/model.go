@@ -23,9 +23,7 @@ import (
 const (
 	defaultContext = 3
 	minSplitWidth  = 80
-	minPlanWidth   = 90
 	minCodeWidth   = 70
-	maxPlanWidth   = 44
 	messageLines   = 5
 )
 
@@ -64,9 +62,9 @@ type model struct {
 	width, height  int
 	context        int
 
-	splitView, showPlan, mouse bool
-	visual, dragging           bool
-	anchor                     int
+	splitView, mouse bool
+	visual, dragging bool
+	anchor           int
 
 	focusFiles bool
 	fileCursor int
@@ -101,7 +99,6 @@ type model struct {
 	composeThread string
 	runGr         func(args ...string) (string, error)
 
-	planW    int
 	sideW    int
 	resizing string
 	chatTop  int
@@ -413,7 +410,7 @@ func (m *model) applyConfig(c config.Config) {
 	var err error
 	m.km, err = newKeymap(c.Keys)
 	m.err = err
-	m.splitView, m.showPlan, m.mouse = c.View.Split, !c.View.HidePlan, !c.View.NoMouse
+	m.splitView, m.mouse = c.View.Split, !c.View.NoMouse
 	m.nowrap = c.View.NoWrap
 	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
 	m.context = m.baseCtx

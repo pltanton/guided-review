@@ -41,9 +41,8 @@ func TestLongLinesWrap(t *testing.T) {
 	if head < 0 || tail <= head {
 		t.Fatalf("a long line wraps and its tail is on screen:\n%s", strings.Join(rows, "\n"))
 	}
-	pw := m.planWidth()
 	for _, r := range rows[head+1 : tail+1] {
-		if code := []rune(r)[pw:]; !strings.HasPrefix(string(code), "      │ ") {
+		if code := []rune(r); !strings.HasPrefix(string(code), "      │ ") {
 			t.Fatalf("a continuation keeps the gutter without a number: %q", string(code))
 		}
 	}
@@ -59,7 +58,7 @@ func TestLongLinesWrap(t *testing.T) {
 	if m.cursor != 3 {
 		t.Fatalf("j moves by logical lines: cursor %d", m.cursor)
 	}
-	m.Update(tea.MouseMsg{X: pw + codePrefix + 2, Y: tail, Button: tea.MouseButtonLeft,
+	m.Update(tea.MouseMsg{X: codePrefix + 2, Y: tail, Button: tea.MouseButtonLeft,
 		Action: tea.MouseActionPress})
 	if avail := codeAvail(m.mainWidth()); m.cursor != 2 || m.col != (tail-head)*avail+2 {
 		t.Fatalf("a click on a continuation picks the line and its column: cursor %d col %d",

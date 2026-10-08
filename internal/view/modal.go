@@ -2,7 +2,10 @@ package view
 
 import (
 	"cmp"
+	"fmt"
 	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -44,9 +47,14 @@ type modalContent struct {
 	body        []string
 }
 
-func (m *model) modal(w int) (modalContent, bool) {
-	if m.chapterOpen != "" {
+func (m *model) modal(w, h int) (modalContent, bool) {
+	switch {
+	case m.chapterOpen != "":
 		return m.chapterModal(w), true
+	case m.focusPlan:
+		return m.planModal(w, h), true
+	case m.focusFiles && m.chatWidth() == 0:
+		return m.filesModal(w, h), true
 	}
 	if m.help {
 		lines := m.helpLines(w)
@@ -64,7 +72,7 @@ func (m *model) drawModal(out []string) {
 		return
 	}
 	w, h := max(m.width-2, 8), len(out)-2
-	if c, ok := m.modal(w - 4); ok {
+	if c, ok := m.modal(w-4, h-2); ok {
 		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), 1, 1)
 	}
 }
@@ -119,4 +127,65 @@ func (m *model) chapterModal(w int) modalContent {
 	}
 	body := append(markdownLines(intro, min(w, detailWidth)), "")
 	return modalContent{m.chapterOpen, "enter close · I reopens", append(body, steps...)}
+}
+
+const modalBodyTop = 2
+
+func (m *model) planModal(w, h int) modalContent {
+	items := m.planItems()
+	m.planCursor = max(0, min(m.planCursor, len(items)-1))
+	row, plain, selected := sideRows(w + 2)
+	entries := m.planEntries(items, row, plain, selected)
+	key := fmt.Sprint(h, " ", m.planCursor)
+	top := scrollWindow(&m.planTop, &m.planFollow, key, true, m.planCursor, h, len(entries))
+	var body []string
+	for _, e := range entries[top:] {
+		body = append(body, e.text)
+	}
+	reviewed := 0
+	for _, st := range m.review.Steps {
+		if st.Status != state.StatusPending {
+			reviewed++
+		}
+	}
+	title := fmt.Sprintf("plan · %d/%d reviewed", reviewed, len(m.review.Steps))
+	if m.review.Round > 1 {
+		title += fmt.Sprintf(" · round %d", m.review.Round)
+	}
+	return modalContent{title, "enter show · h/l fold · esc close", body}
+}
+
+func (m *model) filesModal(w, h int) modalContent {
+	row, plain, selected := sideRows(w + 2)
+	entries, at := m.fileEntries(row, plain, selected)
+	key := fmt.Sprint(h, " ", at)
+	top := scrollWindow(&m.fileTop, &m.fileFollow, key, true, at, h, len(entries))
+	var body []string
+	for _, e := range entries[top:] {
+		body = append(body, e.text)
+	}
+	return modalContent{"files · " + m.step.ID, "enter jump · esc close", body}
+}
+
+func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
+	wheel := map[tea.MouseButton]int{tea.MouseButtonWheelUp: -1, tea.MouseButtonWheelDown: 1}
+	press := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
+	r := msg.Y - modalBodyTop
+	switch {
+	case m.focusPlan && wheel[msg.Button] != 0:
+		m.planCursor = max(0, min(m.planCursor+wheel[msg.Button], len(m.planItems())-1))
+	case m.focusPlan && press && r >= 0 && m.planTop+r < len(m.planItems()):
+		m.planCursor = m.planTop + r
+		return m.handlePlanKey(tea.KeyMsg{Type: tea.KeyEnter})
+	case m.focusFiles && wheel[msg.Button] != 0:
+		m.fileCursor = max(0, min(m.fileCursor+wheel[msg.Button], len(m.stepFiles())-1))
+	case m.focusFiles && press && r >= 0:
+		row, plain, selected := sideRows(m.width)
+		entries, _ := m.fileEntries(row, plain, selected)
+		if i := m.fileTop + r; i < len(entries) && entries[i].file != "" {
+			m.jumpToFile(entries[i].file)
+			m.focusFiles = false
+		}
+	}
+	return nil
 }

@@ -77,9 +77,9 @@ func DefaultActions() []Action {
 			run: do(func(m *model) { m.startCmd('/') })},
 		{Name: "next-file", Group: nav, Desc: "next file", Keys: k("}"), run: jump(1, file)},
 		{Name: "prev-file", Group: nav, Desc: "previous file", Keys: k("{"), run: jump(-1, file)},
-		{Name: "files", Group: nav, Desc: "focus the files panel", Keys: k("f"),
+		{Name: "files", Group: nav, Desc: "the files of this step", Keys: k("f"),
 			run: do((*model).focusFilesPanel)},
-		{Name: "steps", Group: nav, Desc: "focus the plan panel: fold chapters, preview steps",
+		{Name: "steps", Group: nav, Desc: "the plan: fold chapters, look at steps",
 			Keys: k("ctrl+p"), run: do((*model).focusPlanPanel)},
 		{
 			Name:  "prev-step",
@@ -175,8 +175,8 @@ func DefaultActions() []Action {
 			Keys: k("W"), run: do(func(m *model) { m.setWrap(m.nowrap) })},
 		{Name: "chapter", Group: vw, Desc: "the chapter's intro", Keys: k("I"),
 			run: do((*model).openChapter)},
-		{Name: "plan", Group: vw, Desc: "show / hide the plan panel", Keys: k("p"),
-			run: do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
+		{Name: "plan", Group: vw, Desc: "the plan: chapters and steps", Keys: k("p"),
+			run: do((*model).focusPlanPanel)},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
@@ -364,9 +364,8 @@ func (m *model) focusFilesPanel() {
 	if len(files) == 0 {
 		return
 	}
-	m.showPlan, m.focusFiles, m.focusPlan = true, true, false
+	m.focusFiles, m.focusPlan = true, false
 	m.fileCursor = max(0, slices.Index(files, m.current().File))
-	m.relist()
 }
 
 func (m *model) back() tea.Cmd {

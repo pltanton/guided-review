@@ -15,6 +15,8 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.chapterOpen = ""
 		}
 		return nil
+	case m.focusPlan || m.focusFiles && m.chatWidth() == 0:
+		return m.modalMouse(msg)
 	case m.help && msg.Button == tea.MouseButtonWheelUp:
 		m.helpTop = max(m.helpTop-wheelStep, 0)
 		return nil
@@ -72,6 +74,10 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 		if cw := m.chatWidth(); cw > 0 && msg.X > m.width-cw {
+			side := m.sideFiles(m.height-len(m.bottomLines()), cw)
+			if msg.Y < len(side) && side[msg.Y].file != "" {
+				m.jumpToFile(side[msg.Y].file)
+			}
 			return nil
 		}
 		if msg.Y == m.height-1 && !m.composing {
@@ -79,20 +85,6 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			for _, sp := range spans {
 				if msg.X >= sp.from && msg.X < sp.to {
 					return sp.b.press(m)
-				}
-			}
-			return nil
-		}
-		if pw := m.planWidth(); msg.X < pw {
-			side := m.sidebar(max(m.height-len(m.bottomLines()), 1), pw)
-			if msg.Y < len(side) {
-				switch e := side[msg.Y]; {
-				case e.chapter != "":
-					m.toggleChapter(e.chapter)
-				case e.step != "":
-					return m.showStep(e.step)
-				case e.file != "":
-					m.jumpToFile(e.file)
 				}
 			}
 			return nil
@@ -105,17 +97,14 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 				if !m.nowrap {
 					start = sub * codeAvail(m.mainWidth())
 				}
-				m.col = start + max(msg.X-m.planWidth()-codePrefix, 0)
+				m.col = start + max(msg.X-codePrefix, 0)
 			}
 			if it := m.lines[i]; it.Kind == RowFold || it.GapTo > 0 {
 				m.toggleFold()
 			}
 		}
 	case msg.Action == tea.MouseActionMotion && m.resizing != "":
-		switch m.resizing {
-		case "plan":
-			m.planW = msg.X + 1
-		case "chat":
+		if m.resizing == "chat" {
 			m.sideW = m.width - msg.X
 		}
 		m.relist()
@@ -167,8 +156,6 @@ func (m *model) separatorAt(x, y int) string {
 	switch {
 	case m.step == nil || m.preview != "":
 		return ""
-	case y < top && x == m.planWidth()-1:
-		return "plan"
 	case y < top && m.chatWidth() > 0 && x == m.width-m.chatWidth():
 		return "chat"
 	}

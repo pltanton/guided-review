@@ -96,22 +96,12 @@ func (m *model) setChapterOpen(ch string, open bool) {
 	m.planOpen[ch] = open
 }
 
-func (m *model) toggleChapter(ch string) {
-	for _, it := range m.planItems() {
-		if it.head && it.chapter == ch {
-			m.setChapterOpen(ch, !it.open)
-			return
-		}
-	}
-}
-
 func (m *model) focusPlanPanel() {
 	if m.review == nil || len(m.review.Steps) == 0 {
 		return
 	}
-	m.showPlan, m.focusPlan, m.focusFiles = true, true, false
+	m.focusPlan, m.focusFiles = true, false
 	m.planCursor = m.planAnchor(m.planItems())
-	m.relist()
 }
 
 func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
@@ -157,10 +147,7 @@ func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
 	case "files":
 		m.focusPlan = false
 		m.focusFilesPanel()
-	case "plan":
-		m.focusPlan, m.showPlan = false, false
-		m.relist()
-	case "back", "steps":
+	case "back", "steps", "plan":
 		m.focusPlan = false
 	}
 	m.planCursor = max(0, min(m.planCursor, len(m.planItems())-1))
@@ -196,27 +183,17 @@ func scrollWindow(top *int, last *string, key string, force bool, at, h, n int) 
 }
 
 func (m *model) sideWheel(x, y, d int) bool {
-	pw := m.planWidth()
-	if x >= pw || m.step == nil {
+	cw := m.chatWidth()
+	if cw == 0 || x < m.width-cw || m.step == nil {
 		return false
 	}
-	side := m.sidebar(max(m.height-len(m.bottomLines()), 1), pw)
-	if y < 0 || y >= len(side) {
+	side := m.sideFiles(m.height-len(m.bottomLines()), cw)
+	if y < 0 || y >= len(side) || side[y].zone != zoneFiles {
 		return false
 	}
-	switch side[y].zone {
-	case zonePlan:
-		m.planTop += d
-		if m.focusPlan {
-			m.planCursor += d
-		}
-	case zoneFiles:
-		m.fileTop += d
-		if m.focusFiles {
-			m.fileCursor = max(0, min(m.fileCursor+d, len(m.stepFiles())-1))
-		}
-	default:
-		return false
+	m.fileTop += d
+	if m.focusFiles {
+		m.fileCursor = max(0, min(m.fileCursor+d, len(m.stepFiles())-1))
 	}
 	return true
 }

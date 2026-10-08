@@ -55,9 +55,9 @@ func newTestModel(t *testing.T) (*model, *[]inbox.Event) {
 		{ID: "s2", Title: "second", Kind: "logic", Status: state.StatusPending},
 	}}
 	m := &model{
-		review: r, step: &r.Steps[0], rows: testRows(), width: 120, height: 30,
-		context: defaultContext, showPlan: true,
-		send: func(e inbox.Event) error { sent = append(sent, e); return nil },
+		review: r, step: &r.Steps[0], rows: testRows(), width: 100, height: 30,
+		context: defaultContext,
+		send:    func(e inbox.Event) error { sent = append(sent, e); return nil },
 	}
 	m.relist()
 	return m, &sent
@@ -129,12 +129,11 @@ func TestComposeKeysDoNotNavigate(t *testing.T) {
 }
 
 func TestMouse(t *testing.T) {
-	m, sent := newTestModel(t)
+	m, _ := newTestModel(t)
 	hdr := len(m.header())
-	pw := m.planWidth()
 	m.Update(
 		tea.MouseMsg{
-			X:      pw + 5,
+			X:      5,
 			Y:      hdr + 4,
 			Button: tea.MouseButtonLeft,
 			Action: tea.MouseActionPress,
@@ -145,7 +144,7 @@ func TestMouse(t *testing.T) {
 	}
 	m.Update(
 		tea.MouseMsg{
-			X:      pw + 5,
+			X:      5,
 			Y:      hdr + 5,
 			Button: tea.MouseButtonLeft,
 			Action: tea.MouseActionMotion,
@@ -153,7 +152,7 @@ func TestMouse(t *testing.T) {
 	)
 	m.Update(
 		tea.MouseMsg{
-			X:      pw + 5,
+			X:      5,
 			Y:      hdr + 5,
 			Button: tea.MouseButtonLeft,
 			Action: tea.MouseActionRelease,
@@ -162,15 +161,6 @@ func TestMouse(t *testing.T) {
 	if file, lines, ok := m.selection(); !ok || file != "a.go" || lines != "3-9" {
 		t.Fatalf("drag selection = %q %q %v", file, lines, ok)
 	}
-	m.Update(tea.MouseMsg{X: 1, Y: 2, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
-	if len(*sent) != 0 || m.step.ID != "s2" || m.review.Current != "s1" {
-		t.Fatalf(
-			"plan click must preview s2 locally: sent %+v step %s current %s",
-			*sent,
-			m.step.ID,
-			m.review.Current,
-		)
-	}
 }
 
 func TestViewRenders(t *testing.T) {
@@ -178,7 +168,7 @@ func TestViewRenders(t *testing.T) {
 	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"▶ s1 first", "○ s2 second", " s1  logic › first", "1/2", "why x", "claude │ Adds x and y.",
+		" s1  logic › first", "1/2", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -243,7 +233,7 @@ func TestIntakeBeforePlan(t *testing.T) {
 			{Path: "a.pb.go", Tier: state.TierGenerated, Added: 300},
 		},
 		Discussions: []state.Discussion{{Author: "bob"}, {Author: "ci", Resolved: true}}}
-	m := &model{review: r, width: 100, height: 20, showPlan: true,
+	m := &model{review: r, width: 100, height: 20,
 		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
@@ -301,7 +291,7 @@ func TestAgentStatus(t *testing.T) {
 
 func TestNotesWrapIntoBlocks(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.width, m.showPlan = 60, false
+	m.width = 60
 	m.rows[3] = Row{Kind: RowNote, File: "a.go", Line: 2, NoteKind: "comment", NoteLabel: "minor",
 		Text: "Event with the same source verdict and a different command becomes a separate key and looks identical in logs"}
 	m.relist()
@@ -430,6 +420,8 @@ func twoFileModel(t *testing.T) (*model, *[]inbox.Event) {
 
 func TestFilesPanel(t *testing.T) {
 	m, _ := twoFileModel(t)
+	m.width = 160
+	m.relist()
 	if got := m.stepFiles(); !reflect.DeepEqual(got, []string{"a.go", "api/b.go", "api/c.go"}) {
 		t.Fatalf("stepFiles = %v", got)
 	}
@@ -459,10 +451,10 @@ func TestFilesPanel(t *testing.T) {
 	}
 	y := strings.Split(out, "\n")
 	for i, line := range y {
-		if strings.Contains(line, "  a.go") || strings.HasPrefix(strings.TrimSpace(line), "a.go") {
+		if x := strings.Index(line, "│  a.go"); x >= 0 {
 			m.Update(
 				tea.MouseMsg{
-					X:      3,
+					X:      len([]rune(line[:x])) + 3,
 					Y:      i,
 					Button: tea.MouseButtonLeft,
 					Action: tea.MouseActionPress,
@@ -692,12 +684,12 @@ func TestExtraViews(t *testing.T) {
 	if all := m.extraSteps()[2]; len(all.Hunks) != 4 {
 		t.Fatalf("~all must cover every file: %+v", all.Hunks)
 	}
-	out := ansi.Strip(m.View())
+	out := strings.Join(planText(m), "\n")
 	for _, want := range []string{
 		"◇ boilerplate", "◇ generated", "◇ all changes",
 	} {
 		if !strings.Contains(out, want) {
-			t.Fatalf("sidebar lacks %q:\n%s", want, out)
+			t.Fatalf("plan lacks %q:\n%s", want, out)
 		}
 	}
 	m.Update(key("L"))
@@ -945,6 +937,7 @@ func TestKeymapOverrides(t *testing.T) {
 
 func TestHelpOverlay(t *testing.T) {
 	m, _ := newTestModel(t)
+	m.width = 160
 	m.Update(key("?"))
 	out := ansi.Strip(m.View())
 	for _, want := range []string{"essentials", "done with this step", "? all keys"} {
@@ -973,14 +966,8 @@ func TestApplyViewConfig(t *testing.T) {
 	m.applyConfig(
 		config.Config{View: config.View{Split: true, HidePlan: true, NoMouse: true, Context: 8}},
 	)
-	if !m.splitView || m.showPlan || m.mouse || m.baseCtx != 8 {
-		t.Fatalf(
-			"config not applied: split %v plan %v mouse %v ctx %d",
-			m.splitView,
-			m.showPlan,
-			m.mouse,
-			m.baseCtx,
-		)
+	if !m.splitView || m.mouse || m.baseCtx != 8 {
+		t.Fatalf("config not applied: split %v mouse %v ctx %d", m.splitView, m.mouse, m.baseCtx)
 	}
 }
 
@@ -1102,7 +1089,7 @@ func TestChatPanel(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	if !strings.Contains(out, "│ CHAT") || !strings.Contains(out, "message 29") ||
-		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width-m.planWidth() {
+		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width {
 		t.Fatalf("side chat:\n%s", out)
 	}
 	m.handleMouse(tea.MouseMsg{X: m.width - 2, Y: 5, Button: tea.MouseButtonWheelUp})
@@ -1415,10 +1402,6 @@ func TestDragResize(t *testing.T) {
 			Button: tea.MouseButtonLeft})
 		m.handleMouse(tea.MouseMsg{X: toX, Y: toY, Action: tea.MouseActionRelease})
 	}
-	drag(m.planWidth()-1, 3, 45, 3)
-	if got := m.planWidth(); got != 46 {
-		t.Fatalf("plan width after drag = %d, want 46", got)
-	}
 	drag(m.width-m.chatWidth(), 3, m.width-60, 3)
 	if got := m.chatWidth(); got != 60 {
 		t.Fatalf("side chat width after drag = %d, want 60", got)
@@ -1687,6 +1670,7 @@ func TestHeaderOneLine(t *testing.T) {
 
 func TestFlowSection(t *testing.T) {
 	m, _ := newTestModel(t)
+	m.width = 160
 	m.height = 40
 	m.Update(flowMsg{step: "s2", entries: []flowEntry{{name: "ignored"}}})
 	if m.flow != nil {
@@ -1849,6 +1833,7 @@ func TestInputCursorKeepsText(t *testing.T) {
 
 func TestFlowCompact(t *testing.T) {
 	m, _ := newTestModel(t)
+	m.width = 160
 	m.height = 40
 	calls := []string{"RepositoryMetrics.operation(String, Function)", "RepositoryMetrics.operation(String)"}
 	for i := range 6 {
@@ -1975,7 +1960,7 @@ func TestHelpSwallowsClicks(t *testing.T) {
 	if !m.help {
 		t.Fatal("? must open the help")
 	}
-	m.Update(tea.MouseMsg{X: m.planWidth() + 5, Y: len(m.header()) + 4,
+	m.Update(tea.MouseMsg{X: 5, Y: len(m.header()) + 4,
 		Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
 	if m.cursor != 0 || m.visual || !m.help {
 		t.Fatalf("a click under the help moved the code: cursor %d visual %v help %v",
