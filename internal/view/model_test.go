@@ -338,7 +338,7 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"next · >", "message · c", "ask · A", "skip · S"} {
+	for _, b := range []string{"next · >", "comment · c", "ask · A", "skip · S"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
@@ -355,7 +355,7 @@ func TestButtons(t *testing.T) {
 	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
 		t.Fatalf("click on next: %+v", *sent)
 	}
-	x = ansi.StringWidth(last[:strings.Index(last, "message · c")])
+	x = ansi.StringWidth(last[:strings.Index(last, "comment · c")])
 	m.Update(
 		tea.MouseMsg{
 			X:      x + 2,
@@ -964,7 +964,7 @@ func TestHelpOverlay(t *testing.T) {
 func TestApplyViewConfig(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.applyConfig(
-		config.Config{View: config.View{Split: true, HidePlan: true, NoMouse: true, Context: 8}},
+		config.Config{View: config.View{Split: true, NoMouse: true, Context: 8}},
 	)
 	if !m.splitView || m.mouse || m.baseCtx != 8 {
 		t.Fatalf("config not applied: split %v mouse %v ctx %d", m.splitView, m.mouse, m.baseCtx)
@@ -1266,7 +1266,8 @@ func TestFoldNote(t *testing.T) {
 func TestCursorHint(t *testing.T) {
 	m, _ := newTestModel(t)
 	footer := func() string { f, _ := m.footer(); return ansi.Strip(f) }
-	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "? help · q quit") {
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "? keys") ||
+		!strings.Contains(f, "comment · c") {
 		t.Fatalf("plain line footer: %q", f)
 	}
 	m.seek(func(l line) bool { return l.Kind == RowNote })
@@ -1368,7 +1369,7 @@ func TestGeneralMessage(t *testing.T) {
 func TestSideChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
-	if !strings.Contains(ansi.Strip(m.View()), "› c to write · C without a line") {
+	if !strings.Contains(ansi.Strip(m.View()), "› enter to write · C without a line") {
 		t.Fatal("the side chat must always show where to write")
 	}
 	m.Update(key("C"))

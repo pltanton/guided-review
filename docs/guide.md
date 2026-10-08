@@ -16,6 +16,25 @@ What happens during a review, and how to configure it. Installation is in
 6. **Next round shows only what changed**, starting with the replies to your threads.
 
 <details>
+<summary>Getting around</summary>
+
+The screen is the step's code on the left and, on the right, the step's files above the
+chat with the agent. `j`/`k` (or the mouse) move, `enter` acts on the line under the
+cursor, `esc` backs out:
+
+- on code it opens an input right under the line: write a comment, `tab` turns it into
+  a question (an empty question asks the agent to explain the line);
+- on your own comment it edits it, on an agent's note it shows the longer explanation,
+  on `⋯` or `▸` it opens the hidden lines;
+- on the last line of a step, `✓ end of s3`, it moves to the next step.
+
+A chapter's intro opens when the chapter starts (`I` brings it back), `p` opens the
+plan, `?` shows the main keys and `?` again all of them, and `:` finds any action by
+name. Every other key is a shortcut for something these already reach.
+
+</details>
+
+<details>
 <summary>Plan and steps</summary>
 
 Chapters follow behaviour ("transfers", "limits", "migration"), not files. Inside a
@@ -32,11 +51,11 @@ mentions, written during planning, so it opens instantly.
 <details>
 <summary>Talking to the agent</summary>
 
-Point at a line or a selection and write: Enter sends, Alt+Enter or Ctrl+J starts a new
-line. Shift+Enter does too; in tmux it needs `set -g extended-keys on` in `~/.tmux.conf`
+Point at a line or a selection, press Enter and write under it: Enter sends, Alt+Enter
+or Ctrl+J starts a new line. Shift+Enter does too; in tmux it needs `set -g extended-keys on` in `~/.tmux.conf`
 (plus `set -as terminal-features 'xterm*:extkeys'` if the outer terminal does not
 announce them), otherwise tmux delivers it as plain Enter. The line under the input shows
-the mode (MSG, ASK, RAW, EDIT…), where the comment goes and the keys that work right
+the mode (COMMENT, ASK, RAW, EDIT…), where the comment goes and the keys that work right
 now. The agent writes the comment with a severity
 and, for an obvious fix, a suggestion. You can also just ask about code without leaving
 a comment, or save a comment exactly as typed. When the agent needs a decision, it
@@ -62,7 +81,8 @@ marked as moved, whitespace-only changes and renames are marked instead of highl
 and only the changed words inside a line are coloured. Long lines wrap under the code
 column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
 instead, and `h`/`l` scroll sideways. With a language server you get
-definitions, references, implementations, callers, and a call flow for the step.
+definitions, references, implementations, callers (`g` lists them), and a call flow for
+the step under its files. Results open over the code; `/` filters a list, `esc` closes.
 
 </details>
 

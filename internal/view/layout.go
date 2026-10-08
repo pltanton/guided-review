@@ -60,7 +60,7 @@ func (m *model) footerButtons() []button {
 	}
 	btns := []button{
 		b("next", "next", (*model).next),
-		b("message", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
+		b("comment", "message", func(m *model) { m.startCompose(inbox.KindMessage) }),
 		b("ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
 		b("skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
 	}
@@ -81,7 +81,7 @@ type span struct {
 
 func (m *model) footer() (string, []span) {
 	line := m.agentStatus() + "  "
-	tail := m.keys().key("help") + " help · " + m.keys().key("quit") + " quit"
+	tail := m.keys().key("help") + " keys"
 	if h := m.cursorHint(); h != "" {
 		tail = h
 	}
@@ -169,7 +169,7 @@ func (m *model) sidePrompt(w int) []string {
 		return append([]string{rule}, pills...)
 	}
 	return []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
-		km.key("message"), km.key("message-general")))}
+		km.key("act"), km.key("message-general")))}
 }
 
 func (m *model) sideChatLines(h, w int) []string {

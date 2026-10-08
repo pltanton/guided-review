@@ -32,8 +32,8 @@ s3/7 ●●○○○○○ Transfers › validate amount           ? keys
 - **Right column**: the current step's files on top (current file marked, a click or
   `enter` in the list jumps to it, `f` focuses it), a rule, the chat below. The chat's
   "scroll · drag │ to resize" line goes; dragging the border still resizes.
-- **No left column.** The plan is a modal (below). `view.hide_plan` in the config is
-  still parsed and ignored.
+- **No left column.** The plan is a modal (below). `view.hide_plan` goes; the config
+  ignores unknown keys, so old files still load.
 - **Narrow panes** (no room for the right column): chat at the bottom as today; the file
   list opens as a modal on `f`.
 - **Footer**: buttons `next · comment · ask · skip` (`replies N` and `finish` when they

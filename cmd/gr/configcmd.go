@@ -36,8 +36,8 @@ func cmdConfig(ctx context.Context, e env, args []string) error {
 	e.printf("repo config: %s (%s)\n", repoFile, exists(repoFile))
 	e.printf("diff: %s\n", cmp.Or(s.cfg.Diff, gitx.DefaultDiffAlgorithm))
 	v := s.cfg.View
-	e.printf("view: split=%v plan=%v mouse=%v wrap=%v context=%d style=%s\n",
-		v.Split, !v.HidePlan, !v.NoMouse, !v.NoWrap, cmp.Or(v.Context, 3), cmp.Or(v.Style, "monokai"))
+	e.printf("view: split=%v mouse=%v wrap=%v context=%d style=%s\n",
+		v.Split, !v.NoMouse, !v.NoWrap, cmp.Or(v.Context, 3), cmp.Or(v.Style, "monokai"))
 	for lang, argv := range s.cfg.LSP {
 		e.printf("lsp %s: %s\n", lang, strings.Join(argv, " "))
 	}
@@ -55,7 +55,7 @@ func configInit(e env, path string) error {
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
 	w("# guided-review user settings. Everything is commented out: uncomment what you change.\n")
 	w("# A repository's .review.yaml overrides diff and lsp.\n\n")
-	w("# view:\n#   split: false       # start in split view\n#   hide_plan: false\n")
+	w("# view:\n#   split: false       # start in split view\n")
 	w("#   no_mouse: false    # true lets the terminal select text\n")
 	w("#   no_wrap: false     # true cuts long lines; h/l scroll sideways\n")
 	w("#   context: 3         # lines around each change\n")
