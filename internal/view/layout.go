@@ -190,6 +190,9 @@ func (m *model) sidePrompt(w int) []string {
 	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
 	km := m.keys()
 	switch {
+	case m.inputInSideChat() && len(m.answerOptions()) > 0:
+		pills, _ := m.optionPills(w)
+		return append(append([]string{rule}, pills...), m.promptLines(w)...)
 	case m.inputInSideChat():
 		return append([]string{rule}, m.promptLines(w)...)
 	case len(m.answerOptions()) > 0:
@@ -461,7 +464,7 @@ func (m *model) bottomLines() []string {
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
 		lines = append(lines, style.Render(ansi.Truncate(label, m.width, "")))
 		lines = append(lines, m.chatWindow(chat, limit, m.width)...)
-		if len(m.answerOptions()) > 0 && !m.composing {
+		if len(m.answerOptions()) > 0 && (!m.composing || m.chatOpen()) {
 			pills, _ := m.optionPills(m.width)
 			lines = append(lines, pills...)
 		}
@@ -1137,6 +1140,10 @@ func (m *model) intakeView() string {
 
 func (m *model) intakePrompt(w int) []string {
 	prompt := m.promptLines(w)
+	if m.composing && len(m.answerOptions()) > 0 {
+		pills, _ := m.optionPills(w)
+		return append(pills, prompt...)
+	}
 	if m.composing || m.err != nil {
 		return prompt
 	}

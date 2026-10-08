@@ -2368,3 +2368,18 @@ func TestSideChatSitsAtTheBottom(t *testing.T) {
 			files, chat, msg, strings.Join(lines, "\n"))
 	}
 }
+
+func TestAnswersWhileChatting(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.width = 160
+	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	m.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: []string{"yes", "no"}}}
+	m.Update(key("C"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "A-1 yes") || !strings.Contains(v, "A-2 no") {
+		t.Fatalf("an open chat shows the answers with A-n:\n%s", v)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2"), Alt: true})
+	if len(*sent) != 1 || (*sent)[0].Text != "no" || !m.composing || len(m.input) != 0 {
+		t.Fatalf("A-2 answers and the chat stays open: %+v input %q", *sent, string(m.input))
+	}
+}

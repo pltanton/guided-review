@@ -165,6 +165,10 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		}
 		m.paletteSel = 0
 	}
+	if i, ok := m.optionKey(msg.String()); ok && msg.Alt {
+		m.answer(i)
+		return nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.composing, m.input, m.composeThread, m.chatting = false, nil, "", false

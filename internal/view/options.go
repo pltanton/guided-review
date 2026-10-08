@@ -29,6 +29,9 @@ func (m *model) optionPills(w int) (lines []string, spans []pillSpan) {
 	total := -1
 	for i, o := range m.answerOptions() {
 		k := fmt.Sprint(i + 1)
+		if m.composing {
+			k = "A-" + k
+		}
 		pill := keyStyle.Render(" "+k) + buttonStyle.Render(" "+o+" ")
 		pills = append(pills, pill)
 		total += ansi.StringWidth(pill) + 1
