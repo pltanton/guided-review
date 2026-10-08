@@ -158,8 +158,8 @@ func TestRenames(t *testing.T) {
 	if markRenames(lone); lone[0].RenameHide {
 		t.Fatal("a single swapped identifier stays a normal change")
 	}
-	out := ansi.Strip(renderUnified(Row{Kind: RowAdded, Line: 3, Text: "a := computeFee(x)",
-		Plain: "a := computeFee(x)", RenamedFrom: "calcFee"}))
+	out := ansi.Strip(renderCode(cellOf(Row{Kind: RowAdded, Line: 3, Text: "a := computeFee(x)",
+		Plain: "a := computeFee(x)", RenamedFrom: "calcFee"}, 3), false))
 	if !strings.HasPrefix(out, "⇄") || !strings.HasSuffix(out, "← was calcFee") {
 		t.Fatalf("rename line: %q", out)
 	}

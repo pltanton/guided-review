@@ -155,15 +155,10 @@ func fileInfo(fd diff.File) string {
 	return fmt.Sprintf("+%d −%d · %s", added, deleted, status)
 }
 
-func hotspotFile(st *state.Step, h state.Hotspot) string {
-	file, _ := st.HotspotFile(h)
-	return file
-}
-
 func hotspotLines(st state.Step, file string) map[int]bool {
 	out := map[int]bool{}
 	for _, h := range st.Hotspots {
-		if h.Line > 0 && hotspotFile(&st, h) == file {
+		if f, _ := st.HotspotFile(h); h.Line > 0 && f == file {
 			out[h.Line] = true
 		}
 	}

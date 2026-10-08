@@ -370,11 +370,13 @@ func TestNoteMarksItsLines(t *testing.T) {
 	if want := "2* 3* 4* note"; strings.Join(got, " ") != want {
 		t.Fatalf("rows %q, want %q", strings.Join(got, " "), want)
 	}
-	marked := ansi.Strip(renderUnified(Row{Kind: RowCode, Line: 3, Text: "x", Mark: "note"}))
+	marked := ansi.Strip(renderCode(cellOf(Row{Kind: RowCode, Line: 3, Text: "x", Mark: "note"}, 3), false))
 	if out := marked; !strings.Contains(out, "┃ x") {
 		t.Fatalf("a marked line must carry the note bar: %q", out)
 	}
-	reformat := ansi.Strip(renderUnified(Row{Kind: RowAdded, Line: 3, Text: "x", Reformat: true}))
+	reformat := ansi.Strip(
+		renderCode(cellOf(Row{Kind: RowAdded, Line: 3, Text: "x", Reformat: true}, 3), false),
+	)
 	if out := reformat; !strings.HasPrefix(out, "≈") {
 		t.Fatalf("a reformat-only line must be marked ≈: %q", out)
 	}

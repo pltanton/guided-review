@@ -72,7 +72,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case msg.Button == tea.MouseButtonWheelDown:
 		m.scroll(wheelStep)
 	case msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft:
-		if m.resizing = m.separatorAt(msg.X, msg.Y); m.resizing != "" {
+		if m.resizing = m.onChatEdge(msg.X, msg.Y); m.resizing {
 			return nil
 		}
 		if i := m.optionAt(msg.X, msg.Y); i >= 0 {
@@ -111,14 +111,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 				}
 				m.col = start + max(msg.X-codePrefix, 0)
 			}
-			if it := m.lines[i]; it.Kind == RowFold || it.GapTo > 0 {
+			if it := m.lines[i]; it.Kind == RowFold || it.Kind == RowGap {
 				m.toggleFold()
 			}
 		}
-	case msg.Action == tea.MouseActionMotion && m.resizing != "":
-		if m.resizing == "chat" {
-			m.sideW = m.width - msg.X
-		}
+	case msg.Action == tea.MouseActionMotion && m.resizing:
+		m.sideW = m.width - msg.X
 		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
 		if i, _, ok := m.rowAt(msg.Y); ok {
@@ -127,7 +125,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.clamp()
 		}
 	case msg.Action == tea.MouseActionRelease:
-		m.dragging, m.resizing = false, ""
+		m.dragging, m.resizing = false, false
 	}
 	return nil
 }
@@ -162,16 +160,10 @@ func (m *model) overChat(x, y int) bool {
 	return y >= m.height-len(m.bottomLines())
 }
 
-func (m *model) separatorAt(x, y int) string {
-	bottom := m.bottomLines()
-	top := m.height - len(bottom)
-	switch {
-	case m.step == nil || m.preview != "":
-		return ""
-	case y < top && m.chatWidth() > 0 && x == m.width-m.chatWidth():
-		return "chat"
-	}
-	return ""
+func (m *model) onChatEdge(x, y int) bool {
+	cw := m.chatWidth()
+	return m.step != nil && m.preview == "" && cw > 0 && x == m.width-cw &&
+		y < m.height-len(m.bottomLines())
 }
 
 func (m *model) onChatInput(x, y int) bool {
@@ -188,15 +180,4 @@ func (m *model) onChatInput(x, y int) bool {
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
 	return false
-}
-
-func (m *model) inputRowX() int {
-	switch {
-	case m.step == nil:
-		x, _, _ := m.cardFrame(intakeWidth)
-		return x
-	case m.chatWidth() > 0:
-		return m.width - m.chatWidth() + 2
-	}
-	return 0
 }

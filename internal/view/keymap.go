@@ -222,7 +222,7 @@ func (m *model) nextNote(dir int) {
 }
 
 func (m *model) messageOrOpen() {
-	if cur := m.current(); cur.GapTo > 0 || cur.Kind == RowFold {
+	if cur := m.current(); cur.Kind == RowGap || cur.Kind == RowFold {
 		m.toggleFold()
 		return
 	}

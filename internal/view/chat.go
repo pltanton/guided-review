@@ -84,12 +84,7 @@ func (m *model) focusChat() {
 }
 
 func (m *model) handleChatKey(msg tea.KeyMsg) tea.Cmd {
-	km := m.keys()
-	name := ""
-	if i, ok := km.byKey[msg.String()]; ok {
-		name = km.actions[i].Name
-	}
-	switch name {
+	switch m.keys().name(msg.String()) {
 	case "down":
 		m.chatCursor++
 	case "up":

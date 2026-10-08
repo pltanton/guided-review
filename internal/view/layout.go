@@ -160,7 +160,7 @@ func (m *model) cursorHint() string {
 		return k.key("act") + " details · " + k.key("open") + " fold"
 	case cur.Kind == RowNote:
 		return k.key("open") + " fold"
-	case cur.GapTo > 0 || cur.FoldKey != "":
+	case cur.Kind == RowGap || cur.FoldKey != "":
 		return k.key("open") + " open"
 	}
 	return ""
@@ -567,16 +567,14 @@ func (m *model) threadLabel() string {
 	if m.review == nil {
 		return ""
 	}
-	for _, d := range m.review.Discussions {
-		switch {
-		case d.ID != m.composeThread:
-		case d.File != "":
-			return fmt.Sprintf("%s:%d", path.Base(d.File), d.Line)
-		case d.Author != "":
-			return "@" + d.Author
-		}
+	d := m.review.Discussion(m.composeThread)
+	switch {
+	case d == nil:
+		return ""
+	case d.File != "":
+		return fmt.Sprintf("%s:%d", path.Base(d.File), d.Line)
 	}
-	return ""
+	return "@" + d.Author
 }
 
 func (m *model) composeStatus(width int) string {
@@ -967,9 +965,6 @@ func renderUnified(r Row) string {
 	case RowEnd:
 		return addStyle.Render("  ✓ ") + dimStyle.Render(r.Text)
 	case RowGap:
-		if r.GapTo == 0 {
-			return dimStyle.Render("      ⋯")
-		}
 		n := r.GapTo - r.GapFrom + 1
 		gap := fmt.Sprintf("      ⋯ %d hidden lines (%d–%d)", n, r.GapFrom, r.GapTo)
 		return gapStyle.Render(gap) + dimStyle.Render("  · o to show")
@@ -982,11 +977,7 @@ func renderUnified(r Row) string {
 		}
 		return "      " + style.Render(r.Text) + dimStyle.Render("  · o to show")
 	}
-	c := cellOf(r, r.Line)
-	if r.Kind == RowRemoved {
-		c.Line = 0
-	}
-	return renderCode(c, r.Hotspot)
+	return ""
 }
 
 const codePrefix = len("+1234 | ")

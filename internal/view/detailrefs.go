@@ -56,7 +56,7 @@ func (m *model) refLines(p *popup, width int) []string {
 		out = append(out, "", hotStyle.Render(head))
 		lines := m.peek(loc.Path)
 		target := loc.Line - 1
-		for _, l := range codeLines(lines, max(target-1, 0), target, 3) {
+		for _, l := range markedCodeLines(lines, max(target-1, 0), target, 3, nil, 0) {
 			out = append(out, ansi.Truncate(l, width, ""))
 		}
 	}

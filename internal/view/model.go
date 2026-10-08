@@ -100,7 +100,7 @@ type model struct {
 	runGr         func(args ...string) (string, error)
 
 	sideW    int
-	resizing string
+	resizing bool
 	chatTop  int
 
 	chatFocus, chatVisual, chatDrag bool
@@ -317,9 +317,9 @@ func (m *model) notes() []Note {
 				Top: true, Kind: "hotspot", Text: h.Q, Label: label, Dim: h.Checked, Risk: i + 1,
 			})
 		}
-		if h.Line > 0 {
+		if file, _ := m.step.HotspotFile(h); h.Line > 0 {
 			out = append(out, Note{
-				File: hotspotFile(m.step, h), Line: h.Line, Kind: "hotspot", Text: h.Q,
+				File: file, Line: h.Line, Kind: "hotspot", Text: h.Q,
 				Focus: true, Label: label, Dim: h.Checked, Risk: i + 1,
 			})
 		}
@@ -416,7 +416,7 @@ func (m *model) act() tea.Cmd {
 		return m.back()
 	case cur.Kind == RowEnd:
 		m.next()
-	case cur.GapTo > 0 || cur.Kind == RowFold:
+	case cur.Kind == RowGap || cur.Kind == RowFold:
 		m.toggleFold()
 	case cur.Kind == RowNote && cur.Thread != "":
 		m.threadCard, m.threadCardSel = cur.Thread, 0
@@ -614,7 +614,7 @@ func (m *model) hasFolds() bool {
 
 func (m *model) toggleFold() {
 	cur := m.current()
-	if cur.GapTo > 0 {
+	if cur.Kind == RowGap {
 		if m.reveal == nil {
 			m.reveal = map[string][][2]int{}
 		}
@@ -764,10 +764,7 @@ func (m *model) next() {
 		return
 	}
 	if !m.gateOpen && (len(m.openRisks()) > 0 || m.unseen() > 0) {
-		m.gateOpen, m.gateSel = true, len(m.step.Hotspots)
-		if open := m.openRisks(); len(open) > 0 {
-			m.gateSel = open[0]
-		}
+		m.gateOpen, m.gateSel = true, m.firstOpenRisk()
 		return
 	}
 	m.gateOpen = false
@@ -785,6 +782,14 @@ func (m *model) openRisks() []int {
 		}
 	}
 	return out
+}
+
+// firstOpenRisk is the gate card's default choice: the first open risk, else "move on".
+func (m *model) firstOpenRisk() int {
+	if open := m.openRisks(); len(open) > 0 {
+		return open[0]
+	}
+	return len(m.step.Hotspots)
 }
 
 func (m *model) toggleRisk(n int) {
@@ -832,10 +837,7 @@ func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
 				return nil
 			}
 			m.toggleRisk(m.gateSel + 1)
-			m.gateSel = risks
-			if open := m.openRisks(); len(open) > 0 {
-				m.gateSel = open[0]
-			}
+			m.gateSel = m.firstOpenRisk()
 		}
 	}
 	return nil

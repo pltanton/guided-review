@@ -248,11 +248,7 @@ func (m *model) followCol() {
 }
 
 func (m *model) markShown() {
-	body, h := m.bodyHeight(), 0
-	for i := m.offset; i < len(m.lines); i++ {
-		if h += m.lineHeight(i); h > body {
-			return
-		}
+	for i := m.offset; i <= m.lastShown() && i < len(m.lines); i++ {
 		if !m.lineCut(i) {
 			m.markSeen(m.lines[i])
 		}

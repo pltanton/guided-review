@@ -292,17 +292,9 @@ func (m *model) toggleApprove() {
 }
 
 func (m *model) prepare(verdict string, approve bool) {
-	plan := *m.review.Publish
-	args := []string{"prepare", "--verdict", verdict, "--decisions", plan.Decisions}
-	if approve {
-		args = append(args, "--approve")
-	}
-	if out, err := m.runGr(args...); err != nil {
-		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+	if !m.runPrepare(verdict, approve, m.review.Publish.Decisions, false) {
 		return
 	}
-	plan.Verdict, plan.Approve = verdict, approve
-	m.review.Publish, m.err = &plan, nil
 	m.status = "verdict: " + ansi.Strip(verdictStyle(verdict))
 	if approve {
 		m.status += " · approve"
@@ -310,17 +302,41 @@ func (m *model) prepare(verdict string, approve bool) {
 	m.refreshPreview()
 }
 
+// runPrepare runs gr prepare and mirrors the plan it wrote; false when gr refused.
+func (m *model) runPrepare(verdict string, approve bool, decisions string, partial bool) bool {
+	args := []string{"prepare", "--verdict", verdict, "--decisions", decisions}
+	if approve {
+		args = append(args, "--approve")
+	}
+	if partial {
+		args = append(args, "--partial")
+	}
+	if out, err := m.runGr(args...); err != nil {
+		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+		return false
+	}
+	p := state.PublishPlan{Verdict: verdict, Approve: approve, Decisions: decisions}
+	if old := m.review.Publish; old != nil {
+		p.Approved, p.VerdictSent = old.Approved, old.VerdictSent && old.Verdict == verdict
+	}
+	m.review.Publish, m.err = &p, nil
+	return true
+}
+
 func (m *model) editComment(id int) {
-	for _, c := range m.review.Comments {
-		if c.ID == id {
-			m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, id
-			m.anchorFile, m.anchorLines = "", ""
-			m.input = []rune(c.Body)
-			m.inputPos = len(m.input)
-			return
+	if m.review != nil {
+		for _, c := range m.review.Comments {
+			if c.ID == id {
+				m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, id
+				m.anchorFile, m.anchorLines = "", ""
+				m.input = []rune(c.Body)
+				m.inputPos, m.raw = len(m.input), true
+				m.placeInline()
+				return
+			}
 		}
 	}
-	m.status = "select a comment first (j/k)"
+	m.status = "put the cursor on one of your comments to edit it"
 }
 
 func (m *model) cycleSeverity(id int) {
@@ -436,20 +452,10 @@ func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) prepareFinish() tea.Cmd {
 	verdict, _ := plan.SuggestVerdict(m.review)
 	approve := m.askApprove(verdict) && m.approvePick == 1
-	decisions := plan.Decisions(m.review)
-	args := []string{"prepare", "--verdict", verdict, "--decisions", decisions}
-	if approve {
-		args = append(args, "--approve")
-	}
-	if len(plan.Gate(m.review)) > 0 {
-		args = append(args, "--partial")
-	}
-	if out, err := m.runGr(args...); err != nil {
-		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+	partial := len(plan.Gate(m.review)) > 0
+	if !m.runPrepare(verdict, approve, plan.Decisions(m.review), partial) {
 		return nil
 	}
-	m.err = nil
-	m.review.Publish = &state.PublishPlan{Verdict: verdict, Approve: approve, Decisions: decisions}
 	m.finishCard = false
 	return m.finish()
 }

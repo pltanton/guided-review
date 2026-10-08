@@ -423,10 +423,6 @@ func (m *model) refPreview(p *popup, loc lspLoc, width, rows int) []string {
 	return out
 }
 
-func codeLines(lines []string, top, target, rows int) []string {
-	return markedCodeLines(lines, top, target, rows, nil, 0)
-}
-
 func markedCodeLines(lines []string, top, target, rows int, added map[int]bool, width int) []string {
 	var out []string
 	for i := top; i < len(lines) && len(out) < rows; i++ {

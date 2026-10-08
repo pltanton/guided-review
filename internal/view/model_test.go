@@ -1448,7 +1448,7 @@ func TestDragResize(t *testing.T) {
 	if got := m.chatWidth(); got != 60 {
 		t.Fatalf("side chat width after drag = %d, want 60", got)
 	}
-	if m.visual || m.resizing != "" {
+	if m.visual || m.resizing {
 		t.Fatal("resizing must not select lines and must stop on release")
 	}
 }

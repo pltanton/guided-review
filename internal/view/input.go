@@ -206,24 +206,7 @@ func (m *model) anchorAt() (file, lines string, ref int) {
 	return file, lines, ref
 }
 
-func (m *model) startEdit() {
-	ref := m.current().Ref
-	if ref == 0 || m.review == nil {
-		m.status = "put the cursor on one of your comments to edit it"
-		return
-	}
-	for _, c := range m.review.Comments {
-		if c.ID == ref {
-			m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, ref
-			m.anchorFile, m.anchorLines = "", ""
-			m.input = []rune(c.Body)
-			m.inputPos = len(m.input)
-			m.raw = true
-			m.placeInline()
-			return
-		}
-	}
-}
+func (m *model) startEdit() { m.editComment(m.current().Ref) }
 
 func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	if m.cmdMode != 0 {

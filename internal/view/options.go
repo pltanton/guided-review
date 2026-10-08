@@ -61,8 +61,8 @@ func (m *model) pillsAt() (x, y, w int, ok bool) {
 	block := func(w int) int { lines, _ := m.optionPills(w); return len(lines) }
 	switch {
 	case m.step == nil:
-		_, w, _ = m.cardFrame(intakeWidth)
-		return m.inputRowX(), m.height - 2 - block(w), w, m.err == nil
+		x, w, _ = m.cardFrame(intakeWidth)
+		return x, m.height - 2 - block(w), w, m.err == nil
 	case m.chatWidth() > 0:
 		w = m.chatWidth() - 2
 		return m.width - m.chatWidth() + 2, m.height - len(m.bottomLines()) - block(w), w, true

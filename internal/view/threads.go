@@ -78,7 +78,7 @@ func (m *model) threadBody(w int) (lines []string, starts []int) {
 		bar := tn.fg().Render("  │ ")
 		if d.File != "" && !d.OldLine {
 			target := d.Line - 1
-			for _, l := range codeLines(m.peek(d.File), max(target-1, 0), target, 3) {
+			for _, l := range markedCodeLines(m.peek(d.File), max(target-1, 0), target, 3, nil, 0) {
 				lines = append(lines, bar+ansi.Truncate(l, w-4, ""))
 			}
 			lines = append(lines, bar)
@@ -185,16 +185,11 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 		m.threadTop = max(m.threadTop-max(m.height/2, 1), 0)
 	case "r":
 		if ok {
-			m.decideThread(d.ID, state.VerdictResolve, "")
+			m.threadAction(d, "resolve")
 		}
 	case "o":
 		if ok {
-			reply := t.Reply
-			if reply == "" {
-				reply = t.ProposedReply
-			}
-			m.composing, m.composeKind, m.composeThread = true, kindThreadReply, d.ID
-			m.input, m.inputPos = []rune(reply), len([]rune(reply))
+			m.threadAction(d, "reply and keep open")
 		}
 	case "a":
 		switch {
@@ -202,11 +197,11 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 		case t.Proposed == "":
 			m.status = "the agent has not assessed this thread yet"
 		default:
-			m.decideThread(d.ID, t.Proposed, t.ProposedReply)
+			m.threadAction(d, "take the agent's")
 		}
 	case "u":
 		if ok {
-			m.decideThread(d.ID, state.VerdictNone, "")
+			m.threadAction(d, "undo the decision")
 		}
 	case "c", "enter":
 		if ok {
@@ -246,15 +241,6 @@ func (m *model) threadBadge(d state.Discussion) (label string, resolved bool) {
 	return "YOU", false
 }
 
-func (m *model) cardThread() (state.Discussion, bool) {
-	for _, d := range m.review.Discussions {
-		if d.ID == m.threadCard {
-			return d, true
-		}
-	}
-	return state.Discussion{}, false
-}
-
 func (m *model) mine(d state.Discussion) bool {
 	return m.review.MR != nil && d.Author == m.review.MR.Me && d.Resolvable && !d.Resolved
 }
@@ -275,11 +261,12 @@ func (m *model) threadCardItems(d state.Discussion) []string {
 }
 
 func (m *model) threadCardModal(w int) modalContent {
-	d, ok := m.cardThread()
-	if !ok {
+	dp := m.review.Discussion(m.threadCard)
+	if dp == nil {
 		m.threadCard = ""
 		return modalContent{"thread", "esc", nil}
 	}
+	d := *dp
 	t := m.review.ThreadState(d)
 	var body []string
 	say := func(who, text string) {
@@ -317,11 +304,12 @@ func (m *model) threadCardModal(w int) modalContent {
 }
 
 func (m *model) handleThreadCardKey(msg tea.KeyMsg) tea.Cmd {
-	d, ok := m.cardThread()
-	if !ok {
+	dp := m.review.Discussion(m.threadCard)
+	if dp == nil {
 		m.threadCard = ""
 		return nil
 	}
+	d := *dp
 	items := m.threadCardItems(d)
 	m.threadCardSel = max(0, min(m.threadCardSel, len(items)-1))
 	switch cardNav(msg.String(), len(items), &m.threadCardSel) {
