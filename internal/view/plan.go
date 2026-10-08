@@ -183,11 +183,11 @@ func scrollWindow(top *int, last *string, key string, force bool, at, h, n int) 
 }
 
 func (m *model) sideWheel(x, y, d int) bool {
-	cw := m.chatWidth()
-	if cw == 0 || x < m.width-cw || m.step == nil {
+	fw := m.filesWidth()
+	if fw == 0 || x < m.width-fw || m.step == nil {
 		return false
 	}
-	side := m.sideFiles(m.height-len(m.bottomLines()), cw)
+	side := m.sideFiles(m.height-len(m.bottomLines()), fw)
 	if y < 0 || y >= len(side) || side[y].zone != zoneFiles {
 		return false
 	}

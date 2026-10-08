@@ -60,9 +60,6 @@ func (m *model) pillsAt() (x, y, w int, ok bool) {
 	case m.step == nil:
 		_, w, _ = m.cardFrame(intakeWidth)
 		return m.inputRowX(), m.height - 2 - block(w), w, m.err == nil
-	case m.chatWidth() > 0:
-		w = m.chatWidth() - 2
-		return m.width - m.chatWidth() + 2, m.height - len(m.bottomLines()) - block(w), w, true
 	case len(m.chatLines(m.width, false)) == 0:
 		return 0, 0, 0, false
 	}

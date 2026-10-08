@@ -203,7 +203,7 @@ func TestFilesModalWhenNarrow(t *testing.T) {
 	m.relist()
 	m.Update(key("f"))
 	v := ansi.Strip(m.View())
-	if m.chatWidth() != 0 || !strings.Contains(v, "┌ files · s1") || !strings.Contains(v, "c.go") {
+	if m.filesWidth() != 0 || !strings.Contains(v, "┌ files · s1") || !strings.Contains(v, "c.go") {
 		t.Fatalf("narrow: f opens the files modal:\n%s", v)
 	}
 	m.Update(key("j"))

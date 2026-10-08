@@ -131,13 +131,10 @@ func TestComposeStatuslinePlacement(t *testing.T) {
 
 	m.width = 150
 	lines = strings.Split(ansi.Strip(m.View()), "\n")
-	side := func(l string) string {
-		return strings.TrimSpace(string([]rune(l)[m.width-m.chatWidth()+1:]))
-	}
 	n := len(lines)
-	if n != m.height || side(lines[n-3]) != "▌ hello there█" ||
-		!strings.HasPrefix(side(lines[n-2]), "CHAT ") {
-		t.Fatalf("side chat: same input and statusline:\n%s", strings.Join(lines, "\n"))
+	if n != m.height || strings.TrimSpace(lines[n-2]) != "▌ hello there█" ||
+		!strings.HasPrefix(lines[n-1], " CHAT ") {
+		t.Fatalf("wide: the input stays at the bottom too:\n%s", strings.Join(lines, "\n"))
 	}
 
 	for _, size := range [][2]int{{150, 3}, {150, 6}, {120, 4}, {60, 2}, {30, 8}} {
@@ -148,9 +145,6 @@ func TestComposeStatuslinePlacement(t *testing.T) {
 		}
 		if h := m.bodyHeight(); h < 1 {
 			t.Fatalf("%dx%d: body height %d", size[0], size[1], h)
-		}
-		if got := m.sideChatLines(m.height, 40); len(got) != m.height {
-			t.Fatalf("%dx%d: side chat has %d rows", size[0], size[1], len(got))
 		}
 	}
 }

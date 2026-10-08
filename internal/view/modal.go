@@ -66,7 +66,7 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.gateModal(w), true
 	case m.focusPlan:
 		return m.planModal(w, h), true
-	case m.focusFiles && m.chatWidth() == 0:
+	case m.focusFiles && m.filesWidth() == 0:
 		return m.filesModal(w, h), true
 	case m.popup != nil && m.popup.kind != "hover":
 		return modalContent{m.popup.title, m.popupHint(), m.popupBody(w, h)}, true

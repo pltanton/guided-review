@@ -17,7 +17,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			m.chapterOpen = ""
 		}
 		return nil
-	case m.focusPlan || m.focusFiles && m.chatWidth() == 0:
+	case m.focusPlan || m.focusFiles && m.filesWidth() == 0:
 		return m.modalMouse(msg)
 	case m.help && msg.Button == tea.MouseButtonWheelUp:
 		m.helpTop = max(m.helpTop-wheelStep, 0)
@@ -71,13 +71,15 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 		if m.onChatInput(msg.X, msg.Y) {
-			if !m.composing {
+			if m.step == nil {
 				m.startCompose(inbox.KindMessage)
+			} else if !m.composing {
+				m.startChat(true)
 			}
 			return nil
 		}
-		if cw := m.chatWidth(); cw > 0 && msg.X > m.width-cw {
-			side := m.sideFiles(m.height-len(m.bottomLines()), cw)
+		if fw := m.filesWidth(); fw > 0 && msg.X > m.width-fw && msg.Y < m.height-len(m.bottomLines()) {
+			side := m.sideFiles(m.height-len(m.bottomLines()), fw)
 			if msg.Y < len(side) && side[msg.Y].file != "" {
 				m.jumpToFile(side[msg.Y].file)
 			}
@@ -107,8 +109,8 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 			}
 		}
 	case msg.Action == tea.MouseActionMotion && m.resizing != "":
-		if m.resizing == "chat" {
-			m.sideW = m.width - msg.X
+		if m.resizing == "side" {
+			m.sideW = m.width - msg.X - 1
 		}
 		m.relist()
 	case msg.Action == tea.MouseActionMotion && m.dragging:
@@ -146,10 +148,7 @@ func (m *model) rowAt(y int) (i, sub int, ok bool) {
 	return 0, 0, false
 }
 
-func (m *model) overChat(x, y int) bool {
-	if cw := m.chatWidth(); cw > 0 {
-		return x >= m.width-cw
-	}
+func (m *model) overChat(_, y int) bool {
 	return y >= m.height-len(m.bottomLines())
 }
 
@@ -159,8 +158,8 @@ func (m *model) separatorAt(x, y int) string {
 	switch {
 	case m.step == nil || m.preview != "":
 		return ""
-	case y < top && m.chatWidth() > 0 && x == m.width-m.chatWidth():
-		return "chat"
+	case y < top && m.filesWidth() > 0 && x == m.width-m.filesWidth()-1:
+		return "side"
 	}
 	return ""
 }
@@ -169,25 +168,18 @@ func (m *model) onChatInput(x, y int) bool {
 	bodyH := m.height - len(m.bottomLines())
 	_, top, _, pills := m.pillsAt()
 	switch {
-	case pills && m.chatWidth() > 0:
-		return x > m.width-m.chatWidth() && y >= top-1 && y < bodyH
 	case pills:
 		return y >= top && y < m.height-1
 	case m.step == nil:
 		return y == m.height-3
-	case m.chatWidth() > 0:
-		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
-	return false
+	return !m.composing && y == bodyH && len(m.chatRows(m.width, false)) > 0
 }
 
 func (m *model) inputRowX() int {
-	switch {
-	case m.step == nil:
-		x, _, _ := m.cardFrame(intakeWidth)
-		return x
-	case m.chatWidth() > 0:
-		return m.width - m.chatWidth() + 2
+	if m.step != nil {
+		return 0
 	}
-	return 0
+	x, _, _ := m.cardFrame(intakeWidth)
+	return x
 }
