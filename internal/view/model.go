@@ -868,14 +868,19 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if msg.String() != m.keys().key("delete-comment") {
 		m.deleteArmed = 0
 	}
+	filtering := m.popup != nil && m.popup.filtering
+	if k := msg.String(); !m.help && !filtering && (k == "?" || k == "f1") {
+		m.help, m.helpAll, m.helpTop = true, false, 0
+		return nil
+	}
 	switch {
+	case m.help:
+		return m.handleHelpKey(msg)
 	case m.chapterOpen != "":
 		m.chapterOpen = ""
 		return nil
 	case m.gateOpen:
 		return m.handleGateKey(msg)
-	case m.help:
-		return m.handleHelpKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
 	case m.threads && !m.composing:

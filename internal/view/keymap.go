@@ -456,7 +456,15 @@ func (m *model) toggleMouse() tea.Cmd {
 func (m *model) helpLines(width int) []string {
 	km := m.keys()
 	if !m.helpAll {
-		out := []string{boldStyle.Render("essentials"), ""}
+		var out []string
+		if rows := m.windowKeys(); len(rows) > 0 {
+			out = append(out, boldStyle.Render("this window"), "")
+			for _, r := range rows {
+				out = append(out, cursorStyle.Render(fmt.Sprintf("  %-11s", r[0]))+" "+r[1])
+			}
+			out = append(out, "")
+		}
+		out = append(out, boldStyle.Render("essentials"), "")
 		for _, name := range essentials {
 			for _, a := range km.actions {
 				if a.Name == name && len(a.Keys) > 0 {
@@ -515,6 +523,31 @@ func (m *model) helpLines(width int) []string {
 		}
 	}
 	return out
+}
+
+func (m *model) windowKeys() [][2]string {
+	switch {
+	case m.popup == nil:
+		return nil
+	case m.popup.items != nil:
+		return [][2]string{{"j k", "choose"}, {"enter", "open the code"}, {"/", "filter the list"},
+			{"e", "open in $EDITOR"}, {"esc", "close"}}
+	case m.popup.kind == "peek":
+		return [][2]string{{"j k w b", "move"}, {"gd gr gi", "definition, references, implementations"},
+			{"gy gc", "type definition, callers"}, {"K", "type and docs"},
+			{"ctrl+o", "back to the previous window"}, {"tab", "forward again"},
+			{"e", "open in $EDITOR"}, {"esc", "close all"}}
+	case m.popup.kind == "detail":
+		rows := [][2]string{{"j k", "scroll"}}
+		if len(m.popup.refs) > 0 {
+			rows = append(rows, [2]string{"1-9", "open the code it mentions"})
+		}
+		if m.popup.risk > 0 {
+			rows = append(rows, [2]string{"x", "check off the risk, again to reopen"})
+		}
+		return append(rows, [2]string{"esc", "close"})
+	}
+	return [][2]string{{"j k", "scroll"}, {"esc", "close"}}
 }
 
 func helpRow(a Action) string {

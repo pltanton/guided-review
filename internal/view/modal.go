@@ -50,6 +50,14 @@ type modalContent struct {
 }
 
 func (m *model) modal(w, h int) (modalContent, bool) {
+	if m.help {
+		lines := m.helpLines(w)
+		hint := "? all keys · any key closes"
+		if m.helpAll {
+			hint = "j/k scroll · any key closes · remap in " + configHint
+		}
+		return modalContent{"keys", hint, lines[min(m.helpTop, len(lines)):]}, true
+	}
 	switch {
 	case m.chapterOpen != "":
 		return m.chapterModal(w), true
@@ -62,14 +70,6 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 	case m.popup != nil && m.popup.kind != "hover":
 		return modalContent{m.popup.title, m.popupHint(), m.popupBody(w, h)}, true
 	}
-	if m.help {
-		lines := m.helpLines(w)
-		hint := "? all keys · any key closes"
-		if m.helpAll {
-			hint = "j/k scroll · any key closes · remap in " + configHint
-		}
-		return modalContent{"keys", hint, lines[min(m.helpTop, len(lines)):]}, true
-	}
 	return modalContent{}, false
 }
 
@@ -79,8 +79,8 @@ const (
 )
 
 func (m *model) fullModal() bool {
-	return m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		m.chapterOpen == "" && !m.gateOpen && !m.focusPlan && !m.help
+	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
+		m.chapterOpen == "" && !m.gateOpen && !m.focusPlan
 }
 
 func (m *model) drawModal(out []string) {

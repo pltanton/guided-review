@@ -2227,3 +2227,23 @@ func TestModeBadge(t *testing.T) {
 		t.Fatalf("visual mode is shown with its keys: %q", got)
 	}
 }
+
+func TestHelpFromLSPWindow(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.Update(lspMsg{kind: "references", locs: []lspLoc{{Path: "b.go", Line: 3}, {Path: "c.go", Line: 4}}})
+	m.Update(key("?"))
+	v := ansi.Strip(m.View())
+	if !m.help || !strings.Contains(v, "this window") || !strings.Contains(v, "filter the list") {
+		t.Fatalf("? in an LSP window shows its keys first:\n%s", v)
+	}
+	m.Update(key("esc"))
+	if m.help || m.popup == nil {
+		t.Fatal("closing the help returns to the LSP window")
+	}
+	m.Update(key("/"))
+	m.Update(key("?"))
+	if m.help || m.popup.filter != "?" {
+		t.Fatal("while filtering, ? is text")
+	}
+}
