@@ -54,10 +54,11 @@ func (m *model) chatBox() (rows []chatRow, x, y, h int, ok bool) {
 		h = max(inner-len(top)-len(m.intakePrompt(w))-1, 1)
 		return m.chatRows(w, false), x, 1 + len(top) + 1, h, true
 	case m.chatWidth() > 0:
-		w := m.chatWidth() - 2
-		top := m.sideChatTop()
-		h = m.height - len(m.bottomLines()) - top - len(m.sidePrompt(w))
-		return m.chatRows(w, true), m.width - m.chatWidth() + 2, top, h, true
+		bodyH := m.height - len(m.bottomLines())
+		c := m.sideChatLayout(bodyH, m.chatWidth()-2)
+		shown := min(c.chatH, len(c.rows))
+		top := max(bodyH-len(c.prompt)-shown, len(c.files)+1)
+		return c.rows, m.width - m.chatWidth() + 2, top, c.chatH, true
 	}
 	rows = m.chatRows(m.width, false)
 	return rows, 0, m.height - len(m.bottomLines()) + 1, messageLines, len(rows) > 0

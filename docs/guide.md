@@ -18,8 +18,8 @@ What happens during a review, and how to configure it. Installation is in
 <details>
 <summary>Getting around</summary>
 
-The screen is the step's code on the left and, on the right, the step's files above the
-chat with the agent. `j`/`k` (or the mouse) move, `enter` acts on the line under the
+The screen is the step's code on the left and, on the right, the step's files with a
+small chat block at the bottom (`c` opens it wide, `esc` folds it). `j`/`k` (or the mouse) move, `enter` acts on the line under the
 cursor, `esc` or `q` backs out (`Q` or `:q` quits the viewer):
 
 - on code it opens an input right under the line for a comment, saved as you write it

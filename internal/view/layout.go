@@ -200,10 +200,18 @@ func (m *model) sidePrompt(w int) []string {
 		km.key("message"), km.key("message-general")))}
 }
 
-func (m *model) sideChatLines(h, w int) []string {
-	var lines []string
+type sideChat struct {
+	files  []string
+	header string
+	rows   []chatRow
+	chatH  int
+	prompt []string
+}
+
+func (m *model) sideChatLayout(h, w int) sideChat {
+	var c sideChat
 	for _, e := range m.sideFiles(h, w+2) {
-		lines = append(lines, e.text)
+		c.files = append(c.files, e.text)
 	}
 	row, plain, _ := sideRows(w + 2)
 	label, hint := labelStyle.Render("CHAT"), m.keys().key("message")+" opens"
@@ -213,22 +221,26 @@ func (m *model) sideChatLines(h, w int) []string {
 	case m.chatOpen():
 		label, hint = cursorStyle.Render("CHAT"), "esc closes"
 	}
-	lines = append(lines, plain(row(label, dimStyle.Render(hint))))
-	prompt := m.sidePrompt(w)
-	chatH := max(h-len(lines)-len(prompt), 0)
+	c.header = plain(row(label, dimStyle.Render(hint)))
+	c.prompt = m.sidePrompt(w)
+	c.rows = m.chatRows(w, true)
+	c.chatH = max(h-len(c.files)-1-len(c.prompt), 0)
 	if !m.chatOpen() {
-		chatH = min(chatH, collapsedChatRows)
+		c.chatH = min(c.chatH, collapsedChatRows)
 	}
-	lines = append(lines, m.chatWindow(m.chatRows(w, true), chatH, w)...)
-	for len(lines)+len(prompt) < h {
-		lines = append(lines, "")
-	}
-	lines = append(lines, prompt...)
-	return lines[max(len(lines)-h, 0):]
+	return c
 }
 
-func (m *model) sideChatTop() int {
-	return len(m.sideFiles(m.height-len(m.bottomLines()), m.chatWidth())) + 1
+func (m *model) sideChatLines(h, w int) []string {
+	c := m.sideChatLayout(h, w)
+	chat := m.chatWindow(c.rows, c.chatH, w)
+	block := append(append([]string{c.header}, chat...), c.prompt...)
+	lines := c.files
+	for len(lines)+len(block) < h {
+		lines = append(lines, "")
+	}
+	lines = append(lines, block...)
+	return lines[max(len(lines)-h, 0):]
 }
 
 func (m *model) inputInSideChat() bool {

@@ -2341,3 +2341,17 @@ func TestRiskChatShowsTopic(t *testing.T) {
 		t.Fatal("esc ends the topic")
 	}
 }
+
+func TestSideChatSitsAtTheBottom(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 160
+	m.review.Messages = []state.Message{{Step: "s1", Text: "hello from the agent"}}
+	lines := strings.Split(ansi.Strip(m.View()), "\n")
+	files := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "FILES") })
+	chat := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "CHAT") })
+	msg := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "hello from") })
+	if files != 0 || chat < m.height-8 || msg <= chat || msg > chat+2 {
+		t.Fatalf("files on top, a small chat block at the bottom: files %d chat %d msg %d\n%s",
+			files, chat, msg, strings.Join(lines, "\n"))
+	}
+}
