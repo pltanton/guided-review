@@ -88,7 +88,7 @@ func (m *model) finishBody(w int) (lines []string, cards []finishCard) {
 func markdownLines(text string, w int) []string {
 	var out []string
 	var fence string
-	for _, l := range strings.Split(text, "\n") {
+	for l := range strings.SplitSeq(text, "\n") {
 		switch {
 		case strings.HasPrefix(l, "```") && fence == "":
 			fence = cmp.Or(strings.TrimPrefix(l, "```"), "code")
@@ -360,7 +360,7 @@ func (m *model) finishCardModal(w int) modalContent {
 	}
 	if d := plan.Decisions(m.review); d != "" {
 		body = append(body, "")
-		for _, l := range strings.Split(d, "\n") {
+		for l := range strings.SplitSeq(d, "\n") {
 			body = append(body, strings.Split(ansi.Wrap(l, max(w, 20), ""), "\n")...)
 		}
 	}

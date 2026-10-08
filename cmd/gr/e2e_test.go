@@ -310,14 +310,12 @@ func TestInitMR(t *testing.T) {
 		if strings.Contains(args[len(args)-1], "/discussions") {
 			return []byte(discussions), nil
 		}
-		return []byte(
-			fmt.Sprintf(
-				`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
+		return fmt.Appendf(nil,
+			`{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7","source_branch":"feature",
 			"diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
-				base,
-				base,
-				head,
-			),
+			base,
+			base,
+			head,
 		), nil
 	}
 	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
@@ -759,13 +757,11 @@ func TestDiscussionsFull(t *testing.T) {
 				{"body":"reply","author":{"username":"bob"},"system":false}]}]`,
 			), nil
 		}
-		return []byte(
-			fmt.Sprintf(
-				`{"title":"T","web_url":"u","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
-				base,
-				base,
-				head,
-			),
+		return fmt.Appendf(nil,
+			`{"title":"T","web_url":"u","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
+			base,
+			base,
+			head,
 		), nil
 	}
 	h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -85,9 +86,7 @@ type lspManager struct {
 
 func newLSPManager(root string, overrides map[string][]string) *lspManager {
 	servers := map[string][]string{}
-	for k, v := range DefaultServers {
-		servers[k] = v
-	}
+	maps.Copy(servers, DefaultServers)
 	for k, v := range overrides {
 		if len(v) > 0 {
 			servers[k] = v

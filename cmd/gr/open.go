@@ -107,7 +107,7 @@ func agentPane(
 		return ""
 	}
 	panes := map[int]string{}
-	for _, l := range strings.Split(out, "\n") {
+	for l := range strings.SplitSeq(out, "\n") {
 		p, id, ok := strings.Cut(l, " ")
 		if n, err := strconv.Atoi(p); ok && err == nil {
 			panes[n] = id

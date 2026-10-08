@@ -88,7 +88,7 @@ func hasCommentPrefix(line string) bool {
 
 func GitattributesPatterns(s string) []string {
 	var out []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		f := strings.Fields(line)
 		if len(f) < 2 || strings.HasPrefix(f[0], "#") {
 			continue

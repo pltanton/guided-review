@@ -697,7 +697,7 @@ func modifiedEnter(s string) (mod int, ok bool) {
 	}
 	body = strings.TrimSuffix(body, "]?")
 	var seq []byte
-	for _, f := range strings.Fields(body) {
+	for f := range strings.FieldsSeq(body) {
 		b, err := strconv.ParseUint(f, 10, 8)
 		if err != nil {
 			return 0, false

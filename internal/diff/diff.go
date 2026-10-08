@@ -87,7 +87,7 @@ func Parse(s string) ([]File, error) {
 			cur = nil
 		}
 	}
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			flushFile()

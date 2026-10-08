@@ -442,7 +442,7 @@ func (m *model) chatRows(width int, all bool) []chatRow {
 			msg = -1
 		}
 		for h, hard := range strings.Split(c.text, "\n") {
-			for _, l := range strings.Split(ansi.Wrap(hard, textW, ""), "\n") {
+			for l := range strings.SplitSeq(ansi.Wrap(hard, textW, ""), "\n") {
 				lead := "       " + bar + " "
 				if first && named {
 					lead = style.Render(name) + " " + bar + " "

@@ -100,7 +100,7 @@ func (t *tail) lastLines(n int) string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	var lines []string
-	for _, l := range strings.Split(string(t.buf), "\n") {
+	for l := range strings.SplitSeq(string(t.buf), "\n") {
 		if l = strings.TrimSpace(l); l != "" {
 			lines = append(lines, l)
 		}
@@ -397,7 +397,7 @@ func markupText(raw json.RawMessage) string {
 
 func stripFences(s string) string {
 	var out []string
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(l), "```") {
 			continue
 		}

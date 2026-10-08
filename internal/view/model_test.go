@@ -333,7 +333,7 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 	if !strings.Contains(out, "▌  minor  Event with the same") || strings.Contains(out, "…") {
 		t.Fatalf("note block:\n%s", out)
 	}
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		if ansi.StringWidth(line) > m.width {
 			t.Fatalf("line wider than %d: %q", m.width, line)
 		}
@@ -479,10 +479,10 @@ func TestFilesPanel(t *testing.T) {
 	}
 	y := strings.Split(out, "\n")
 	for i, line := range y {
-		if x := strings.Index(line, "│  a.go"); x >= 0 {
+		if before, _, ok := strings.Cut(line, "│  a.go"); ok {
 			m.Update(
 				tea.MouseMsg{
-					X:      len([]rune(line[:x])) + 3,
+					X:      len([]rune(before)) + 3,
 					Y:      i,
 					Button: tea.MouseButtonLeft,
 					Action: tea.MouseActionPress,
@@ -1899,7 +1899,7 @@ func TestChangedLinesTinted(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.cursor = 0
 	var added, context string
-	for _, l := range strings.Split(m.View(), "\n") {
+	for l := range strings.SplitSeq(m.View(), "\n") {
 		switch plain := ansi.Strip(l); {
 		case strings.Contains(plain, "x := 1"):
 			added = l
