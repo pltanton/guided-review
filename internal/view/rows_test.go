@@ -379,3 +379,33 @@ func TestNoteMarksItsLines(t *testing.T) {
 		t.Fatalf("a reformat-only line must be marked ≈: %q", out)
 	}
 }
+
+func TestTopNotes(t *testing.T) {
+	src := fakeSource{
+		files: map[string]diff.File{"a.go": {Path: "a.go", Hunks: []diff.Hunk{
+			{NewStart: 2, NewLines: 1, Lines: []diff.Line{{Kind: '+', Text: "L2"}}},
+		}}},
+		lines: map[string][]string{"a.go": numbered(3)},
+	}
+	notes := []Note{
+		{Top: true, Kind: "hotspot", Text: "second charge on retry?"},
+		{Top: true, Kind: "note", Text: "an aside"},
+	}
+	st := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
+	rows, err := buildRows(src, st, 1, notes, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) < 4 || rows[0].Kind != RowNote || rows[1].Kind != RowNote ||
+		rows[2].Kind != RowSpacer || rows[3].Kind != RowFile {
+		t.Fatalf("top notes must come before the first file:\n%s", summary(rows))
+	}
+	if rows[0].NoteKind != "hotspot" || rows[0].File != "a.go" || rows[0].Line != 0 {
+		t.Fatalf("top note row = %+v", rows[0])
+	}
+	for _, r := range rows[3:] {
+		if r.Kind == RowNote {
+			t.Fatalf("a top note leaked into the file: %+v", r)
+		}
+	}
+}

@@ -118,6 +118,8 @@ type model struct {
 	km           *keymap
 	help         bool
 	helpAll      bool
+	chapterOpen  string
+	introShown   map[string]bool
 	helpTop      int
 	baseCtx      int
 	popup        *popup
@@ -231,6 +233,7 @@ func (m *model) reload() {
 	if changed {
 		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseCtx, 0, 0, false, nil
 	}
+	m.introOnce()
 	m.rebuild(changed)
 	m.refreshDetail()
 	m.refreshPreview()
@@ -261,7 +264,13 @@ func (m *model) notes() []Note {
 			File: a.File, Line: a.Line, To: a.To, Kind: a.Kind, Text: a.Text, Focus: true,
 		})
 	}
+	if m.step.Note != "" {
+		out = append(out, Note{Top: true, Kind: "note", Text: m.step.Note})
+	}
 	for _, h := range m.step.Hotspots {
+		if h.Line == 0 {
+			out = append(out, Note{Top: true, Kind: "hotspot", Text: h.Q})
+		}
 		if h.Line > 0 {
 			out = append(out, Note{
 				File: hotspotFile(m.step, h), Line: h.Line, Kind: "hotspot", Text: h.Q,
@@ -627,6 +636,7 @@ func (m *model) showStep(id string) tea.Cmd {
 	m.step = st
 	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseCtx, nil
 	m.hscroll = 0
+	m.introOnce()
 	if m.src == nil {
 		return nil
 	}
@@ -759,6 +769,9 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.deleteArmed = 0
 	}
 	switch {
+	case m.chapterOpen != "":
+		m.chapterOpen = ""
+		return nil
 	case m.help:
 		return m.handleHelpKey(msg)
 	case m.preview != "":

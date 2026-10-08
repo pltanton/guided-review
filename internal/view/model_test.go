@@ -178,7 +178,7 @@ func TestViewRenders(t *testing.T) {
 	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		"▶ s1 first", "○ s2 second", " s1  first  logic", "1/2", "why x", "claude │ Adds x and y.",
+		"▶ s1 first", "○ s2 second", " s1  logic › first", "1/2", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -1662,18 +1662,26 @@ func TestSeenLines(t *testing.T) {
 	}
 }
 
-func TestChapterIntro(t *testing.T) {
+func TestHeaderOneLine(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.step.Chapter = "Переводы"
-	m.step.Intro = "Before: a retry debited twice. After: the key returns the first result."
-	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "▌ Переводы") || !strings.Contains(v, "▌ Before: a retry debited twice.") {
-		t.Fatalf("the chapter intro must head its first step:\n%s", v)
+	m.step.Chapter = "Transfers"
+	m.step.Intro = "Before: a retry debited twice."
+	m.step.Note = "an aside about the step"
+	m.step.MayChange = true
+	m.step.Hotspots = []state.Hotspot{{Q: "second charge on retry?"}}
+	hdr := m.header()
+	if len(hdr) != 2 {
+		t.Fatalf("header has %d lines, want title and rule: %q", len(hdr), hdr)
 	}
-	m.review.Steps[1].Chapter = "Переводы"
-	m.step = &m.review.Steps[1]
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ Переводы · Before: a retry debited twice.") {
-		t.Fatalf("later steps of the chapter keep a one-line reminder:\n%s", v)
+	title := ansi.Strip(hdr[0])
+	for _, want := range []string{"s1", "Transfers › first", "may change", "○○ 1/2"} {
+		if !strings.Contains(title, want) {
+			t.Errorf("title %q lacks %q", title, want)
+		}
+	}
+	m.viewStep, m.step = "s2", &m.review.Steps[1]
+	if hdr := m.header(); len(hdr) != 3 || !strings.Contains(ansi.Strip(hdr[1]), "esc to return") {
+		t.Fatalf("viewing another step keeps the way back: %q", hdr)
 	}
 }
 
@@ -1993,5 +2001,63 @@ func TestPeekGHint(t *testing.T) {
 	m.Update(key("x"))
 	if strings.Contains(ansi.Strip(m.View()), "d  definition") {
 		t.Fatal("the hint goes away after the second key")
+	}
+}
+
+func TestTopNoteDetails(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.rows = append([]Row{
+		{Kind: RowNote, File: "a.go", NoteKind: "hotspot", Text: "first risk"},
+		{Kind: RowNote, File: "a.go", NoteKind: "hotspot", Text: "second risk, a longer one"},
+		{Kind: RowSpacer, File: "a.go"},
+	}, m.rows...)
+	m.relist()
+	m.cursor = 1
+	m.Update(key("i"))
+	if m.popup == nil || len(*sent) != 0 {
+		t.Fatalf("details of a step-level note open locally: popup %v sent %+v", m.popup, *sent)
+	}
+	if got := ansi.Strip(strings.Join(m.popup.lines, "\n")); !strings.Contains(got, "second risk") {
+		t.Fatalf("details show %q, want the second risk", got)
+	}
+}
+
+func TestChapterModal(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Steps = append(m.review.Steps,
+		state.Step{ID: "s3", Title: "third", Chapter: "Bare", Status: state.StatusPending})
+	m.review.Steps[0].Chapter, m.review.Steps[1].Chapter = "Transfers", "Transfers"
+	m.review.Steps[0].Intro = "Before: a retry debited twice."
+	m.showStep("s1")
+	if m.chapterOpen != "Transfers" {
+		t.Fatal("the first step of a chapter opens its intro")
+	}
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"┌ Transfers", "Before: a retry debited twice.", "▶ s1 first",
+		"○ s2 second"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("chapter modal lacks %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "s3 third") {
+		t.Fatalf("the modal lists only its chapter's steps:\n%s", v)
+	}
+	m.Update(key("enter"))
+	if m.chapterOpen != "" || m.composing {
+		t.Fatal("enter only closes the intro")
+	}
+	m.showStep("s2")
+	if m.chapterOpen != "" {
+		t.Fatal("the intro shows once per chapter")
+	}
+	m.Update(key("I"))
+	if m.chapterOpen != "Transfers" {
+		t.Fatal("I reopens the intro")
+	}
+	m.Update(key("esc"))
+	m.showStep("s3")
+	m.Update(key("I"))
+	if m.chapterOpen != "" {
+		t.Fatal("a chapter without intro has no modal")
 	}
 }

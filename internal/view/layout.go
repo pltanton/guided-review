@@ -223,40 +223,20 @@ func (m *model) header() []string {
 		}
 	}
 	lines := []string{m.stepTitle(st)}
-	bar, w := chapterStyle.Render("▌ "), max(m.mainWidth()-4, 20)
-	switch intro := m.chapterIntro(st); {
-	case st.Intro != "":
-		lines = append(lines, bar+chapterStyle.Bold(true).Render(cmp.Or(st.Chapter, "chapter")))
-		for _, l := range strings.Split(ansi.Wrap(st.Intro, w, ""), "\n") {
-			lines = append(lines, bar+textTone.fg().Render(l))
-		}
-	case intro != "":
-		first, _, _ := strings.Cut(intro, "\n")
-		line := chapterStyle.Bold(true).Render(st.Chapter) + dimStyle.Render(" · "+first)
-		lines = append(lines, bar+ansi.Truncate(line, w, "…"))
-	}
 	if m.viewStep != "" {
 		back := fmt.Sprintf("viewing %s · current is %s — esc to return", st.ID, m.review.Current)
 		lines = append(lines, hotStyle.Render(back))
-	}
-	if st.Note != "" {
-		lines = append(lines, dimStyle.Render(st.Note))
-	}
-	for _, h := range st.Hotspots {
-		if h.Line == 0 {
-			lines = append(lines, hotStyle.Render("⚑ ")+h.Q)
-		}
-	}
-	if st.MayChange {
-		lines = append(lines, delStyle.Render("may change after earlier comments"))
 	}
 	return append(lines, m.separator())
 }
 
 func (m *model) stepTitle(st *state.Step) string {
 	pill := inkTone.fg().Background(accentTone.color()).Bold(true).Render(" " + st.ID + " ")
-	left := pill + " " + boldStyle.Render(st.Title) +
-		dimStyle.Render("  "+cmp.Or(st.Chapter, st.Kind))
+	left := pill + " " + chapterStyle.Render(cmp.Or(st.Chapter, st.Kind)) +
+		dimStyle.Render(" › ") + boldStyle.Render(st.Title)
+	if st.MayChange {
+		left += delStyle.Render("  may change")
+	}
 	if st.Status != state.StatusPending {
 		left += dimStyle.Render(" · " + string(st.Status))
 	}
@@ -277,28 +257,22 @@ func (m *model) stepTitle(st *state.Step) string {
 			reviewed++
 		}
 	}
-	const barW = 12
-	filled := barW * reviewed / max(total, 1)
-	right := accentTone.fg().Render(strings.Repeat("━", filled)) +
-		faintTone.fg().Render(strings.Repeat("━", barW-filled)) +
-		dimStyle.Render(fmt.Sprintf(" %d/%d", m.review.StepIndex(st.ID)+1, total))
+	const barW, maxDots = 12, 20
+	var right string
+	if total <= maxDots {
+		right = accentTone.fg().Render(strings.Repeat("●", reviewed)) +
+			faintTone.fg().Render(strings.Repeat("○", total-reviewed))
+	} else {
+		filled := barW * reviewed / max(total, 1)
+		right = accentTone.fg().Render(strings.Repeat("━", filled)) +
+			faintTone.fg().Render(strings.Repeat("━", barW-filled))
+	}
+	right += dimStyle.Render(fmt.Sprintf(" %d/%d", m.review.StepIndex(st.ID)+1, total))
 	gap := m.mainWidth() - ansi.StringWidth(left) - ansi.StringWidth(right) - 1
 	if gap < 2 {
 		return left
 	}
 	return left + strings.Repeat(" ", gap) + right
-}
-
-func (m *model) chapterIntro(st *state.Step) string {
-	if st.Chapter == "" || m.review == nil {
-		return ""
-	}
-	for _, s := range m.review.Steps {
-		if s.Chapter == st.Chapter && s.Intro != "" {
-			return s.Intro
-		}
-	}
-	return ""
 }
 
 func (m *model) separator() string {

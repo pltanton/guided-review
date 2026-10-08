@@ -171,6 +171,8 @@ func DefaultActions() []Action {
 
 		{Name: "wrap", Group: vw, Desc: "wrap long lines / cut them and scroll sideways",
 			Keys: k("W"), run: do(func(m *model) { m.setWrap(m.nowrap) })},
+		{Name: "chapter", Group: vw, Desc: "the chapter's intro", Keys: k("I"),
+			run: do((*model).openChapter)},
 		{Name: "plan", Group: vw, Desc: "show / hide the plan panel", Keys: k("p"),
 			run: do(func(m *model) { m.showPlan = !m.showPlan; m.relist() })},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),

@@ -10,6 +10,11 @@ const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
+	case m.chapterOpen != "":
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			m.chapterOpen = ""
+		}
+		return nil
 	case m.help && msg.Button == tea.MouseButtonWheelUp:
 		m.helpTop = max(m.helpTop-wheelStep, 0)
 		return nil

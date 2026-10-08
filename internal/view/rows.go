@@ -65,6 +65,7 @@ type Note struct {
 	Text  string
 	Dim   bool
 	Focus bool
+	Top   bool
 }
 
 type Source interface {
@@ -97,6 +98,13 @@ func buildRows(
 		ranges[sh.File] = append(ranges[sh.File], [2]int{start, end})
 	}
 	var rows []Row
+	for _, n := range notes {
+		if n.Top && len(files) > 0 {
+			rows = append(rows, Row{
+				Kind: RowNote, File: files[0], Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label,
+			})
+		}
+	}
 	for _, file := range files {
 		fd, err := src.FileDiff(file)
 		if err != nil {
@@ -108,7 +116,7 @@ func buildRows(
 		}
 		var fileNotes []Note
 		for _, n := range notes {
-			if n.File == "" || n.File == file {
+			if !n.Top && (n.File == "" || n.File == file) {
 				fileNotes = append(fileNotes, n)
 			}
 		}

@@ -310,6 +310,13 @@ func (m *model) noteDetails() {
 		m.status = "put the cursor on one of the agent's notes"
 		return
 	}
+	text := m.noteText(cur)
+	if cur.Line == 0 {
+		width := min(max(m.mainWidth()-4, 20), detailWidth)
+		title := strings.ToLower(noteKinds[cur.NoteKind].label) + " · " + m.step.ID
+		m.popup = &popup{kind: "detail", title: title, lines: markdownLines(text, width)}
+		return
+	}
 	loc := lspLoc{Path: cur.File, Line: cur.Line}
 	title := fmt.Sprintf("details · %s:%d", filepath.Base(cur.File), cur.Line)
 	m.popup = &popup{kind: "detail", title: title, loc: loc}
@@ -317,17 +324,20 @@ func (m *model) noteDetails() {
 		return
 	}
 	m.popup.lines = []string{hotStyle.Render("the agent is writing the details…")}
-	text := cur.Text
-	for _, r := range m.rows {
-		same := r.File == cur.File && r.Line == cur.Line && r.NoteKind == cur.NoteKind
-		if r.Kind == RowNote && same {
-			text = r.Text
-			break
-		}
-	}
 	m.emit(inbox.Event{
 		Kind: inbox.KindDetail, File: cur.File, Lines: fmt.Sprint(cur.Line), Text: text,
 	})
+}
+
+func (m *model) noteText(cur line) string {
+	head := strings.TrimRight(cur.Text, " ▸…")
+	for _, r := range m.rows {
+		same := r.File == cur.File && r.Line == cur.Line && r.NoteKind == cur.NoteKind
+		if r.Kind == RowNote && same && strings.HasPrefix(r.Text, head) {
+			return r.Text
+		}
+	}
+	return cur.Text
 }
 
 func (m *model) refreshDetail() bool {

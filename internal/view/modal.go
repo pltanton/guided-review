@@ -1,9 +1,12 @@
 package view
 
 import (
+	"cmp"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 func modalBox(w, h int, title, hint string, body []string) []string {
@@ -42,6 +45,9 @@ type modalContent struct {
 }
 
 func (m *model) modal(w int) (modalContent, bool) {
+	if m.chapterOpen != "" {
+		return m.chapterModal(w), true
+	}
 	if m.help {
 		lines := m.helpLines(w)
 		hint := "? all keys · any key closes"
@@ -61,4 +67,56 @@ func (m *model) drawModal(out []string) {
 	if c, ok := m.modal(w - 4); ok {
 		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), 1, 1)
 	}
+}
+
+func (m *model) chapterIntro(st *state.Step) string {
+	if st.Chapter == "" || m.review == nil {
+		return ""
+	}
+	for _, s := range m.review.Steps {
+		if s.Chapter == st.Chapter && s.Intro != "" {
+			return s.Intro
+		}
+	}
+	return ""
+}
+
+func (m *model) introOnce() {
+	st := m.step
+	if st == nil || st.Chapter == "" || m.introShown[st.Chapter] || m.chapterIntro(st) == "" {
+		return
+	}
+	if m.introShown == nil {
+		m.introShown = map[string]bool{}
+	}
+	m.introShown[st.Chapter], m.chapterOpen = true, st.Chapter
+}
+
+func (m *model) openChapter() {
+	if m.step == nil || m.chapterIntro(m.step) == "" {
+		m.status = "this step has no chapter intro"
+		return
+	}
+	m.chapterOpen = m.step.Chapter
+}
+
+func (m *model) chapterModal(w int) modalContent {
+	var intro string
+	var steps []string
+	for _, st := range m.review.Steps {
+		if st.Chapter != m.chapterOpen {
+			continue
+		}
+		intro = cmp.Or(intro, st.Intro)
+		glyph, style := st.Status.Glyph(), dimStyle
+		switch {
+		case st.ID == m.review.Current:
+			glyph, style = "▶", boldStyle
+		case st.Status == state.StatusPending:
+			glyph, style = "○", textTone.fg()
+		}
+		steps = append(steps, style.Render(glyph+" "+st.ID+" "+st.Title))
+	}
+	body := append(markdownLines(intro, min(w, detailWidth)), "")
+	return modalContent{m.chapterOpen, "enter close · I reopens", append(body, steps...)}
 }
