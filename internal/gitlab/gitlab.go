@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 type MRRef struct {
@@ -92,24 +94,6 @@ func FetchMR(ctx context.Context, run Runner, ref MRRef) (MR, error) {
 	return mr, nil
 }
 
-type Discussion struct {
-	ID         string
-	Author     string
-	Body       string
-	Replies    int
-	File       string
-	Line       int
-	OldLine    bool
-	Resolved   bool
-	Resolvable bool
-	Notes      []Note
-}
-
-type Note struct {
-	Author string
-	Body   string
-}
-
 type apiDiscussion struct {
 	ID    string    `json:"id"`
 	Notes []apiNote `json:"notes"`
@@ -133,7 +117,7 @@ type apiPosition struct {
 	OldLine *int   `json:"old_line"`
 }
 
-func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion, error) {
+func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]state.Discussion, error) {
 	path := fmt.Sprintf(
 		"projects/%s/merge_requests/%d/discussions?per_page=100",
 		url.PathEscape(ref.Project),
@@ -143,7 +127,7 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 	if err != nil {
 		return nil, err
 	}
-	var result []Discussion
+	var result []state.Discussion
 	dec := json.NewDecoder(bytes.NewReader(out))
 	for dec.More() {
 		var page []apiDiscussion
@@ -159,17 +143,19 @@ func FetchDiscussions(ctx context.Context, run Runner, ref MRRef) ([]Discussion,
 			if body == "" {
 				continue
 			}
-			disc := Discussion{
+			disc := state.Discussion{
 				ID:         d.ID,
 				Author:     first.Author.Username,
 				Body:       body,
 				Replies:    len(d.Notes) - 1,
 				Resolved:   first.Resolved,
 				Resolvable: first.Resolvable,
+				Comment:    state.MarkedComment(first.Body),
 			}
 			for _, n := range d.Notes {
 				if !n.System {
-					disc.Notes = append(disc.Notes, Note{Author: n.Author.Username, Body: n.Body})
+					note := state.Note{Author: n.Author.Username, Body: state.WithoutMarker(n.Body)}
+					disc.Notes = append(disc.Notes, note)
 				}
 			}
 			if p := first.Position; p != nil {

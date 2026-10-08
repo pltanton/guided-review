@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pltanton/guided-review/internal/github"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 func TestParsePRURL(t *testing.T) {
@@ -52,12 +53,12 @@ func TestFetchDiscussions(t *testing.T) {
 	if !strings.Contains(strings.Join(args, " "), "number=5") || args[2] != "github.com" {
 		t.Fatalf("query args %q", args)
 	}
-	want := []github.Discussion{
+	want := []state.Discussion{
 		{ID: "t1", Author: "alice", Body: "why float?", Replies: 2, File: "a.go", Line: 12,
-			ReplyTo: 71, Resolvable: true, Notes: []github.Note{
+			ReplyTo: 71, Resolvable: true, Notes: []state.Note{
 				{Author: "alice", Body: "why float?"}, {Author: "bob", Body: "it is money"}}},
 		{ID: "t3", Author: "bob", Body: "outdated", File: "c.go", Line: 9, OldLine: true, Resolvable: true,
-			Notes: []github.Note{{Author: "bob", Body: "outdated"}}},
+			Notes: []state.Note{{Author: "bob", Body: "outdated"}}},
 		{ID: "c1", Author: "carol", Body: "LGTM overall"},
 	}
 	if len(ds) != len(want) {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/pltanton/guided-review/internal/gitlab"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 func TestParseMRURL(t *testing.T) {
@@ -102,13 +103,13 @@ func TestFetchDiscussions(t *testing.T) {
 	if !reflect.DeepEqual(gotArgs, wantArgs) {
 		t.Fatalf("args = %v", gotArgs)
 	}
-	want := []gitlab.Discussion{
+	want := []state.Discussion{
 		{ID: "d1", Author: "alice", Body: "why float?", Replies: 1, File: "api/a.go", Line: 57,
-			Resolvable: true, Notes: []gitlab.Note{{Author: "alice", Body: "why float?"}, {Author: "bob", Body: "ok"}}},
-		{ID: "d6", Author: "ci", Body: "**Stuck** approval", Notes: []gitlab.Note{
+			Resolvable: true, Notes: []state.Note{{Author: "alice", Body: "why float?"}, {Author: "bob", Body: "ok"}}},
+		{ID: "d6", Author: "ci", Body: "**Stuck** approval", Notes: []state.Note{
 			{Author: "ci", Body: "<!-- review-bot fp=x -->\n**Stuck** approval"}}},
 		{ID: "d3", Author: "carol", Body: "general remark", Resolved: true, Resolvable: true,
-			Notes: []gitlab.Note{{Author: "carol", Body: "general remark"}}},
+			Notes: []state.Note{{Author: "carol", Body: "general remark"}}},
 		{
 			ID:      "d4",
 			Author:  "dan",
@@ -116,7 +117,7 @@ func TestFetchDiscussions(t *testing.T) {
 			File:    "api/b.go",
 			Line:    12,
 			OldLine: true,
-			Notes:   []gitlab.Note{{Author: "dan", Body: "on removed line"}},
+			Notes:   []state.Note{{Author: "dan", Body: "on removed line"}},
 		},
 	}
 	if !reflect.DeepEqual(got, want) {

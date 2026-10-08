@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/pltanton/guided-review/internal/state"
 )
 
 type Runner func(ctx context.Context, args ...string) ([]byte, error)
@@ -82,25 +84,6 @@ func FetchPR(ctx context.Context, run Runner, ref PRRef) (PR, error) {
 	return pr, nil
 }
 
-type Discussion struct {
-	ID         string
-	Author     string
-	Body       string
-	Replies    int
-	File       string
-	Line       int
-	OldLine    bool
-	Resolved   bool
-	Resolvable bool
-	Notes      []Note
-	ReplyTo    int64
-}
-
-type Note struct {
-	Author string
-	Body   string
-}
-
 const threadsQuery = `query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
@@ -152,7 +135,7 @@ type threadsReply struct {
 
 var htmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
 
-func FetchDiscussions(ctx context.Context, run Runner, ref PRRef) ([]Discussion, error) {
+func FetchDiscussions(ctx context.Context, run Runner, ref PRRef) ([]state.Discussion, error) {
 	owner, name, _ := strings.Cut(ref.Project, "/")
 	out, err := run(ctx, "api", "--hostname", ref.Host, "graphql",
 		"-f", "query="+threadsQuery, "-F", "owner="+owner, "-F", "name="+name,
@@ -165,7 +148,7 @@ func FetchDiscussions(ctx context.Context, run Runner, ref PRRef) ([]Discussion,
 		return nil, fmt.Errorf("decode review threads: %w", err)
 	}
 	pr := reply.Data.Repository.PullRequest
-	var result []Discussion
+	var result []state.Discussion
 	for _, t := range pr.ReviewThreads.Nodes {
 		if len(t.Comments.Nodes) == 0 {
 			continue
@@ -175,13 +158,14 @@ func FetchDiscussions(ctx context.Context, run Runner, ref PRRef) ([]Discussion,
 		if body == "" {
 			continue
 		}
-		d := Discussion{
+		d := state.Discussion{
 			ID: t.ID, Author: first.Author.Login, Body: body, File: t.Path,
 			Replies: t.Comments.TotalCount - 1, Resolved: t.IsResolved,
-			ReplyTo: first.DatabaseID, Resolvable: true,
+			ReplyTo: first.DatabaseID, Resolvable: true, Comment: state.MarkedComment(first.Body),
 		}
 		for _, c := range t.Comments.Nodes {
-			d.Notes = append(d.Notes, Note{Author: c.Author.Login, Body: c.Body})
+			note := state.Note{Author: c.Author.Login, Body: state.WithoutMarker(c.Body)}
+			d.Notes = append(d.Notes, note)
 		}
 		switch {
 		case t.Line != nil && t.DiffSide != "LEFT":
@@ -193,7 +177,8 @@ func FetchDiscussions(ctx context.Context, run Runner, ref PRRef) ([]Discussion,
 	}
 	for _, c := range pr.Comments.Nodes {
 		if body := strings.TrimSpace(htmlComment.ReplaceAllString(c.Body, "")); body != "" {
-			result = append(result, Discussion{ID: c.ID, Author: c.Author.Login, Body: body})
+			d := state.Discussion{ID: c.ID, Author: c.Author.Login, Body: body}
+			result = append(result, d)
 		}
 	}
 	return result, nil
