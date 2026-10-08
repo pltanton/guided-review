@@ -40,6 +40,16 @@ gr help | head -3
 If `gr` is not found after installing, `$(go env GOPATH)/bin` is not on `PATH`: tell the
 human which line to add to their shell profile rather than editing it yourself.
 
+**With Nix** (`command -v nix`), ask the human which way they want it instead of `go install`;
+Go is then not needed:
+
+```bash
+nix profile install github:pltanton/guided-review
+```
+
+If they manage their setup with home-manager, do not run anything: show them
+[the module](#home-manager) to add to their configuration.
+
 ## 3. The skills
 
 **Claude Code** — the plugin brings both skills (`guided-review`, `guided-selfreview`) and
@@ -101,8 +111,10 @@ claude plugin marketplace update guided-review
 claude plugin update guided-review@guided-review
 ```
 
-For Codex, `git -C ~/.local/share/guided-review pull`. Restart the agent afterwards; an
-open viewer picks up the new `gr` after `q` and `gr open`.
+For Codex, `git -C ~/.local/share/guided-review pull`. Installed with Nix,
+`nix profile upgrade guided-review`; with home-manager, `nix flake update guided-review` in
+the configuration and switch. Restart the agent afterwards; an
+open viewer picks up the new `gr` after `Q` and `gr open`.
 
 ## Uninstalling
 
@@ -114,7 +126,10 @@ claude plugin marketplace remove guided-review
 rm -f ~/.codex/skills/guided-review ~/.codex/skills/guided-selfreview
 rm -rf ~/.local/share/guided-review
 rm -f "$(go env GOPATH)/bin/gr"
+nix profile remove guided-review
 ```
+
+With home-manager, the human removes the module from their configuration and switches.
 
 What `gr` left behind — ask before deleting, it holds review history:
 
@@ -124,3 +139,28 @@ What `gr` left behind — ask before deleting, it holds review history:
   `git worktree remove <path>` from the repository, or delete the folder and run
   `git worktree prune` there.
 - `~/.config/guided-review/` if `gr config init` was run.
+
+## home-manager
+
+Add the flake to the configuration's inputs and import the module:
+
+```nix
+inputs.guided-review = {
+  url = "github:pltanton/guided-review";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
+```
+
+```nix
+{ inputs, ... }: {
+  imports = [ inputs.guided-review.homeManagerModules.default ];
+  programs.guided-review = {
+    enable = true;        # puts gr on PATH
+    codex.enable = true;  # links the skills into ~/.codex/skills
+  };
+}
+```
+
+Claude Code still takes the skills and the Stop hook from its plugin
+([step 3](#3-the-skills)). Without home-manager, the flake's `overlays.default` adds
+`pkgs.guided-review` for NixOS or nix-darwin.
