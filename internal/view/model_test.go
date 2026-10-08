@@ -75,8 +75,17 @@ func TestNavigation(t *testing.T) {
 			t.Fatalf("after %q cursor = %d, want %d", s.key, m.cursor, s.want)
 		}
 	}
-	if _, cmd := m.Update(key("q")); cmd == nil {
-		t.Fatal("q must quit")
+	m.Update(key("v"))
+	if _, cmd := m.Update(key("q")); cmd != nil || m.visual {
+		t.Fatal("q backs out like esc, it does not quit")
+	}
+	if _, cmd := m.Update(key("Q")); cmd == nil {
+		t.Fatal("Q must quit")
+	}
+	m.Update(key(":"))
+	typeText(m, "q")
+	if _, cmd := m.Update(key("enter")); cmd == nil {
+		t.Fatal(":q must quit")
 	}
 }
 

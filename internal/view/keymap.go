@@ -94,7 +94,7 @@ func DefaultActions() []Action {
 			Name:  "back",
 			Group: nav,
 			Desc:  "clear selection / search / chat, back to the current step",
-			Keys:  k("esc"),
+			Keys:  k("esc", "q"),
 			run:   (*model).back,
 		},
 		{Name: "word-next", Group: nav, Desc: "next symbol in the line", Keys: k("w"),
@@ -200,7 +200,7 @@ func DefaultActions() []Action {
 			run: do(func(m *model) { m.help, m.helpAll, m.helpTop = true, false, 0 })},
 		{Name: "interrupt", Group: rev, Desc: "stop the agent's current work and add to your question",
 			Keys: k("ctrl+c"), run: do((*model).interrupt)},
-		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q"),
+		{Name: "quit", Group: vw, Desc: "quit the viewer (also :q)", Keys: k("Q"),
 			run: func(*model) tea.Cmd { return tea.Quit }},
 
 		{Name: "verdict", Group: finishGroup, Desc: "verdict: approve → changes → blocked",
