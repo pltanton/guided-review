@@ -287,9 +287,9 @@ func (m *model) notes() []Note {
 		label := ""
 		switch {
 		case h.Checked && h.Comment > 0:
-			label = fmt.Sprintf("RISK ✓ #%d", h.Comment)
+			label = fmt.Sprintf("✓ DONE #%d", h.Comment)
 		case h.Checked:
-			label = "RISK ✓"
+			label = "✓ DONE"
 		}
 		if h.Line == 0 {
 			out = append(out, Note{
@@ -311,7 +311,8 @@ func (m *model) notes() []Note {
 		}
 		out = append(out, Note{
 			Ref: c.ID, File: c.File, Line: start, To: end, Kind: "comment",
-			Label: fmt.Sprintf("#%d %s", c.ID, c.Severity), Text: c.Body, Dim: c.Resolved,
+			Label: resolvedLabel(fmt.Sprintf("#%d %s", c.ID, c.Severity), c.Resolved),
+			Text:  c.Body, Dim: c.Resolved,
 		})
 	}
 	for _, e := range m.events {
@@ -1064,4 +1065,11 @@ func (m *model) unseen() int {
 		}
 	}
 	return n
+}
+
+func resolvedLabel(label string, resolved bool) string {
+	if resolved {
+		return "✓ " + label
+	}
+	return label
 }

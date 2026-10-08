@@ -1044,11 +1044,7 @@ func expandNotes(rows []Row, width int, folded map[string]bool) []Row {
 		}
 		badge := noteBadge(r.NoteKind, r.NoteLabel)
 		pad := ansi.StringWidth(badge) + 1
-		text := r.Text
-		if r.Dim {
-			text += " ✓"
-		}
-		lines := strings.Split(ansi.Wrap(text, max(width-pad, 10), ""), "\n")
+		lines := strings.Split(ansi.Wrap(r.Text, max(width-pad, 10), ""), "\n")
 		if folded[noteKey(r)] && len(lines) > 1 {
 			lines = []string{ansi.Truncate(lines[0], max(width-pad-4, 10), "…") + " ▸"}
 		}
@@ -1064,7 +1060,7 @@ func expandNotes(rows []Row, width int, folded map[string]bool) []Row {
 func renderNote(r Row) string {
 	t, text := noteKinds[r.NoteKind].tone, noteTextTone
 	if r.Dim {
-		t, text = faintTone, mutedTone
+		t, text = okTone, mutedTone
 	}
 	badge := noteBadge(r.NoteKind, r.NoteLabel)
 	lead := strings.Repeat(" ", ansi.StringWidth(badge)+1)

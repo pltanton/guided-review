@@ -349,7 +349,7 @@ func (m *model) openFinish() {
 func (m *model) finishItems() []string {
 	verdict, _ := plan.SuggestVerdict(m.review)
 	if m.askApprove(verdict) {
-		return []string{"approve the MR", "do not approve", "show the result"}
+		return []string{"approve the MR", "do not approve"}
 	}
 	return []string{"show the result"}
 }
@@ -367,13 +367,10 @@ func (m *model) finishCardModal(w int) modalContent {
 		}
 	}
 	if m.askApprove(verdict) {
-		body = append(body, "", hotStyle.Render("approve the MR when it is published?"))
+		body = append(body, "", hotStyle.Render("approve the MR when it is published? then the result"))
 	}
 	body = append(body, "")
 	for i, it := range m.finishItems() {
-		if len(m.finishItems()) == 3 && (i == 0 && m.approvePick == 1 || i == 1 && m.approvePick == 2) {
-			it += addStyle.Render("  ✓")
-		}
 		body = append(body, cardItem(i, m.finishSel, it, w))
 	}
 	if m.err != nil {
@@ -411,13 +408,8 @@ func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 	case "esc", "q":
 		m.finishCard = false
 	case "enter":
-		if len(items) == 3 && m.finishSel < 2 {
-			m.approvePick, m.finishSel = m.finishSel+1, 2
-			return nil
-		}
-		if len(items) == 3 && m.approvePick == 0 {
-			m.status, m.finishSel = "choose first: approve the MR or not", 0
-			return nil
+		if len(items) == 2 {
+			m.approvePick = m.finishSel + 1
 		}
 		return m.prepareFinish()
 	}

@@ -1544,18 +1544,14 @@ func TestFinishCard(t *testing.T) {
 			t.Fatalf("finish card lacks %q:\n%s", want, v)
 		}
 	}
-	m.Update(key("j"))
-	m.Update(key("j"))
-	m.Update(key("enter"))
-	if len(ran) != 0 || !strings.Contains(m.status, "approve the MR or not") {
-		t.Fatalf("the result waits for the approve answer: ran %v", ran)
+	if strings.Contains(v, "show the result") {
+		t.Fatalf("with an approve question there is no separate show item:\n%s", v)
 	}
 	m.Update(key("j"))
 	m.Update(key("enter"))
 	if m.approvePick != 2 {
 		t.Fatalf("enter on «do not approve» picks it: %d", m.approvePick)
 	}
-	m.Update(key("enter"))
 	want := []string{"prepare", "--verdict", "approve", "--decisions", "- Skipped s2 «second»: trivial"}
 	if len(ran) < 2 || !slices.Equal(ran[0], want) || m.preview == "" || len(*sent) != 0 {
 		t.Fatalf("show the result prepares without the agent and opens the preview: ran %q", ran)
@@ -1864,7 +1860,7 @@ func TestCheckOffRisk(t *testing.T) {
 	if !m.review.Steps[0].Hotspots[0].Checked || len(ran) != 1 {
 		t.Fatalf("x checks the risk off: ran %v", ran)
 	}
-	if got := m.notes(); len(got) == 0 || got[0].Label != "RISK ✓" || !got[0].Dim {
+	if got := m.notes(); len(got) == 0 || got[0].Label != "✓ DONE" || !got[0].Dim {
 		t.Fatalf("a checked risk shows as such: %+v", got)
 	}
 	m.Update(key("x"))
@@ -2485,16 +2481,13 @@ func TestCardDigits(t *testing.T) {
 	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
 	m.openFinish()
 	if v := ansi.Strip(m.View()); !strings.Contains(v, " 1  approve the MR") ||
-		!strings.Contains(v, " 3  show the result") {
+		!strings.Contains(v, " 2  do not approve") {
 		t.Fatalf("finish items are numbered:\n%s", v)
 	}
-	m.Update(key("2"))
-	if m.approvePick != 2 {
-		t.Fatalf("2 picks «do not approve»: %d", m.approvePick)
-	}
-	m.Update(key("3"))
-	if len(ran) == 0 || ran[0][0] != "prepare" || slices.Contains(ran[0], "--approve") {
-		t.Fatalf("3 shows the result without approve: %q", ran)
+	m.Update(key("1"))
+	if m.approvePick != 1 || len(ran) == 0 || ran[0][0] != "prepare" ||
+		!slices.Contains(ran[0], "--approve") {
+		t.Fatalf("1 approves and goes straight to the result: %q", ran)
 	}
 }
 
