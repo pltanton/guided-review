@@ -82,7 +82,7 @@ func TestComposeStatusline(t *testing.T) {
 		{"raw", func(m *model) {
 			m.composeKind, m.raw, m.anchorFile, m.anchorLines = inbox.KindMessage, true, "a.go", "2"
 		}, " COMMENT minor a.go:2         enter save",
-			"tab ai comment · S-tab severity · C-j new line · esc cancel"},
+			"tab ai comment · S-tab severity · C-s suggestion · C-j new line · esc cancel"},
 		{"edit", func(m *model) { m.composeKind, m.composeRef = inbox.KindEdit, 3 },
 			" AI EDIT #3        enter send · tab edit", "tab edit · C-j new line · esc cancel"},
 		{"skip", func(m *model) { m.composeKind = inbox.KindSkip },
@@ -276,5 +276,32 @@ func TestInlineComposer(t *testing.T) {
 		"--step", "s1", "--", "why x"}
 	if !slices.Equal(ran, want) || len(*sent) != 1 || (*sent)[0].Kind != inbox.KindComment {
 		t.Fatalf("a plain comment is saved as written: ran %q sent %+v", ran, *sent)
+	}
+}
+
+func TestCommentWithSuggestion(t *testing.T) {
+	m, _ := newTestModel(t)
+	var ran []string
+	m.runGr = func(args ...string) (string, error) { ran = args; return "comment #1 nit a.go:2", nil }
+	m.cursor = 2
+	m.Update(key("enter"))
+	typeText(m, "name it fee")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "suggestion") || !strings.Contains(v, "+ x := 1█") ||
+		!strings.Contains(v, "│ name it fee") {
+		t.Fatalf("C-s opens a suggestion with the line's code under the comment:\n%s", v)
+	}
+	for range len("x := 1") {
+		m.Update(key("backspace"))
+	}
+	typeText(m, "fee := 1")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlS})
+	typeText(m, "!")
+	m.Update(key("enter"))
+	want := []string{"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "minor",
+		"--step", "s1", "--suggestion", "fee := 1", "--", "name it fee!"}
+	if !slices.Equal(ran, want) {
+		t.Fatalf("gr args = %q, want %q", ran, want)
 	}
 }

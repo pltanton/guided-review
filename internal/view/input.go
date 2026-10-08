@@ -26,6 +26,7 @@ func (m *model) startCompose(kind string) {
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
 	m.raw, m.rawSeverity, m.chatting, m.chatAbout, m.chatTopic = false, "", false, "", ""
+	m.sugOn, m.sugFocus, m.altInput = false, false, nil
 	defer m.placeInline()
 	switch kind {
 	case inbox.KindMessage:
@@ -62,6 +63,50 @@ func (m *model) discussNote() {
 			m.chatAbout = "about " + p.title + ": "
 		}
 	}
+}
+
+func (m *model) canSuggest() bool {
+	return m.rawMode() && m.composeKind == inbox.KindMessage
+}
+
+func (m *model) toggleSuggestion() {
+	if !m.canSuggest() {
+		return
+	}
+	if !m.sugOn {
+		m.sugOn, m.altInput, m.altPos = true, m.input, m.inputPos
+		m.input = []rune(m.anchoredCode())
+		m.inputPos, m.sugFocus = len(m.input), true
+		return
+	}
+	m.input, m.altInput = m.altInput, m.input
+	m.inputPos, m.altPos = m.altPos, m.inputPos
+	m.sugFocus = !m.sugFocus
+}
+
+func (m *model) composedTexts() (comment, suggestion string) {
+	switch {
+	case !m.sugOn:
+		return string(m.input), ""
+	case m.sugFocus:
+		return string(m.altInput), string(m.input)
+	}
+	return string(m.input), string(m.altInput)
+}
+
+func (m *model) anchoredCode() string {
+	from, to, err := state.ParseLines(m.anchorLines)
+	if err != nil {
+		return ""
+	}
+	var lines []string
+	for _, r := range m.rows {
+		code := r.Kind == RowCode || r.Kind == RowAdded
+		if code && r.File == m.anchorFile && r.Line >= from && r.Line <= max(to, from) {
+			lines = append(lines, cmp.Or(r.Plain, ansi.Strip(r.Text)))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *model) startComment() {
@@ -112,15 +157,31 @@ func (m *model) composerRows(w int) []string {
 		head += " " + dimStyle.Render(anchor)
 	}
 	head += " " + frame.Render(strings.Repeat("─", max(bw-ansi.StringWidth(head)-2, 0))+"╮")
-	var body []string
-	if len(m.input) == 0 {
-		body = []string{withCursor(nil, 0) + dimStyle.Render(" "+placeholder)}
-	} else {
-		body = m.inputLines("", "", bw-4)
+	active := func() []string {
+		if len(m.input) == 0 {
+			return []string{withCursor(nil, 0) + dimStyle.Render(" "+placeholder)}
+		}
+		return m.inputLines("", "", bw-4)
+	}
+	idle := func() []string {
+		return strings.Split(ansi.Wrap(expandTabs(string(m.altInput)), bw-4, ""), "\n")
+	}
+	comment, suggestion := active, idle
+	if m.sugOn && m.sugFocus {
+		comment, suggestion = idle, active
+		placeholder = "the code as it should be"
 	}
 	out := []string{indent + head}
-	for _, l := range body {
-		out = append(out, indent+frame.Render("│ ")+fit(l, bw-4)+frame.Render(" │"))
+	row := func(l string) string { return indent + frame.Render("│ ") + fit(l, bw-4) + frame.Render(" │") }
+	for _, l := range comment() {
+		out = append(out, row(l))
+	}
+	if m.sugOn {
+		label := frame.Render("├─ ") + addStyle.Render("suggestion") + " "
+		out = append(out, indent+label+frame.Render(strings.Repeat("─", max(bw-ansi.StringWidth(label)-1, 0))+"┤"))
+		for _, l := range suggestion() {
+			out = append(out, row(addStyle.Render("+ ")+l))
+		}
 	}
 	parts := make([]string, len(hints))
 	for i, h := range hints {
@@ -196,6 +257,10 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		m.answer(i)
 		return nil
 	}
+	if msg.Type == tea.KeyCtrlS {
+		m.toggleSuggestion()
+		return nil
+	}
 	switch msg.Type {
 	case tea.KeyEsc:
 		m.composing, m.input, m.composeThread, m.chatting = false, nil, "", false
@@ -209,8 +274,10 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 			return nil
 		}
 		defer m.resume()
-		text := strings.TrimSpace(string(m.input))
+		comment, suggestion := m.composedTexts()
+		text := strings.TrimSpace(comment)
 		thread, raw := m.composeThread, m.rawMode()
+		m.sugOn, m.sugFocus, m.altInput = false, false, nil
 		m.composing, m.input, m.composeThread = false, nil, ""
 		if m.chatting && text != "" {
 			defer func() { m.composing = m.err == nil }()
@@ -227,7 +294,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case m.composeKind == inbox.KindSkip:
 			m.moveStep("skip", "--reason", text)
 		case raw:
-			m.saveRaw(text)
+			m.saveRaw(text, suggestion)
 		default:
 			m.emit(inbox.Event{
 				Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines,
@@ -407,7 +474,7 @@ func (m *model) severity() state.Severity {
 	return cmp.Or(m.rawSeverity, state.SeverityMinor)
 }
 
-func (m *model) saveRaw(text string) {
+func (m *model) saveRaw(text, suggestion string) {
 	args := []string{"comment", "edit", fmt.Sprint(m.composeRef), "--", text}
 	if m.composeKind == inbox.KindMessage {
 		if m.anchorFile == "" {
@@ -420,6 +487,9 @@ func (m *model) saveRaw(text string) {
 		}
 		if m.step != nil && !isExtra(m.step.ID) {
 			args = append(args, "--step", m.step.ID)
+		}
+		if suggestion != "" {
+			args = append(args, "--suggestion", suggestion)
 		}
 		args = append(args, "--", text)
 	}

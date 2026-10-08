@@ -158,6 +158,10 @@ type model struct {
 	anchorFile  string
 	anchorLines string
 	inlineAt    int
+	sugOn       bool
+	sugFocus    bool
+	altInput    []rune
+	altPos      int
 	listW       int
 	chatting    bool
 	chatAbout   string

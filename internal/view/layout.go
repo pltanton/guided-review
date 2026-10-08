@@ -532,6 +532,11 @@ func (m *model) composeMode() (
 	case m.rawMode():
 		badge, hints[0].desc = "COMMENT "+string(m.severity()), "save"
 		hints = append(hints, composeHint{"tab", "ai comment"}, composeHint{"S-tab", "severity"})
+		if m.sugOn {
+			hints = append(hints, composeHint{"C-s", "comment ⇄ suggestion"})
+		} else {
+			hints = append(hints, composeHint{"C-s", "suggestion"})
+		}
 	case m.composeKind == inbox.KindEdit:
 		badge = fmt.Sprintf("AI EDIT #%d", m.composeRef)
 		if m.inlineCompose() {
