@@ -371,18 +371,10 @@ func (m *model) finishCardModal(w int) modalContent {
 	}
 	body = append(body, "")
 	for i, it := range m.finishItems() {
-		mark := "  "
-		switch {
-		case i == 0 && m.approvePick == 1, i == 1 && m.approvePick == 2:
-			mark = addStyle.Render("✓ ")
+		if len(m.finishItems()) == 3 && (i == 0 && m.approvePick == 1 || i == 1 && m.approvePick == 2) {
+			it += addStyle.Render("  ✓")
 		}
-		line := mark + it
-		if i == m.finishSel {
-			line = paint(fit(accentTone.fg().Render("▌")+line, w), cursorTone)
-		} else {
-			line = " " + line
-		}
-		body = append(body, line)
+		body = append(body, cardItem(i, m.finishSel, it, w))
 	}
 	if m.err != nil {
 		body = append(body, "", delStyle.Render(m.err.Error()))
@@ -407,6 +399,10 @@ func severityCounts(r *state.Review) string {
 
 func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 	items := m.finishItems()
+	if i, ok := digitPick(msg.String(), len(items)); ok {
+		m.finishSel = i
+		return m.handleFinishCardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	}
 	switch msg.String() {
 	case "j", "down":
 		m.finishSel = min(m.finishSel+1, len(items)-1)

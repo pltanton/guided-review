@@ -280,14 +280,7 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 
 func (m *model) gateModal(w int) modalContent {
 	var body []string
-	item := func(i int, text string) {
-		if i == m.gateSel {
-			text = paint(fit(accentTone.fg().Render("▌")+text, w), cursorTone)
-		} else {
-			text = " " + text
-		}
-		body = append(body, text)
-	}
+	item := func(i int, text string) { body = append(body, cardItem(i, m.gateSel, text, w)) }
 	if len(m.step.Hotspots) > 0 {
 		body = append(body, dimStyle.Render("risks — enter checks one off once you are sure"), "")
 	}
@@ -331,16 +324,16 @@ func (m *model) staleModal(w int) modalContent {
 		"",
 	}
 	for i, it := range staleItems {
-		line := " " + it
-		if i == m.staleSel {
-			line = paint(fit(accentTone.fg().Render("▌")+it, w), cursorTone)
-		}
-		body = append(body, line)
+		body = append(body, cardItem(i, m.staleSel, it, w))
 	}
 	return modalContent{"blocker", "enter · esc continue", body}
 }
 
 func (m *model) handleStaleKey(msg tea.KeyMsg) tea.Cmd {
+	if i, ok := digitPick(msg.String(), len(staleItems)); ok {
+		m.staleSel = i
+		return m.handleStaleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	}
 	switch msg.String() {
 	case "j", "down":
 		m.staleSel = 1
@@ -356,4 +349,19 @@ func (m *model) handleStaleKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func cardItem(i, sel int, text string, w int) string {
+	text = keyStyle.Render(fmt.Sprintf(" %d ", i+1)) + " " + text
+	if i == sel {
+		return paint(fit(accentTone.fg().Render("▌")+text, w), cursorTone)
+	}
+	return " " + text
+}
+
+func digitPick(k string, n int) (int, bool) {
+	if len(k) != 1 || k < "1" || k > "9" || int(k[0]-'1') >= n {
+		return 0, false
+	}
+	return int(k[0] - '1'), true
 }

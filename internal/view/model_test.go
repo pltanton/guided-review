@@ -2476,3 +2476,23 @@ func TestBlockerAsksContinueOrFinish(t *testing.T) {
 		t.Fatal("finish now opens the finish card")
 	}
 }
+
+func TestCardDigits(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.MR = &state.MR{URL: "https://gitlab/x/-/merge_requests/1", Me: "me"}
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
+	m.openFinish()
+	if v := ansi.Strip(m.View()); !strings.Contains(v, " 1  approve the MR") ||
+		!strings.Contains(v, " 3  show the result") {
+		t.Fatalf("finish items are numbered:\n%s", v)
+	}
+	m.Update(key("2"))
+	if m.approvePick != 2 {
+		t.Fatalf("2 picks «do not approve»: %d", m.approvePick)
+	}
+	m.Update(key("3"))
+	if len(ran) == 0 || ran[0][0] != "prepare" || slices.Contains(ran[0], "--approve") {
+		t.Fatalf("3 shows the result without approve: %q", ran)
+	}
+}

@@ -775,6 +775,10 @@ func (m *model) toggleRisk(n int) {
 
 func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
 	risks := len(m.step.Hotspots)
+	if i, ok := digitPick(msg.String(), risks+1); ok {
+		m.gateSel = i
+		return m.handleGateKey(tea.KeyMsg{Type: tea.KeyEnter})
+	}
 	switch msg.String() {
 	case "j", "down":
 		m.gateSel = min(m.gateSel+1, risks)
