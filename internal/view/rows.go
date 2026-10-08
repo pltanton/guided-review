@@ -55,20 +55,22 @@ type Row struct {
 	RenamedFrom string
 	RenameHide  bool
 	Risk        int
+	Thread      string
 }
 
 type Note struct {
-	Ref   int
-	File  string
-	Line  int
-	To    int
-	Kind  string
-	Label string
-	Text  string
-	Dim   bool
-	Focus bool
-	Top   bool
-	Risk  int
+	Ref    int
+	File   string
+	Line   int
+	To     int
+	Kind   string
+	Label  string
+	Text   string
+	Dim    bool
+	Focus  bool
+	Top    bool
+	Risk   int
+	Thread string
 }
 
 type Source interface {
@@ -318,6 +320,7 @@ func fileRows(
 						Dim:       note.Dim,
 						Ref:       note.Ref,
 						Risk:      note.Risk,
+						Thread:    note.Thread,
 					},
 				)
 			}

@@ -68,6 +68,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.finishCardModal(w), true
 	case m.pub != nil:
 		return m.publishModal(w), true
+	case m.threadCard != "":
+		return m.threadCardModal(w), true
 	case len(m.staleSteps) > 0:
 		return m.staleModal(w), true
 	case m.focusPlan:
@@ -88,6 +90,7 @@ const (
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
 		m.chapterOpen == "" && !m.gateOpen && !m.finishCard && m.pub == nil &&
+		m.threadCard == "" &&
 		len(m.staleSteps) == 0 &&
 		!m.focusPlan
 }
@@ -306,6 +309,9 @@ func (m *model) gateModal(w int) modalContent {
 	if n := m.unseen(); n > 0 {
 		body = append(body, "", hotStyle.Render(fmt.Sprintf("%d changed lines not seen yet", n)))
 	}
+	if waiting := m.threadsWaiting(); waiting != "" {
+		body = append(body, "", waiting)
+	}
 	body = append(body, "")
 	item(len(m.step.Hotspots), boldStyle.Render("move on to the next step"))
 	return modalContent{"before " + m.step.ID + " is done", "enter · esc back to the step", body}
@@ -313,6 +319,7 @@ func (m *model) gateModal(w int) modalContent {
 
 func (m *model) blocked() bool {
 	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard || m.pub != nil ||
+		m.threadCard != "" ||
 		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"
 }

@@ -142,6 +142,8 @@ func (m *model) cursorHint() string {
 		del := k.key("delete-comment")
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
+	case cur.Thread != "":
+		return k.key("act") + " open the thread · " + k.key("replies") + " all your threads"
 	case cur.Risk > 0:
 		return fmt.Sprintf("%s details · %s check off", k.key("act"), k.key("check-risk"))
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:

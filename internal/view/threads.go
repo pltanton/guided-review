@@ -1,6 +1,7 @@
 package view
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 	"time"
@@ -239,4 +240,147 @@ func (m *model) decideThread(id, verdict, reply string) {
 	}
 	m.reload()
 	m.status = "thread " + verdictWord(verdict)
+}
+
+func (m *model) threadBadge(d state.Discussion) (label string, resolved bool) {
+	r := m.review
+	if r.MR == nil || d.Author != r.MR.Me {
+		return "@" + d.Author, false
+	}
+	switch t := r.ThreadState(d); {
+	case t.Decided() && t.Verdict == state.VerdictResolve:
+		return "✓ RESOLVE", true
+	case t.Decided() && t.Verdict == state.VerdictOpen:
+		return "↩ OPEN", false
+	case len(d.Notes) > 0:
+		return fmt.Sprintf("YOU ↩%d", len(d.Notes)), false
+	}
+	return "YOU", false
+}
+
+func (m *model) cardThread() (state.Discussion, bool) {
+	for _, d := range m.review.Discussions {
+		if d.ID == m.threadCard {
+			return d, true
+		}
+	}
+	return state.Discussion{}, false
+}
+
+func (m *model) mine(d state.Discussion) bool {
+	return m.review.MR != nil && d.Author == m.review.MR.Me && d.Resolvable && !d.Resolved
+}
+
+func (m *model) threadCardItems(d state.Discussion) []string {
+	if !m.mine(d) {
+		return []string{"discuss it with the agent"}
+	}
+	t := m.review.ThreadState(d)
+	items := []string{"resolve", "reply and keep open"}
+	if t.Proposed != "" {
+		items = append(items, "take the agent's: "+verdictWord(t.Proposed))
+	}
+	if t.Decided() {
+		items = append(items, "undo the decision")
+	}
+	return items
+}
+
+func (m *model) threadCardModal(w int) modalContent {
+	d, ok := m.cardThread()
+	if !ok {
+		m.threadCard = ""
+		return modalContent{"thread", "esc", nil}
+	}
+	t := m.review.ThreadState(d)
+	var body []string
+	say := func(who, text string) {
+		lead := youStyle.Render(who)
+		if m.review.MR == nil || who != m.review.MR.Me {
+			lead = agentStyle.Render(who)
+		}
+		for i, l := range strings.Split(ansi.Wrap(text, max(w-4, 20), ""), "\n") {
+			if i == 0 {
+				body = append(body, lead+dimStyle.Render(" │ ")+l)
+			} else {
+				body = append(body, strings.Repeat(" ", ansi.StringWidth(who))+dimStyle.Render(" │ ")+l)
+			}
+		}
+	}
+	say(d.Author, d.Body)
+	for _, n := range d.Notes {
+		say(n.Author, n.Body)
+	}
+	if t.Proposed != "" {
+		body = append(body, "", agentTone.fg().Render("agent: "+verdictWord(t.Proposed)+" — ")+t.Assessment)
+		if t.ProposedReply != "" {
+			body = append(body, dimStyle.Render("reply it suggests: ")+t.ProposedReply)
+		}
+	}
+	if m.mine(d) {
+		body = append(body, "", "now: "+threadStatus(m.review, d, t))
+	}
+	body = append(body, "")
+	for i, it := range m.threadCardItems(d) {
+		body = append(body, cardItem(i, m.threadCardSel, it, w))
+	}
+	title := fmt.Sprintf("thread · %s:%d · @%s", d.File, d.Line, d.Author)
+	return modalContent{title, "enter · esc back", body}
+}
+
+func (m *model) handleThreadCardKey(msg tea.KeyMsg) tea.Cmd {
+	d, ok := m.cardThread()
+	if !ok {
+		m.threadCard = ""
+		return nil
+	}
+	items := m.threadCardItems(d)
+	k := msg.String()
+	if i, ok := digitPick(k, len(items)); ok {
+		m.threadCardSel, k = i, "enter"
+	}
+	switch k {
+	case "j", "down":
+		m.threadCardSel = min(m.threadCardSel+1, len(items)-1)
+	case "k", "up":
+		m.threadCardSel = max(m.threadCardSel-1, 0)
+	case "esc", "q":
+		m.threadCard = ""
+	case "enter":
+		m.threadCard = ""
+		m.threadAction(d, items[m.threadCardSel])
+	}
+	return nil
+}
+
+func (m *model) threadAction(d state.Discussion, item string) {
+	t := m.review.ThreadState(d)
+	switch {
+	case item == "resolve":
+		m.decideThread(d.ID, state.VerdictResolve, "")
+	case item == "reply and keep open":
+		reply := cmp.Or(t.Reply, t.ProposedReply)
+		m.composing, m.composeKind, m.composeThread = true, kindThreadReply, d.ID
+		m.input, m.inputPos = []rune(reply), len([]rune(reply))
+	case strings.HasPrefix(item, "take the agent's"):
+		m.decideThread(d.ID, t.Proposed, t.ProposedReply)
+	case item == "undo the decision":
+		m.decideThread(d.ID, state.VerdictNone, "")
+	default:
+		m.startChat(true)
+		m.composeThread = d.ID
+	}
+}
+
+func (m *model) threadsWaiting() string {
+	n := m.pendingThreads()
+	if n == 0 {
+		return ""
+	}
+	what := "threads of yours wait"
+	if n == 1 {
+		what = "thread of yours waits"
+	}
+	return hotStyle.Render(fmt.Sprintf("%d answered %s for your decision · press %s",
+		n, what, m.keys().key("replies")))
 }

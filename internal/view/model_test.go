@@ -2532,3 +2532,46 @@ func TestPublishFromViewer(t *testing.T) {
 		t.Fatalf("closing tells the agent it is published: %+v", *sent)
 	}
 }
+
+func TestThreadCardInCode(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.MR = &state.MR{IID: 7, Title: "guard", Me: "me"}
+	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "me", Body: "return an error",
+		File: "a.go", Line: 2, Resolvable: true, Notes: []state.Note{
+			{Author: "me", Body: "return an error"}, {Author: "alice", Body: "fixed in b.go"}}}}
+	m.review.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "the error is returned now",
+		Proposed: state.VerdictResolve}}
+	m.store = state.Store{Dir: t.TempDir(), Key: "k"}
+	if err := m.store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: "return an error",
+		NoteKind: "mr", NoteLabel: "YOU ↩2", Thread: "d1"})
+	m.relist()
+	m.cursor = 4
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "enter open the thread · R all your threads") {
+		t.Fatalf("a thread row says how to open it: %q", ansi.Strip(f))
+	}
+	m.Update(key("enter"))
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"┌ thread · a.go:2 · @me", "alice │ fixed in b.go",
+		"agent: resolve — the error is returned now", " 3  take the agent's: resolve"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("thread card lacks %q:\n%s", want, v)
+		}
+	}
+	m.Update(key("1"))
+	r, err := m.store.LoadCurrent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th := r.ThreadState(r.Discussions[0]); !th.Decided() || th.Verdict != state.VerdictResolve {
+		t.Fatalf("1 resolves the thread: %+v", th)
+	}
+	if label, done := m.threadBadge(m.review.Discussions[0]); label != "✓ RESOLVE" || !done {
+		t.Fatalf("the row shows it resolved: %q %v", label, done)
+	}
+}

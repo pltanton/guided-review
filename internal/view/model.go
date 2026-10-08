@@ -130,43 +130,45 @@ type model struct {
 	lspServers   map[string][]string
 	reveal       map[string][][2]int
 
-	composing   bool
-	composeKind string
-	cmdMode     rune
-	history     []string
-	histIdx     int
-	paletteSel  int
-	search      string
-	input       []rune
-	inputPos    int
-	composeRef  int
-	raw         bool
-	deleteArmed int
-	gateOpen    bool
-	pub         *publishCard
-	staleSteps  []string
-	staleSel    int
-	finishCard  bool
-	finishSel   int
-	approvePick int
-	autoVerdict bool
-	gateSel     int
-	notice      string
-	lspStep     string
-	seen        map[string]bool
-	flow        []flowEntry
-	rawSeverity state.Severity
-	anchorFile  string
-	anchorLines string
-	inlineAt    int
-	sugOn       bool
-	sugFocus    bool
-	altInput    []rune
-	altPos      int
-	listW       int
-	chatting    bool
-	chatAbout   string
-	chatTopic   string
+	composing     bool
+	composeKind   string
+	cmdMode       rune
+	history       []string
+	histIdx       int
+	paletteSel    int
+	search        string
+	input         []rune
+	inputPos      int
+	composeRef    int
+	raw           bool
+	deleteArmed   int
+	gateOpen      bool
+	threadCard    string
+	threadCardSel int
+	pub           *publishCard
+	staleSteps    []string
+	staleSel      int
+	finishCard    bool
+	finishSel     int
+	approvePick   int
+	autoVerdict   bool
+	gateSel       int
+	notice        string
+	lspStep       string
+	seen          map[string]bool
+	flow          []flowEntry
+	rawSeverity   state.Severity
+	anchorFile    string
+	anchorLines   string
+	inlineAt      int
+	sugOn         bool
+	sugFocus      bool
+	altInput      []rune
+	altPos        int
+	listW         int
+	chatting      bool
+	chatAbout     string
+	chatTopic     string
 
 	send   func(inbox.Event) error
 	status string
@@ -331,8 +333,10 @@ func (m *model) notes() []Note {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
+		label, dim := m.threadBadge(d)
 		out = append(out, Note{
-			File: d.File, Line: d.Line, Kind: "mr", Label: "@" + d.Author, Text: body,
+			File: d.File, Line: d.Line, Kind: "mr", Label: label, Text: body, Dim: dim,
+			Thread: d.ID,
 		})
 	}
 	return out
@@ -395,6 +399,8 @@ func (m *model) act() tea.Cmd {
 		m.next()
 	case cur.GapTo > 0 || cur.Kind == RowFold:
 		m.toggleFold()
+	case cur.Kind == RowNote && cur.Thread != "":
+		m.threadCard, m.threadCardSel = cur.Thread, 0
 	case cur.Kind == RowNote && cur.Ref > 0:
 		m.startEdit()
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
@@ -810,6 +816,9 @@ func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "esc", "q":
 		m.gateOpen = false
+	case m.keys().key("replies"):
+		m.gateOpen = false
+		m.openThreads()
 	}
 	return nil
 }
@@ -916,6 +925,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleFinishCardKey(msg)
 	case m.pub != nil:
 		return m.handlePublishKey(msg)
+	case m.threadCard != "":
+		return m.handleThreadCardKey(msg)
 	case len(m.staleSteps) > 0:
 		return m.handleStaleKey(msg)
 	case m.preview != "":

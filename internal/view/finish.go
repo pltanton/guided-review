@@ -366,6 +366,9 @@ func (m *model) finishCardModal(w int) modalContent {
 			body = append(body, strings.Split(ansi.Wrap(l, max(w, 20), ""), "\n")...)
 		}
 	}
+	if waiting := m.threadsWaiting(); waiting != "" {
+		body = append(body, "", waiting)
+	}
 	if m.askApprove(verdict) {
 		body = append(body, "", hotStyle.Render("approve the MR when it is published? then the result"))
 	}
@@ -407,6 +410,9 @@ func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 		m.finishSel = max(m.finishSel-1, 0)
 	case "esc", "q":
 		m.finishCard = false
+	case m.keys().key("replies"):
+		m.finishCard = false
+		m.openThreads()
 	case "enter":
 		if len(items) == 2 {
 			m.approvePick = m.finishSel + 1
