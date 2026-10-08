@@ -143,6 +143,8 @@ type model struct {
 	raw           bool
 	deleteArmed   int
 	gateOpen      bool
+	themeSel      int
+	themeWas      string
 	threadCard    string
 	threadCardSel int
 	pub           *publishCard
@@ -449,6 +451,11 @@ func (m *model) applyConfig(c config.Config) {
 	m.nowrap = c.View.NoWrap
 	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
 	m.context = m.baseCtx
+	if c.View.Theme != "" {
+		if err := applyTheme(c.View.Theme); err != nil {
+			m.err = err
+		}
+	}
 	if c.View.Style != "" {
 		styleName = c.View.Style
 	}
@@ -927,6 +934,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handlePublishKey(msg)
 	case m.threadCard != "":
 		return m.handleThreadCardKey(msg)
+	case m.themeWas != "":
+		return m.handleThemeKey(msg)
 	case len(m.staleSteps) > 0:
 		return m.handleStaleKey(msg)
 	case m.preview != "":

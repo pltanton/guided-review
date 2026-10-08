@@ -55,3 +55,44 @@ func TestLoad(t *testing.T) {
 		t.Fatal("broken repo file: want error")
 	}
 }
+
+func TestSaveTheme(t *testing.T) {
+	tests := []struct {
+		name string
+		give string
+		want string
+	}{
+		{"no file", "", "view:\n  theme: nord\n"},
+		{"only comments", "# view:\n#   split: false\n", "# view:\n#   split: false\n\nview:\n  theme: nord\n"},
+		{"keeps other settings", "diff: patience\nview:\n  split: true\n",
+			"diff: patience\nview:\n    split: true\n    theme: nord\n"},
+		{"replaces the theme", "view:\n  theme: dracula\n", "view:\n    theme: nord\n"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if tt.give != "" {
+				if err := os.WriteFile(path, []byte(tt.give), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := config.SaveTheme(path, "nord"); err != nil {
+				t.Fatal(err)
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tt.want {
+				t.Errorf("SaveTheme wrote\n%s\nwant\n%s", got, tt.want)
+			}
+		})
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("- a list\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveTheme(path, "nord"); err == nil {
+		t.Error("SaveTheme on a list: want an error")
+	}
+}

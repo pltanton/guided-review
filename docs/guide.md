@@ -142,6 +142,10 @@ your session, which applies them and offers another round.
 - `gr config init` writes `~/.config/guided-review/config.yaml` with every setting
   commented out: default view, diff algorithm, language servers, key bindings.
 - `gr config` shows the effective settings and reports key conflicts.
+- Colours: `:theme` in the viewer tries each theme live and `enter` saves it as
+  `theme:` under `view:`. Besides the default there are catppuccin (mocha, latte),
+  gruvbox (dark, light), nord, dracula, tokyonight, one-dark, solarized (dark, light)
+  and github (dark, light); `style:` still picks the code highlighting on its own.
 - `.review.yaml` in a repository:
 
       domain: finance          # raises the bar for money-related changes

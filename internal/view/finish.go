@@ -20,9 +20,7 @@ const finishWidth = 110
 var (
 	boldMarkdown  = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	severityHead  = regexp.MustCompile("^(?:`[^`]+` )?\\*\\*(\\w+)\\*\\* ?")
-	severityTones = map[string]tone{
-		"blocker": badTone, "major": warnTone, "minor": agentTone, "nit": mutedTone,
-	}
+	severityTones map[string]tone
 )
 
 type finishCard struct {

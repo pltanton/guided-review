@@ -3,12 +3,14 @@ package view
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/pltanton/guided-review/internal/config"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -100,6 +102,13 @@ func (m *model) drawModal(out []string) {
 		return
 	}
 	room := len(out) - 2
+	if m.themeWas != "" {
+		c := m.themeModal()
+		w, h := min(max(m.width-4, 8), themeCardWidth), min(len(c.body)+2, room)
+		m.modalY = 1
+		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), m.modalY, m.width-w-1)
+		return
+	}
 	w, h := max(m.width, 8), room
 	if !m.fullModal() {
 		w = min(max(m.width-4, 8), cardWidth)
@@ -319,7 +328,7 @@ func (m *model) gateModal(w int) modalContent {
 
 func (m *model) blocked() bool {
 	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard || m.pub != nil ||
-		m.threadCard != "" ||
+		m.threadCard != "" || m.themeWas != "" ||
 		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"
 }
@@ -374,4 +383,71 @@ func digitPick(k string, n int) (int, bool) {
 		return 0, false
 	}
 	return int(k[0] - '1'), true
+}
+
+const themeCardWidth = 34
+
+func (m *model) openThemes() {
+	m.themeWas, m.themeSel = themeName, max(slices.Index(Themes(), themeName), 0)
+}
+
+func (m *model) themeModal() modalContent {
+	var body []string
+	for i, name := range Themes() {
+		if name == m.themeWas {
+			name += dimStyle.Render("  (was)")
+		}
+		body = append(body, cardItem(i, m.themeSel, name, themeCardWidth-4))
+	}
+	return modalContent{"theme", "j/k try · enter save · esc", body}
+}
+
+func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
+	names := Themes()
+	switch msg.String() {
+	case "j", "down":
+		m.themeSel = min(m.themeSel+1, len(names)-1)
+	case "k", "up":
+		m.themeSel = max(m.themeSel-1, 0)
+	case "esc", "q":
+		m.setTheme(m.themeWas)
+		m.themeWas = ""
+		return nil
+	case "enter":
+		m.themeWas = ""
+		m.saveTheme(names[m.themeSel])
+		return nil
+	default:
+		if i, ok := digitPick(msg.String(), len(names)); ok {
+			m.themeSel = i
+		}
+	}
+	m.setTheme(names[m.themeSel])
+	return nil
+}
+
+func (m *model) setTheme(name string) {
+	if name == themeName {
+		return
+	}
+	if err := applyTheme(name); err != nil {
+		m.err = err
+		return
+	}
+	if m.src != nil {
+		m.src = newGitSource(m.ctx, m.repo, m.algo, m.src.base, m.src.head)
+		m.rebuild(false)
+	}
+}
+
+func (m *model) saveTheme(name string) {
+	path, err := config.UserPath()
+	if err == nil {
+		err = config.SaveTheme(path, name)
+	}
+	if err != nil {
+		m.err = fmt.Errorf("theme %s is on for now, saving it failed: %w", name, err)
+		return
+	}
+	m.status = "theme " + name + " saved to " + path
 }

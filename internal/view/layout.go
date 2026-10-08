@@ -18,25 +18,38 @@ import (
 )
 
 var (
-	addStyle      = okTone.fg()
-	delStyle      = badTone.fg()
-	hotStyle      = warnTone.fg().Bold(true)
-	dimStyle      = mutedTone.fg()
-	boldStyle     = textTone.fg().Bold(true)
-	fileStyle     = textTone.fg().Bold(true)
-	fileInfoStyle = mutedTone.fg()
-	cursorStyle   = accentTone.fg().Bold(true)
-	agentStyle    = agentTone.fg().Bold(true)
-	youStyle      = youTone.fg().Bold(true)
-	buttonStyle   = textTone.fg().Background(surfaceTone.color())
-	keyStyle      = accentTone.fg().Background(surfaceTone.color()).Bold(true)
-	foldStyle     = badTone.fg().Faint(true)
-	gapStyle      = blueTone.fg()
-	fieldStyle    = mutedTone.fg().Background(surfaceTone.color())
-	labelStyle    = mutedTone.fg().Bold(true)
-	chapterStyle  = accentTone.fg()
-	chatStyle     = accentTone.fg().Bold(true)
+	addStyle, delStyle, hotStyle, dimStyle, boldStyle, fileStyle     lipgloss.Style
+	fileInfoStyle, cursorStyle, agentStyle, youStyle, buttonStyle    lipgloss.Style
+	keyStyle, foldStyle, gapStyle, fieldStyle, labelStyle, chatStyle lipgloss.Style
+	chapterStyle                                                     lipgloss.Style
 )
+
+func init() { restyle(defaultTones.noteBg) }
+
+func restyle(noteBg map[string]tone) {
+	addStyle, delStyle = okTone.fg(), badTone.fg()
+	hotStyle, dimStyle = warnTone.fg().Bold(true), mutedTone.fg()
+	boldStyle, fileStyle = textTone.fg().Bold(true), textTone.fg().Bold(true)
+	fileInfoStyle, cursorStyle = mutedTone.fg(), accentTone.fg().Bold(true)
+	agentStyle, youStyle = agentTone.fg().Bold(true), youTone.fg().Bold(true)
+	buttonStyle = textTone.fg().Background(surfaceTone.color())
+	keyStyle = accentTone.fg().Background(surfaceTone.color()).Bold(true)
+	foldStyle, gapStyle = badTone.fg().Faint(true), blueTone.fg()
+	fieldStyle = mutedTone.fg().Background(surfaceTone.color())
+	labelStyle, chapterStyle, chatStyle = mutedTone.fg().Bold(true), accentTone.fg(),
+		accentTone.fg().Bold(true)
+	noteKinds = map[string]noteKind{
+		"note":    {agentTone, noteBg["note"], "NOTE"},
+		"spec":    {badTone, noteBg["spec"], "SPEC"},
+		"hotspot": {warnTone, noteBg["hotspot"], "RISK"},
+		"comment": {youTone, noteBg["comment"], "YOU"},
+		"mr":      {blueTone, noteBg["mr"], "MR"},
+		"pending": {warnTone, noteBg["pending"], "…"},
+	}
+	severityTones = map[string]tone{
+		"blocker": badTone, "major": warnTone, "minor": agentTone, "nit": mutedTone,
+	}
+}
 
 const (
 	configHint = "~/.config/guided-review/config.yaml (gr config init)"
@@ -1016,17 +1029,12 @@ const (
 	maxFlowCalls = 4
 )
 
-var noteKinds = map[string]struct {
+type noteKind struct {
 	tone, bg tone
 	label    string
-}{
-	"note":    {agentTone, tone{"#E8F6F8", "#162529"}, "NOTE"},
-	"spec":    {badTone, tone{"#FBEDED", "#2A1A1D"}, "SPEC"},
-	"hotspot": {warnTone, tone{"#FBF4E4", "#292316"}, "RISK"},
-	"comment": {youTone, tone{"#FAEBF3", "#291827"}, "YOU"},
-	"mr":      {blueTone, tone{"#EAF0FB", "#172033"}, "MR"},
-	"pending": {warnTone, tone{"#FBF4E4", "#292316"}, "…"},
 }
+
+var noteKinds map[string]noteKind
 
 func noteBadge(kind, label string) string {
 	return " " + cmp.Or(label, noteKinds[kind].label) + " "

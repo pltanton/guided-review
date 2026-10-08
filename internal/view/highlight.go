@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-var styleName = "monokai"
+var styleName = defaultTones.chroma
 
 func Highlight(path, content string) []string {
 	plain := splitLines(content)
