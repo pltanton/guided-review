@@ -143,6 +143,11 @@ type model struct {
 	raw           bool
 	deleteArmed   int
 	gateOpen      bool
+	newsOpen      bool
+	newsAll       bool
+	newsTop       int
+	newsFile      string
+	newsChecked   bool
 	themeSel      int
 	themeWas      string
 	threadCard    string
@@ -200,6 +205,9 @@ func newModel(ctx context.Context, o Options) *model {
 		algo:       gitx.DefaultDiffAlgorithm,
 	}
 	m.applyConfig(o.Config)
+	if dir, err := os.UserCacheDir(); err == nil {
+		m.newsFile = filepath.Join(dir, "guided-review", "seen-version")
+	}
 	m.lspDo = m.defaultLSP
 	m.runGr = func(args ...string) (string, error) {
 		bin, err := os.Executable()
@@ -936,6 +944,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleThreadCardKey(msg)
 	case m.themeWas != "":
 		return m.handleThemeKey(msg)
+	case m.newsOpen:
+		return m.handleNewsKey(msg)
 	case len(m.staleSteps) > 0:
 		return m.handleStaleKey(msg)
 	case m.preview != "":

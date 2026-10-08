@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 
+	guidedreview "github.com/pltanton/guided-review"
+
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 )
@@ -34,6 +36,7 @@ review
           [--approve] [--partial]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
                        and print that dir (--dir: only print it)
+  version              print the version (the viewer: :changelog lists what changed)
   publish              post the export to the MR with glab or gh (resumes what did not go out)
   mark-published       mark what the publish script logged to <export dir>/published.jsonl
   done
@@ -144,6 +147,9 @@ func run(ctx context.Context, e env, args []string) error {
 	switch args[0] {
 	case "help", "-h", "--help":
 		e.printf("%s", usage)
+		return nil
+	case "version", "--version":
+		e.println("gr " + guidedreview.Version)
 		return nil
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", args[0], usage)

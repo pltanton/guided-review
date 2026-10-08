@@ -647,6 +647,10 @@ func (m *model) View() string {
 	if m.listW != m.mainWidth() {
 		m.relist()
 	}
+	if !m.newsChecked {
+		m.newsChecked = true
+		m.showNewsOnce()
+	}
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()

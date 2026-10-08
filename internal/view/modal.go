@@ -72,6 +72,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.publishModal(w), true
 	case m.threadCard != "":
 		return m.threadCardModal(w), true
+	case m.newsOpen:
+		return m.newsModal(w, h), true
 	case len(m.staleSteps) > 0:
 		return m.staleModal(w), true
 	case m.focusPlan:
@@ -92,7 +94,7 @@ const (
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
 		m.chapterOpen == "" && !m.gateOpen && !m.finishCard && m.pub == nil &&
-		m.threadCard == "" &&
+		m.threadCard == "" && !m.newsOpen &&
 		len(m.staleSteps) == 0 &&
 		!m.focusPlan
 }
@@ -328,7 +330,7 @@ func (m *model) gateModal(w int) modalContent {
 
 func (m *model) blocked() bool {
 	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard || m.pub != nil ||
-		m.threadCard != "" || m.themeWas != "" ||
+		m.threadCard != "" || m.themeWas != "" || m.newsOpen ||
 		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"
 }

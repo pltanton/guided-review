@@ -172,6 +172,8 @@ func DefaultActions() []Action {
 
 		{Name: "wrap", Group: vw, Desc: "wrap long lines / cut them and scroll sideways",
 			Keys: k("W"), run: do(func(m *model) { m.setWrap(m.nowrap) })},
+		{Name: "changelog", Group: vw, Desc: "what changed in each version", Keys: k(),
+			run: do((*model).openChangelog)},
 		{Name: "theme", Group: vw, Desc: "pick a colour theme (saved to your config)", Keys: k(),
 			run: do((*model).openThemes)},
 		{Name: "chapter", Group: vw, Desc: "the chapter's intro", Keys: k("I"),
