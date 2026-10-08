@@ -28,7 +28,7 @@ var (
 	previewActions = []string{"finish", "edit-comment", "delete-comment", "message", "act"}
 	essentials     = []string{
 		"down", "up", "next-hunk", "prev-hunk", "act", "select", "message", "ask", "next",
-		"skip", "check-risk", "details", "plan", "finish", "command", "quit",
+		"skip", "check-risk", "plan", "finish", "command", "quit",
 	}
 )
 
@@ -143,13 +143,10 @@ func DefaultActions() []Action {
 			run: do((*model).next)},
 		{Name: "act", Group: rev, Desc: "comment here · edit your comment · details of a note ·" +
 			" open ⋯ / ▸ · next step at the end", Keys: k("enter"), run: (*model).act},
-		{Name: "message", Group: rev, Desc: "ai comment: the agent writes it from your words",
+		{Name: "message", Group: rev, Desc: "chat with the agent about this line; esc leaves",
 			Keys: k("c"), run: do((*model).messageOrOpen)},
-		{Name: "message-general", Group: rev, Desc: "message the agent without a line",
-			Keys: k("C"), run: do(func(m *model) {
-				m.startCompose(inbox.KindMessage)
-				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
-			})},
+		{Name: "message-general", Group: rev, Desc: "chat with the agent without a line",
+			Keys: k("C"), run: do(func(m *model) { m.startChat(true) })},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
 			Keys: k("a"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
 		{Name: "check-risk", Group: rev, Desc: "check off the risk under the cursor (again: reopen)",
@@ -225,7 +222,7 @@ func (m *model) messageOrOpen() {
 		m.toggleFold()
 		return
 	}
-	m.startCompose(inbox.KindMessage)
+	m.startChat(false)
 }
 
 func (m *model) focusAgent() {

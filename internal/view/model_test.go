@@ -103,9 +103,14 @@ func TestEventsFromKeys(t *testing.T) {
 	m.Update(key("backspace"))
 	m.Update(key("e"))
 	m.Update(key("enter"))
+	if !m.composing || !m.chatting {
+		t.Fatal("after sending, the chat input stays open")
+	}
+	m.Update(key("esc"))
 	m.Update(key("c"))
 	typeText(m, "ok")
 	m.Update(key("enter"))
+	m.Update(key("esc"))
 	m.Update(key("S"))
 	typeText(m, "trivial")
 	m.Update(key("enter"))
@@ -517,6 +522,7 @@ func TestStepPreview(t *testing.T) {
 	if len(*sent) != 1 || (*sent)[0].Step != "s1" {
 		t.Fatalf("message in preview must carry s1: %+v", *sent)
 	}
+	m.Update(key("esc"))
 	m.Update(key("L"))
 	if m.step.ID != "s2" || m.viewStep != "" {
 		t.Fatalf("L back to current: step %s view %q", m.step.ID, m.viewStep)
@@ -640,17 +646,19 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.relist()
 	m.cursor = 1
 	m.Update(key("c"))
-	if out := ansi.Strip(m.View()); !strings.Contains(out, " AI COMMENT a.go:1 ") {
+	if out := ansi.Strip(m.View()); !strings.Contains(out, " CHAT a.go:1 ") {
 		t.Fatalf("prompt must show the anchor:\n%s", out)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	typeText(m, "general")
 	m.Update(key("enter"))
+	m.Update(key("esc"))
 
 	m.cursor = 3
 	m.Update(key("c"))
 	typeText(m, "why nit?")
 	m.Update(key("enter"))
+	m.Update(key("esc"))
 
 	m.Update(key("E"))
 	if string(m.input) != "rename x" || !m.raw {
@@ -718,6 +726,7 @@ func TestExtraViews(t *testing.T) {
 	if len(*sent) != 1 || (*sent)[0].Step != "~boilerplate" {
 		t.Fatalf("sent %+v", *sent)
 	}
+	m.Update(key("esc"))
 	m.Update(key("esc"))
 	if m.step.ID != "s1" {
 		t.Fatalf("esc must return to the current step, got %s", m.step.ID)
@@ -1165,7 +1174,7 @@ func TestRawComment(t *testing.T) {
 		return "comment #4 nit a.go:2\n", nil
 	}
 	m.cursor = 2
-	for _, k := range []tea.KeyMsg{key("c"), {Type: tea.KeyCtrlR}, {Type: tea.KeyShiftTab}} {
+	for _, k := range []tea.KeyMsg{key("enter"), {Type: tea.KeyShiftTab}} {
 		m.Update(k)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
@@ -1283,7 +1292,7 @@ func TestCursorHint(t *testing.T) {
 		t.Fatalf("plain line footer: %q", f)
 	}
 	m.seek(func(l line) bool { return l.Kind == RowNote })
-	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "o fold · i details") {
+	if f := footer(); !strings.HasSuffix(strings.TrimSpace(f), "enter details · o fold") {
 		t.Fatalf("note footer: %q", f)
 	}
 	m.lines[m.cursor].Ref = 4
@@ -1436,7 +1445,7 @@ func TestNoteDetails(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.seek(func(l line) bool { return l.Kind == RowNote })
 	note := m.current()
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	if m.popup == nil || m.popup.kind != "detail" ||
 		!strings.Contains(ansi.Strip(strings.Join(m.popup.lines, "")), "writing the details") {
 		t.Fatalf("i must open a waiting popup: %+v", m.popup)
@@ -1454,7 +1463,7 @@ func TestNoteDetails(t *testing.T) {
 		t.Fatalf("popup must show the detail:\n%s", body)
 	}
 	m.Update(key("esc"))
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	if len(*sent) != 1 || !strings.Contains(ansi.Strip(strings.Join(m.popup.lines, "\n")), "fee") {
 		t.Fatal("a stored detail opens without asking the agent again")
 	}
@@ -1511,7 +1520,7 @@ func TestDetailPopupUX(t *testing.T) {
 	m.relist()
 	m.seek(func(l line) bool { return l.Kind == RowNote && l.Line == 59 })
 	m.clamp()
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	detail := strings.Repeat("detail line\n", 30)
 	m.step.Annotations = []state.Annotation{
 		{File: "a.go", Line: 59, Kind: "note", Text: "late note", Detail: detail},
@@ -1786,7 +1795,7 @@ func TestCheckOffRisk(t *testing.T) {
 		!slices.Equal(ran[1], []string{"step", "check", "--undo", "s1", "1"}) {
 		t.Fatalf("x again reopens it: ran %v", ran)
 	}
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	if !strings.Contains(m.popupHint(), "x check off the risk") {
 		t.Fatalf("details of a risk offer to check it off: %q", m.popupHint())
 	}
@@ -1905,7 +1914,7 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	note := m.current()
 	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
 		Text: note.Text, Detail: "claim races in a.go:7 and (a.go:7), not in missing.go:3."}}
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	if got := m.popup.refs; len(got) != 1 || got[0] != (lspLoc{Path: "a.go", Line: 7}) {
 		t.Fatalf("refs = %+v, want only a.go:7", got)
 	}
@@ -2049,7 +2058,7 @@ func TestTopNoteDetails(t *testing.T) {
 	}, m.rows...)
 	m.relist()
 	m.cursor = 1
-	m.Update(key("i"))
+	m.Update(key("enter"))
 	if m.popup == nil || len(*sent) != 0 {
 		t.Fatalf("details of a step-level note open locally: popup %v sent %+v", m.popup, *sent)
 	}
@@ -2255,5 +2264,33 @@ func TestHelpFromLSPWindow(t *testing.T) {
 	m.Update(key("?"))
 	if m.help || m.popup.filter != "?" {
 		t.Fatal("while filtering, ? is text")
+	}
+}
+
+func TestInfoModalScrollStopsAtTheEnd(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.height = 16
+	m.seek(func(l line) bool { return l.Kind == RowNote })
+	note := m.current()
+	var d []string
+	for i := range 30 {
+		d = append(d, fmt.Sprintf("paragraph %d", i))
+	}
+	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+		Text: note.Text, Detail: strings.Join(d, "\n\n")}}
+	m.Update(key("enter"))
+	m.View()
+	full := strings.Count(ansi.Strip(m.View()), "│ ")
+	for range 100 {
+		m.Update(key("j"))
+	}
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "paragraph 29") || strings.Count(v, "│ ") != full {
+		t.Fatalf("scrolling stops with the last page full:\n%s", v)
+	}
+	m.Update(key("k"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "paragraph 28") ||
+		strings.Contains(v, "paragraph 29") && strings.Contains(v, "paragraph 23") {
+		t.Fatalf("one k moves back right away:\n%s", v)
 	}
 }

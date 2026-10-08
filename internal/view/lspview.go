@@ -520,6 +520,10 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 		m.toggleRisk(p.risk)
 		return nil
 	}
+	if k := msg.String(); p.kind == "detail" && (k == "enter" || k == "c") {
+		m.discussNote()
+		return nil
+	}
 	if p.kind == "peek" {
 		if cmd, handled := m.peekKey(p, msg.String()); handled {
 			return cmd
@@ -593,9 +597,11 @@ func (m *model) popupHint() string {
 		if m.step.Hotspots[p.risk-1].Checked {
 			verb = "reopen the risk"
 		}
-		return "x " + verb + " · j/k scroll · esc close"
+		return "enter discuss · x " + verb + " · esc close"
 	case p.kind == "detail" && len(p.refs) > 0:
-		return "1-9 open code · j/k scroll · esc close"
+		return "enter discuss · 1-9 open code · esc close"
+	case p.kind == "detail":
+		return "enter discuss · j/k scroll · esc close"
 	}
 	return "j/k scroll · esc close"
 }
@@ -653,7 +659,7 @@ func (m *model) popupBody(width, rows int) []string {
 			out = append(out, l)
 		}
 	default:
-		p.top = max(0, min(p.top, len(p.lines)-1))
+		p.top = max(0, min(p.top, len(p.lines)-rows))
 		out = p.lines[p.top:]
 	}
 	if p.kind == "peek" && p.gKey && len(out) > 0 {

@@ -123,8 +123,8 @@ func TestComposeStatuslinePlacement(t *testing.T) {
 	typeText(m, "hello there")
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	if n := len(lines); n != m.height || strings.TrimSpace(lines[n-2]) != "▌ hello there█" ||
-		!strings.HasPrefix(lines[n-1], " MSG ") ||
-		!strings.HasSuffix(lines[n-1], "esc cancel") {
+		!strings.HasPrefix(lines[n-1], " CHAT ") ||
+		!strings.HasSuffix(lines[n-1], "esc leave the chat") {
 		t.Fatalf("bottom: the text has its line, the statusline sits below:\n%s",
 			strings.Join(lines, "\n"))
 	}
@@ -136,7 +136,7 @@ func TestComposeStatuslinePlacement(t *testing.T) {
 	}
 	n := len(lines)
 	if n != m.height || side(lines[n-3]) != "▌ hello there█" ||
-		!strings.HasPrefix(side(lines[n-2]), "MSG ") {
+		!strings.HasPrefix(side(lines[n-2]), "CHAT ") {
 		t.Fatalf("side chat: same input and statusline:\n%s", strings.Join(lines, "\n"))
 	}
 
@@ -172,7 +172,7 @@ func TestShiftEnterAddsLine(t *testing.T) {
 		t.Fatalf("shift+enter adds a line: composing %v %q", m.composing, string(m.input))
 	}
 	m.Update(msgs[len(seqs)])
-	if m.composing || len(*sent) != 1 || (*sent)[0].Text != "a\nb\nb\nb" {
+	if len(m.input) != 0 || len(*sent) != 1 || (*sent)[0].Text != "a\nb\nb\nb" {
 		t.Fatalf("plain enter still sends: %+v", *sent)
 	}
 	if _, ok := modifiedEnter("?CSI[50 55 59 53 59 57 126]?"); ok {

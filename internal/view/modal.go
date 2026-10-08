@@ -56,7 +56,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		if m.helpAll {
 			hint = "j/k scroll · any key closes · remap in " + configHint
 		}
-		return modalContent{"keys", hint, lines[min(m.helpTop, len(lines)):]}, true
+		m.helpTop = max(0, min(m.helpTop, len(lines)-h))
+		return modalContent{"keys", hint, lines[m.helpTop:]}, true
 	}
 	switch {
 	case m.chapterOpen != "":

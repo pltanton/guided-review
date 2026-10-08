@@ -152,6 +152,8 @@ type model struct {
 	anchorFile  string
 	anchorLines string
 	inlineAt    int
+	chatting    bool
+	chatAbout   string
 
 	send   func(inbox.Event) error
 	status string

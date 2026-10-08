@@ -143,9 +143,9 @@ func (m *model) cursorHint() string {
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
 	case cur.Risk > 0:
-		return fmt.Sprintf("%s check off · %s details", k.key("check-risk"), k.key("details"))
+		return fmt.Sprintf("%s details · %s check off", k.key("act"), k.key("check-risk"))
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
-		return k.key("open") + " fold · " + k.key("details") + " details"
+		return k.key("act") + " details · " + k.key("open") + " fold"
 	case cur.Kind == RowNote:
 		return k.key("open") + " fold"
 	case cur.GapTo > 0 || cur.FoldKey != "":
@@ -502,6 +502,11 @@ func (m *model) composeMode() (
 	default:
 		if m.composeRef > 0 {
 			anchor = strings.TrimSpace(fmt.Sprintf("re #%d %s", m.composeRef, loc))
+		}
+		if m.chatting {
+			badge = "CHAT"
+			return badge, style, anchor, append(hints,
+				composeHint{"ctrl+j", "new line"}, composeHint{"esc", "leave the chat"})
 		}
 		if m.inlineCompose() {
 			badge, hints = "AI COMMENT", append(hints, composeHint{"tab", "ask"})

@@ -25,7 +25,7 @@ func (m *model) startCompose(kind string) {
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
-	m.raw, m.rawSeverity = false, ""
+	m.raw, m.rawSeverity, m.chatting, m.chatAbout = false, "", false, ""
 	defer m.placeInline()
 	switch kind {
 	case inbox.KindMessage:
@@ -35,6 +35,28 @@ func (m *model) startCompose(kind string) {
 			m.composing = false
 			m.status = "nothing to ask about here: put the cursor on code"
 		}
+	}
+}
+
+func (m *model) startChat(general bool) {
+	m.startCompose(inbox.KindMessage)
+	if general {
+		m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
+	}
+	m.chatting = m.composing
+}
+
+func (m *model) discussNote() {
+	p := m.popup
+	m.popup, m.popupStack, m.popupForward = nil, nil, nil
+	m.startChat(false)
+	if p == nil || !m.composing {
+		return
+	}
+	if p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots) {
+		m.chatAbout = "about the risk «" + m.step.Hotspots[p.risk-1].Q + "»: "
+	} else if m.anchorFile == "" {
+		m.chatAbout = "about " + p.title + ": "
 	}
 }
 
@@ -54,8 +76,8 @@ func (m *model) placeInline() {
 }
 
 func (m *model) inlineCompose() bool {
-	if !m.composing || m.cmdMode != 0 || m.step == nil || m.preview != "" || m.threads ||
-		m.composeThread != "" {
+	if !m.composing || m.chatting || m.cmdMode != 0 || m.step == nil || m.preview != "" ||
+		m.threads || m.composeThread != "" {
 		return false
 	}
 	switch m.composeKind {
@@ -141,7 +163,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.composing, m.input, m.composeThread = false, nil, ""
+		m.composing, m.input, m.composeThread, m.chatting, m.chatAbout = false, nil, "", false, ""
 		m.resume()
 	case tea.KeyCtrlJ:
 		m.insert([]rune{'\n'})
@@ -152,8 +174,12 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		}
 		defer m.resume()
 		text := strings.TrimSpace(string(m.input))
-		thread := m.composeThread
+		thread, raw := m.composeThread, m.rawMode()
 		m.composing, m.input, m.composeThread = false, nil, ""
+		if m.chatting && text != "" {
+			defer func() { m.composing = m.err == nil }()
+			text, m.chatAbout = m.chatAbout+text, ""
+		}
 		switch {
 		case m.composeKind == kindThreadReply:
 			m.decideThread(thread, state.VerdictOpen, text)
@@ -164,7 +190,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case text == "":
 		case m.composeKind == inbox.KindSkip && m.localSteps():
 			m.moveStep("skip", "--reason", text)
-		case m.rawMode():
+		case raw:
 			m.saveRaw(text)
 		default:
 			m.emit(inbox.Event{
@@ -173,7 +199,9 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 			})
 		}
 	case tea.KeyCtrlR:
-		m.raw = !m.raw
+		if m.inlineCompose() {
+			m.raw = !m.raw
+		}
 	case tea.KeyTab:
 		switch {
 		case !m.inlineCompose():
@@ -335,7 +363,8 @@ func (m *model) selected(i int) bool {
 }
 
 func (m *model) rawMode() bool {
-	return m.raw && (m.composeKind == inbox.KindMessage || m.composeKind == inbox.KindEdit)
+	return m.raw && m.inlineCompose() &&
+		(m.composeKind == inbox.KindMessage || m.composeKind == inbox.KindEdit)
 }
 
 func (m *model) severity() state.Severity {
