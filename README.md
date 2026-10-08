@@ -43,5 +43,6 @@ following its INSTALL.md, or see [Updating](INSTALL.md#updating) and
 
 - [How it works and settings](docs/guide.md)
 - [Manual installation](INSTALL.md), [Nix and home-manager](INSTALL.md#home-manager)
+- [Developing guided-review](docs/development.md)
 
 Apache-2.0, see [LICENSE](LICENSE).

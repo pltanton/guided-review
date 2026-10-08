@@ -153,14 +153,17 @@ inputs.guided-review = {
 
 ```nix
 { inputs, ... }: {
-  imports = [ inputs.guided-review.homeManagerModules.default ];
+  imports = [ inputs.guided-review.homeModules.default ];
   programs.guided-review = {
-    enable = true;        # puts gr on PATH
-    codex.enable = true;  # links the skills into ~/.codex/skills
+    enable = true;         # puts gr on PATH
+    codex.enable = true;   # links the skills into ~/.codex/skills
+    claude.enable = true;  # links them into ~/.claude/skills, for Claude Code without the plugin
   };
 }
 ```
 
-Claude Code still takes the skills and the Stop hook from its plugin
-([step 3](#3-the-skills)). Without home-manager, the flake's `overlays.default` adds
+The Claude Code plugin ([step 3](#3-the-skills)) brings the skills and the Stop hook;
+`claude.enable` only links the skills. `checkout = "/path/to/guided-review";` links the
+skills from a working copy instead of the package, see
+[docs/development.md](docs/development.md). Without home-manager, the flake's `overlays.default` adds
 `pkgs.guided-review` for NixOS or nix-darwin.

@@ -25,12 +25,24 @@
 
     overlays.default = final: _: {guided-review = gr final;};
 
-    homeManagerModules.default = import ./nix/home-manager.nix self;
+    homeModules.default = import ./nix/home-manager.nix self;
+    homeManagerModules.default = self.homeModules.default;
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
         inputsFrom = [(gr pkgs)];
-        packages = with pkgs; [gopls git tmux jq glab gh];
+        packages = with pkgs; [
+          gopls
+          golangci-lint
+          gotools
+          go-tools
+          errcheck
+          git
+          tmux
+          jq
+          glab
+          gh
+        ];
       };
     });
 
