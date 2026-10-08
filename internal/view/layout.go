@@ -472,7 +472,7 @@ func (m *model) composeMode() (
 			anchor = strings.TrimSpace(fmt.Sprintf("re #%d %s", m.composeRef, loc))
 		}
 		if m.chatting {
-			badge = "CHAT"
+			badge, anchor = "CHAT", cmp.Or(m.chatTopic, anchor)
 			return badge, style, anchor, append(hints,
 				composeHint{"ctrl+j", "new line"}, composeHint{"esc", "leave the chat"})
 		}

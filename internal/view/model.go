@@ -156,6 +156,7 @@ type model struct {
 	listW       int
 	chatting    bool
 	chatAbout   string
+	chatTopic   string
 
 	send   func(inbox.Event) error
 	status string

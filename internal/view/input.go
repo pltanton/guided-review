@@ -25,7 +25,7 @@ func (m *model) startCompose(kind string) {
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
 	m.composeRef, m.anchorFile, m.anchorLines, m.composeThread = 0, "", "", ""
-	m.raw, m.rawSeverity, m.chatting, m.chatAbout = false, "", false, ""
+	m.raw, m.rawSeverity, m.chatting, m.chatAbout, m.chatTopic = false, "", false, "", ""
 	defer m.placeInline()
 	switch kind {
 	case inbox.KindMessage:
@@ -54,9 +54,13 @@ func (m *model) discussNote() {
 		return
 	}
 	if p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots) {
-		m.chatAbout = "about the risk «" + m.step.Hotspots[p.risk-1].Q + "»: "
-	} else if m.anchorFile == "" {
-		m.chatAbout = "about " + p.title + ": "
+		q := m.step.Hotspots[p.risk-1].Q
+		m.chatAbout, m.chatTopic = "about the risk «"+q+"»: ", "⚑ "+q
+	} else {
+		m.chatTopic = p.title
+		if m.anchorFile == "" {
+			m.chatAbout = "about " + p.title + ": "
+		}
 	}
 }
 
@@ -163,7 +167,8 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	}
 	switch msg.Type {
 	case tea.KeyEsc:
-		m.composing, m.input, m.composeThread, m.chatting, m.chatAbout = false, nil, "", false, ""
+		m.composing, m.input, m.composeThread, m.chatting = false, nil, "", false
+		m.chatAbout, m.chatTopic = "", ""
 		m.resume()
 	case tea.KeyCtrlJ:
 		m.insert([]rune{'\n'})

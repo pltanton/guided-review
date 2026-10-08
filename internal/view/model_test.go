@@ -2292,3 +2292,26 @@ func TestChatCollapsed(t *testing.T) {
 		t.Fatal("esc folds it again")
 	}
 }
+
+func TestRiskChatShowsTopic(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Steps[0].Hotspots = []state.Hotspot{{Q: "second charge on retry?", Line: 2}}
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2,
+		Text: "second charge on retry?", NoteKind: "hotspot", Risk: 1})
+	m.relist()
+	m.cursor = 4
+	m.Update(key("i"))
+	m.Update(key("c"))
+	typeText(m, "no, the key dedupes")
+	m.Update(key("enter"))
+	if f := ansi.Strip(m.composeStatus(80)); !strings.Contains(f, "CHAT ⚑ second charge on retry?") {
+		t.Fatalf("a risk chat says which risk it is about, also after sending: %q", f)
+	}
+	if n := len(*sent); n == 0 || !strings.HasPrefix((*sent)[n-1].Text, "about the risk «second charge") {
+		t.Fatalf("the agent gets the risk with the message: %+v", *sent)
+	}
+	m.Update(key("esc"))
+	if m.chatTopic != "" {
+		t.Fatal("esc ends the topic")
+	}
+}
