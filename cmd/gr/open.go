@@ -26,12 +26,15 @@ func parentPID(ctx context.Context, pid int) int {
 	return ppid
 }
 
-func cmdPane(ctx context.Context, e env, _ []string) error {
-	tmux := e.tmux
-	if tmux == nil {
-		tmux = runTmux
+func (e env) tmuxRunner() tmuxRunner {
+	if e.tmux != nil {
+		return e.tmux
 	}
-	pane := agentPane(ctx, tmux, "", os.Getenv("TMUX_PANE"), os.Getppid(), parentPID)
+	return runTmux
+}
+
+func cmdPane(ctx context.Context, e env, _ []string) error {
+	pane := agentPane(ctx, e.tmuxRunner(), "", os.Getenv("TMUX_PANE"), os.Getppid(), parentPID)
 	if pane == "" {
 		e.println("not in tmux")
 		return nil
@@ -54,10 +57,7 @@ func cmdOpen(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return err
 	}
-	tmux := e.tmux
-	if tmux == nil {
-		tmux = runTmux
-	}
+	tmux := e.tmuxRunner()
 	pane := agentPane(ctx, tmux, *ret, os.Getenv("TMUX_PANE"), os.Getppid(), parentPID)
 	if pane == "" {
 		e.printf("not in tmux: ask the human to run the viewer in another terminal:\n"+

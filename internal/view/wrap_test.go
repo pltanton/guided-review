@@ -75,7 +75,9 @@ func TestLongLinesWrap(t *testing.T) {
 
 func TestNoWrapScrollsSideways(t *testing.T) {
 	m := longLineModel(t)
-	m.applyConfig(config.Config{View: config.View{NoWrap: true}})
+	if err := m.applyConfig(config.Config{View: config.View{NoWrap: true}}); err != nil {
+		t.Fatal(err)
+	}
 	m.seen = nil
 	rows := screenRows(m)
 	line := rows[rowsWith(rows, "total := fee(")]

@@ -25,7 +25,6 @@ const (
 	KindComment  = "comment"
 	KindAsk      = "ask"
 	KindDetail   = "detail"
-	KindReviewed = "reviewed"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"
@@ -95,15 +94,16 @@ func Wait(ctx context.Context, dir string, timeout, poll time.Duration) ([]Event
 		return nil, err
 	}
 	marker := filepath.Join(dir, waitingFile)
-	stamp := []byte(time.Now().Format(time.RFC3339Nano))
-	if err := os.WriteFile(filepath.Join(dir, lastWaitFile), stamp, 0o600); err != nil {
+	now := time.Now()
+	deadline := now.Add(timeout)
+	if err := writeStamp(filepath.Join(dir, lastWaitFile), now); err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(marker, stamp, 0o600); err != nil {
+	// The marker holds the deadline: a killed agent cannot remove it, so it expires instead.
+	if err := writeStamp(marker, deadline); err != nil {
 		return nil, err
 	}
 	defer func() { _ = os.Remove(marker) }()
-	deadline := time.Now().Add(timeout)
 	for {
 		evs, next, err := readFrom(dir, offset)
 		if err != nil {
@@ -172,12 +172,17 @@ func writeOffset(dir string, offset int64) error {
 	)
 }
 
-func WaitingSince(dir string) (time.Time, bool) {
-	return readStamp(filepath.Join(dir, waitingFile))
+func Waiting(dir string) bool {
+	deadline, ok := readStamp(filepath.Join(dir, waitingFile))
+	return ok && time.Now().Before(deadline)
 }
 
 func LastWait(dir string) (time.Time, bool) {
 	return readStamp(filepath.Join(dir, lastWaitFile))
+}
+
+func writeStamp(path string, t time.Time) error {
+	return os.WriteFile(path, []byte(t.Format(time.RFC3339Nano)), 0o600)
 }
 
 func readStamp(path string) (time.Time, bool) {
@@ -193,11 +198,7 @@ func MarkIdle(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(
-		filepath.Join(dir, idleFile),
-		[]byte(time.Now().Format(time.RFC3339Nano)),
-		0o600,
-	)
+	return writeStamp(filepath.Join(dir, idleFile), time.Now())
 }
 
 func IdleSince(dir string) (time.Time, bool) {

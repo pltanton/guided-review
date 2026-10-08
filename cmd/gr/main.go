@@ -23,7 +23,8 @@ review
                        against BASE itself when they share no history; --base: BRANCH only
   status [--gate]
   hunks
-  plan set [-f FILE]...
+  plan set [--route] [-f FILE]...   --route: a plan without explanations yet
+  plan fill [-f FILE]...            the explanations for steps of a --route plan
   step [show [ID] | next | skip --reason TEXT | goto ID | check [--undo] ID N]
   comment add --file F --lines N[-M] --severity S [--step ID] [--suggestion TEXT] BODY...
   comment list | resolve ID | delete ID | edit ID [--severity S] TEXT...
@@ -56,34 +57,30 @@ viewer channel
 
 type command func(ctx context.Context, e env, args []string) error
 
-var commands map[string]command
-
-func init() {
-	commands = map[string]command{
-		"init":           cmdInit,
-		"status":         cmdStatus,
-		"hunks":          cmdHunks,
-		"plan":           cmdPlan,
-		"step":           cmdStep,
-		"comment":        cmdComment,
-		"note":           cmdNote,
-		"discussions":    cmdDiscussions,
-		"thread":         cmdThread,
-		"prepare":        cmdPrepare,
-		"export":         cmdExport,
-		"mark-published": cmdMarkPublished,
-		"publish":        cmdPublish,
-		"done":           cmdDone,
-		"list":           cmdList,
-		"view":           cmdView,
-		"open":           cmdOpen,
-		"pane":           cmdPane,
-		"wait":           cmdWait,
-		"say":            cmdSay,
-		"progress":       cmdProgress,
-		"idle":           cmdIdle,
-		"config":         cmdConfig,
-	}
+var commands = map[string]command{
+	"init":           cmdInit,
+	"status":         cmdStatus,
+	"hunks":          cmdHunks,
+	"plan":           cmdPlan,
+	"step":           cmdStep,
+	"comment":        cmdComment,
+	"note":           cmdNote,
+	"discussions":    cmdDiscussions,
+	"thread":         cmdThread,
+	"prepare":        cmdPrepare,
+	"export":         cmdExport,
+	"mark-published": cmdMarkPublished,
+	"publish":        cmdPublish,
+	"done":           cmdDone,
+	"list":           cmdList,
+	"view":           cmdView,
+	"open":           cmdOpen,
+	"pane":           cmdPane,
+	"wait":           cmdWait,
+	"say":            cmdSay,
+	"progress":       cmdProgress,
+	"idle":           cmdIdle,
+	"config":         cmdConfig,
 }
 
 type env struct {

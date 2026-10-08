@@ -434,7 +434,7 @@ func (m *model) toggleSplit() {
 	m.splitView = !m.splitView
 	m.relist()
 	if m.splitView && !m.useSplit() {
-		m.status = "too narrow for split: widen the pane or hide the plan"
+		m.status = "too narrow for split: widen the pane or close the chat"
 	}
 }
 

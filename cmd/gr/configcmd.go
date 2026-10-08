@@ -37,7 +37,7 @@ func cmdConfig(ctx context.Context, e env, args []string) error {
 	e.printf("diff: %s\n", cmp.Or(s.cfg.Diff, gitx.DefaultDiffAlgorithm))
 	v := s.cfg.View
 	e.printf("view: theme=%s split=%v mouse=%v wrap=%v context=%d style=%s\n",
-		cmp.Or(v.Theme, "default"), v.Split, !v.NoMouse, !v.NoWrap, cmp.Or(v.Context, 3),
+		cmp.Or(v.Theme, "default"), v.Split, !v.NoMouse, !v.NoWrap, cmp.Or(v.Context, view.DefaultContext),
 		cmp.Or(v.Style, "from the theme"))
 	e.printf("themes: %s (try them with :theme in the viewer)\n", strings.Join(view.Themes(), " "))
 	for lang, argv := range s.cfg.LSP {

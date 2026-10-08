@@ -172,15 +172,19 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	c.mu.Lock()
 	c.pending[id] = ch
 	c.mu.Unlock()
+	forget := func() {
+		c.mu.Lock()
+		delete(c.pending, id)
+		c.mu.Unlock()
+	}
 	req := map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params}
 	if err := c.send(req); err != nil {
+		forget()
 		return nil, err
 	}
 	select {
 	case <-ctx.Done():
-		c.mu.Lock()
-		delete(c.pending, id)
-		c.mu.Unlock()
+		forget()
 		return nil, ctx.Err()
 	case r := <-ch:
 		if r.Error != nil {

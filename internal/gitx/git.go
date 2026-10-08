@@ -69,10 +69,6 @@ const DefaultDiffAlgorithm = "histogram"
 
 var DiffAlgorithms = []string{"histogram", "patience", "myers", "minimal"}
 
-func (r Repo) Diff(ctx context.Context, base, head string, paths ...string) (string, error) {
-	return r.DiffWith(ctx, DefaultDiffAlgorithm, base, head, paths...)
-}
-
 var stableDiff = []string{
 	"-c", "core.quotePath=false",
 	"-c", "diff.noprefix=false",
@@ -169,7 +165,7 @@ func (r Repo) Files(
 	}
 	if len(names) != len(files) {
 		return nil, fmt.Errorf("git diff %s %s: %d patches for %d changed files",
-			base, head, len(files), len(changes))
+			base, head, len(files), len(names))
 	}
 	for i, n := range names {
 		files[i].Path, files[i].OldPath = n.Path, n.OldPath

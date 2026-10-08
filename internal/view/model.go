@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	defaultContext = 3
+	DefaultContext = 3
 	minSplitWidth  = 80
 	minCodeWidth   = 70
 	messageLines   = 5
@@ -204,7 +204,7 @@ func newModel(ctx context.Context, o Options) *model {
 		returnPane: o.ReturnPane,
 		algo:       gitx.DefaultDiffAlgorithm,
 	}
-	m.applyConfig(o.Config)
+	cfgErr := m.applyConfig(o.Config)
 	if dir, err := os.UserCacheDir(); err == nil {
 		m.newsFile = filepath.Join(dir, "guided-review", "seen-version")
 	}
@@ -226,6 +226,9 @@ func newModel(ctx context.Context, o Options) *model {
 		return inbox.Append(m.store.ReviewDir(m.review.ID), e)
 	}
 	m.reload()
+	if cfgErr != nil {
+		m.err = cfgErr
+	}
 	return m
 }
 
@@ -451,17 +454,16 @@ func firstFocus(list []line) int {
 
 func (m *model) Init() tea.Cmd { return tick() }
 
-func (m *model) applyConfig(c config.Config) {
+func (m *model) applyConfig(c config.Config) error {
 	var err error
 	m.km, err = newKeymap(c.Keys)
-	m.err = err
 	m.splitView, m.mouse = c.View.Split, !c.View.NoMouse
 	m.nowrap = c.View.NoWrap
-	m.baseCtx = cmp.Or(c.View.Context, defaultContext)
+	m.baseCtx = cmp.Or(c.View.Context, DefaultContext)
 	m.context = m.baseCtx
 	if c.View.Theme != "" {
-		if err := applyTheme(c.View.Theme); err != nil {
-			m.err = err
+		if terr := applyTheme(c.View.Theme); terr != nil {
+			err = errors.Join(err, terr)
 		}
 	}
 	if c.View.Style != "" {
@@ -469,6 +471,7 @@ func (m *model) applyConfig(c config.Config) {
 	}
 	m.algo = cmp.Or(c.Diff, m.algo)
 	m.lspServers = c.LSP
+	return err
 }
 
 func (m *model) clock() time.Time {
@@ -488,8 +491,8 @@ func (m *model) refreshAgent() {
 			m.rebuild(false)
 		}
 	}
-	if since, ok := inbox.WaitingSince(m.store.ReviewDir(m.review.ID)); ok {
-		m.agentWaiting, m.agentIdle, m.agentSince = true, false, since
+	if inbox.Waiting(m.store.ReviewDir(m.review.ID)) {
+		m.agentWaiting, m.agentIdle = true, false
 		return
 	}
 	idle, ok := inbox.IdleSince(m.store.ReviewDir(m.review.ID))
@@ -1005,12 +1008,15 @@ func (m *model) openEditor() tea.Cmd {
 }
 
 func editorCmd(dir, file string, line int) *exec.Cmd {
-	editor := cmp.Or(os.Getenv("VISUAL"), os.Getenv("EDITOR"), "vi")
+	editor := strings.Fields(cmp.Or(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
+	if len(editor) == 0 {
+		editor = []string{"vi"}
+	}
 	target := fmt.Sprintf("+%d %s", line, shellQuote(file))
-	if name := filepath.Base(strings.Fields(editor)[0]); name == "hx" || name == "helix" {
+	if name := filepath.Base(editor[0]); name == "hx" || name == "helix" {
 		target = shellQuote(fmt.Sprintf("%s:%d", file, line))
 	}
-	script := editor + " " + target
+	script := strings.Join(editor, " ") + " " + target
 	var cmd *exec.Cmd
 	if os.Getenv("TMUX") != "" {
 		popup := []string{"display-popup", "-E", "-w", "90%", "-h", "90%", "-d", dir, script}

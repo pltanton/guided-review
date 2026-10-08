@@ -185,7 +185,7 @@ func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
 	n := len(m.myThreads())
 	d, t, ok := m.selectedThread()
 	switch msg.String() {
-	case "esc", "q", "R":
+	case "esc", "q", m.keys().key("replies"):
 		m.threads = false
 	case "j", "down":
 		m.threadSel, m.threadFollow = min(m.threadSel+1, max(n-1, 0)), true

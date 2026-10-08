@@ -33,7 +33,7 @@ func TestRepo(t *testing.T) {
 	if got, err := repo.MergeBase(ctx, "main", "feature"); err != nil || got != base {
 		t.Fatalf("MergeBase = %q, %v; want %q", got, err, base)
 	}
-	d, err := repo.Diff(ctx, base, head)
+	d, err := repo.DiffWith(ctx, gitx.DefaultDiffAlgorithm, base, head)
 	if err != nil || !strings.Contains(d, "@@ -1,0 +2 @@") {
 		t.Fatalf("Diff = %q, %v", d, err)
 	}

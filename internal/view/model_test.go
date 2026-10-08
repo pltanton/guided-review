@@ -57,7 +57,7 @@ func newTestModel(t *testing.T) (*model, *[]inbox.Event) {
 	}}
 	m := &model{
 		review: r, step: &r.Steps[0], rows: testRows(), width: 100, height: 30,
-		context: defaultContext,
+		context: DefaultContext,
 		send:    func(e inbox.Event) error { sent = append(sent, e); return nil },
 	}
 	m.relist()
@@ -779,7 +779,7 @@ func TestQuitWhenReviewCloses(t *testing.T) {
 	if err := store.SetCurrent("mr-1"); err != nil {
 		t.Fatal(err)
 	}
-	m := &model{store: store, context: defaultContext}
+	m := &model{store: store, context: DefaultContext}
 	m.reload()
 	if m.review == nil {
 		t.Fatal("review not loaded")
@@ -997,9 +997,12 @@ func TestHelpOverlay(t *testing.T) {
 
 func TestApplyViewConfig(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.applyConfig(
+	err := m.applyConfig(
 		config.Config{View: config.View{Split: true, NoMouse: true, Context: 8}},
 	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !m.splitView || m.mouse || m.baseCtx != 8 {
 		t.Fatalf("config not applied: split %v mouse %v ctx %d", m.splitView, m.mouse, m.baseCtx)
 	}

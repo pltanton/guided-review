@@ -2,13 +2,21 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"github.com/pltanton/guided-review/internal/publish"
+	"github.com/pltanton/guided-review/internal/state"
+)
+
+var (
+	//go:embed publish-gitlab.sh
+	publishGitLab []byte
+	//go:embed publish-github.sh
+	publishGitHub []byte
 )
 
 func cmdPublish(ctx context.Context, e env, _ []string) error {
@@ -22,14 +30,14 @@ func cmdPublish(ctx context.Context, e env, _ []string) error {
 	if r.Publish == nil || r.Publish.Export == "" {
 		return errors.New("nothing exported yet: run gr export first")
 	}
-	for _, tool := range []string{publish.Tool(r.MR.Provider), "jq"} {
-		if _, err := exec.LookPath(tool); err != nil {
-			return fmt.Errorf("publishing needs %s on PATH", tool)
-		}
+	tool, script := "glab", publishGitLab
+	if r.MR.Provider == state.ProviderGitHub {
+		tool, script = "gh", publishGitHub
 	}
-	script, err := publish.Script(r.MR.Provider)
-	if err != nil {
-		return err
+	for _, name := range []string{tool, "jq"} {
+		if _, err := exec.LookPath(name); err != nil {
+			return fmt.Errorf("publishing needs %s on PATH", name)
+		}
 	}
 	f, err := os.CreateTemp("", "gr-publish-*.sh")
 	if err != nil {
@@ -45,10 +53,9 @@ func cmdPublish(ctx context.Context, e env, _ []string) error {
 	}
 	cmd := exec.CommandContext(ctx, "bash", f.Name())
 	cmd.Dir, cmd.Stdout, cmd.Stderr = e.dir, e.stdout, e.stdout
-	cmd.Env = os.Environ()
 	if self, err := os.Executable(); err == nil {
-		cmd.Env = append(cmd.Env, "PATH="+filepath.Dir(self)+string(os.PathListSeparator)+
-			os.Getenv("PATH"))
+		path := filepath.Dir(self) + string(os.PathListSeparator) + os.Getenv("PATH")
+		cmd.Env = append(os.Environ(), "PATH="+path)
 	}
 	return cmd.Run()
 }
