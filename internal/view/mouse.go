@@ -172,7 +172,7 @@ func (m *model) onChatInput(x, y int) bool {
 	case pills:
 		return y >= top && y < m.height-1
 	case m.step == nil:
-		return y == m.height-2
+		return y == m.height-3
 	case m.chatWidth() > 0:
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}
@@ -182,7 +182,8 @@ func (m *model) onChatInput(x, y int) bool {
 func (m *model) inputRowX() int {
 	switch {
 	case m.step == nil:
-		return max((m.width-min(max(m.width-2, 20), intakeWidth))/2, 0)
+		x, _, _ := m.cardFrame(intakeWidth)
+		return x
 	case m.chatWidth() > 0:
 		return m.width - m.chatWidth() + 2
 	}

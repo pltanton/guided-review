@@ -160,7 +160,8 @@ func TestPlanMouseFoldsChapter(t *testing.T) {
 	m.Update(ctrlP())
 	m.View()
 	click := func(want string) {
-		y := modalBodyTop + planRow(t, m, want)
+		m.View()
+		y := m.modalY + 1 + planRow(t, m, want)
 		m.Update(tea.MouseMsg{X: 4, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
 	}
 	click("CHAPTER 2 ")

@@ -24,11 +24,6 @@ var (
 	}
 )
 
-func (m *model) finishColumn() (pad string, w int) {
-	w = min(max(m.width-2, 20), finishWidth)
-	return strings.Repeat(" ", max((m.width-w)/2, 0)), w
-}
-
 type finishCard struct {
 	id, line int
 }
@@ -125,7 +120,7 @@ func markdownLines(text string, w int) []string {
 }
 
 func (m *model) finishView() string {
-	pad, w := m.finishColumn()
+	x, w, inner := m.cardFrame(finishWidth)
 	r := m.review
 	title := "finish"
 	if r.MR != nil {
@@ -152,13 +147,10 @@ func (m *model) finishView() string {
 		keys += " · " + m.keys().key("approve") + " approve"
 	}
 	top := []string{
-		"",
-		boldStyle.Render(ansi.Truncate(title, w, "…")),
-		dimStyle.Render(strings.Repeat("─", w)),
-		strings.Join(facts, dimStyle.Render(" · ")) + hotStyle.Render("   "+keys),
+		strings.Join(facts, dimStyle.Render(" · ")) + hotStyle.Render("   "+keys), "",
 	}
 	body, cards := m.finishBody(w)
-	h := max(m.height-len(top)-2, 1)
+	h := max(inner-len(top)-1, 1)
 	if m.previewFollow && m.previewSel < len(cards) {
 		line := cards[m.previewSel].line
 		m.previewTop = max(min(m.previewTop, line-1), line+3-h)
@@ -167,7 +159,7 @@ func (m *model) finishView() string {
 	m.previewTop = max(0, min(m.previewTop, len(body)-h))
 	shown := body[m.previewTop:min(len(body), m.previewTop+h)]
 	lines := append(top, shown...)
-	for len(lines) < m.height-1 {
+	for len(lines) < inner-1 {
 		lines = append(lines, "")
 	}
 	km := m.keys()
@@ -188,11 +180,8 @@ func (m *model) finishView() string {
 	case m.status != "":
 		bottom = []string{dimStyle.Render(m.status)}
 	}
-	lines = append(lines[:max(m.height-len(bottom), 0)], bottom...)
-	for i, l := range lines {
-		lines[i] = pad + fit(l, w)
-	}
-	return strings.Join(lines, "\n")
+	lines = append(lines[:max(inner-len(bottom), 0)], bottom...)
+	return m.card(x, w, title, lines)
 }
 
 func verdictStyle(v string) string {

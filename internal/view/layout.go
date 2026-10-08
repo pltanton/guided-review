@@ -1041,12 +1041,25 @@ func (m *model) renderSplit(l line, w int) (rows []string) {
 
 const intakeWidth = 100
 
+func (m *model) cardFrame(maxW int) (x, w, h int) {
+	w = min(max(m.width-6, 20), maxW)
+	return max((m.width-w-4)/2, 0) + 2, w, max(m.height-2, 1)
+}
+
+func (m *model) card(x, w int, title string, body []string) string {
+	box := modalBox(w+4, m.height, title, "", body)
+	pad := strings.Repeat(" ", max(x-2, 0))
+	for i := range box {
+		box[i] = pad + box[i]
+	}
+	return strings.Join(box, "\n")
+}
+
 func (m *model) intakeView() string {
-	w := min(max(m.width-2, 20), intakeWidth)
-	pad := strings.Repeat(" ", max((m.width-w)/2, 0))
+	x, w, h := m.cardFrame(intakeWidth)
 	top := m.intakeTop(w)
 	prompt := m.intakePrompt(w)
-	chatH := max(m.height-len(top)-len(prompt)-1, 1)
+	chatH := max(h-len(top)-len(prompt)-1, 1)
 	chat := m.chatWindow(m.chatRows(w, false), chatH, w)
 	if len(chat) == 0 {
 		chat = []string{dimStyle.Render("the agent is reading the MR; its questions show up here")}
@@ -1058,14 +1071,11 @@ func (m *model) intakeView() string {
 	rule += strings.Repeat("─", max(w-ansi.StringWidth(rule), 0))
 	lines := append(top, style.Render(rule))
 	lines = append(lines, chat...)
-	for len(lines)+len(prompt) < m.height {
+	for len(lines)+len(prompt) < h {
 		lines = append(lines, "")
 	}
-	lines = append(lines[:min(len(lines), max(m.height-len(prompt), 0))], prompt...)
-	for i, l := range lines {
-		lines[i] = pad + fit(l, w)
-	}
-	return strings.Join(lines, "\n")
+	lines = append(lines[:min(len(lines), max(h-len(prompt), 0))], prompt...)
+	return m.card(x, w, m.intakeTitle(), lines)
 }
 
 func (m *model) intakePrompt(w int) []string {
@@ -1081,12 +1091,15 @@ func (m *model) intakePrompt(w int) []string {
 	return append(lines, prompt...)
 }
 
+func (m *model) intakeTitle() string {
+	if r := m.review; r.MR != nil {
+		return "guided review · " + r.MR.Label() + " " + r.MR.Title
+	}
+	return "guided review · " + m.review.ID
+}
+
 func (m *model) intakeTop(w int) []string {
 	r := m.review
-	title := "guided review · " + r.ID
-	if r.MR != nil {
-		title = "guided review · " + r.MR.Label() + " " + r.MR.Title
-	}
 	var stages []string
 	cur := 0
 	switch {
@@ -1103,13 +1116,7 @@ func (m *model) intakeTop(w int) []string {
 			stages = append(stages, dimStyle.Render("○ "+name))
 		}
 	}
-	lines := []string{
-		"",
-		boldStyle.Render(ansi.Truncate(title, w, "…")),
-		dimStyle.Render(strings.Repeat("─", w)),
-		strings.Join(stages, dimStyle.Render("  ›  ")),
-		"",
-	}
+	lines := []string{strings.Join(stages, dimStyle.Render("  ›  ")), ""}
 	row := func(label, value string) {
 		lines = append(lines, dimStyle.Render(fmt.Sprintf("%-9s", label))+value)
 	}

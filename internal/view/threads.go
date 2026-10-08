@@ -130,7 +130,7 @@ func verdictWord(v string) string {
 }
 
 func (m *model) threadsView() string {
-	pad, w := m.finishColumn()
+	x, w, inner := m.cardFrame(finishWidth)
 	r := m.review
 	title := "replies"
 	if r.MR != nil {
@@ -148,14 +148,9 @@ func (m *model) threadsView() string {
 	}
 	facts := fmt.Sprintf("%d open threads of yours · %d answered · %d decided",
 		len(ds), answered, decided)
-	top := []string{
-		"",
-		boldStyle.Render(ansi.Truncate(title, w, "…")),
-		dimStyle.Render(strings.Repeat("─", w)),
-		dimStyle.Render(facts),
-	}
+	top := []string{dimStyle.Render(facts), ""}
 	body, starts := m.threadBody(w)
-	h := max(m.height-len(top)-2, 1)
+	h := max(inner-len(top)-1, 1)
 	if m.threadFollow && m.threadSel < len(starts) {
 		line := starts[m.threadSel]
 		end := len(body)
@@ -167,7 +162,7 @@ func (m *model) threadsView() string {
 	}
 	m.threadTop = max(0, min(m.threadTop, len(body)-h))
 	lines := append(top, body[m.threadTop:min(len(body), m.threadTop+h)]...)
-	for len(lines) < m.height-1 {
+	for len(lines) < inner-1 {
 		lines = append(lines, "")
 	}
 	hint := "j/k thread · r resolve · o keep open + reply · a take the agent's · u undo" +
@@ -181,11 +176,8 @@ func (m *model) threadsView() string {
 	case m.status != "":
 		bottom = []string{dimStyle.Render(m.status)}
 	}
-	lines = append(lines[:max(m.height-len(bottom), 0)], bottom...)
-	for i, l := range lines {
-		lines[i] = pad + fit(l, w)
-	}
-	return strings.Join(lines, "\n")
+	lines = append(lines[:max(inner-len(bottom), 0)], bottom...)
+	return m.card(x, w, title, lines)
 }
 
 func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {

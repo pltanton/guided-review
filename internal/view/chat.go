@@ -49,10 +49,10 @@ func (m *model) chatBox() (rows []chatRow, x, y, h int, ok bool) {
 	case m.review == nil || m.threads || m.preview != "":
 		return nil, 0, 0, 0, false
 	case m.step == nil:
-		w := min(max(m.width-2, 20), intakeWidth)
+		x, w, inner := m.cardFrame(intakeWidth)
 		top := m.intakeTop(w)
-		h = max(m.height-len(top)-len(m.intakePrompt(w))-1, 1)
-		return m.chatRows(w, false), m.inputRowX(), len(top) + 1, h, true
+		h = max(inner-len(top)-len(m.intakePrompt(w))-1, 1)
+		return m.chatRows(w, false), x, 1 + len(top) + 1, h, true
 	case m.chatWidth() > 0:
 		w := m.chatWidth() - 2
 		top := m.sideChatTop()

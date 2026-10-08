@@ -116,6 +116,7 @@ type model struct {
 	help         bool
 	helpAll      bool
 	chapterOpen  string
+	modalY       int
 	introShown   map[string]bool
 	helpTop      int
 	baseCtx      int

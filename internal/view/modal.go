@@ -17,9 +17,11 @@ func modalBox(w, h int, title, hint string, body []string) []string {
 	frame := faintTone.fg()
 	head := frame.Render("┌ ") + boldStyle.Render(ansi.Truncate(title, w-6, "…")) + " "
 	head += frame.Render(strings.Repeat("─", max(w-ansi.StringWidth(head)-1, 0)) + "┐")
-	hint = ansi.Truncate(hint, w-4, "…")
-	foot := frame.Render("└" + strings.Repeat("─", max(w-ansi.StringWidth(hint)-3, 0)))
-	foot += " " + dimStyle.Render(hint) + frame.Render("┘")
+	foot := frame.Render("└" + strings.Repeat("─", w-2) + "┘")
+	if hint = ansi.Truncate(hint, w-4, "…"); hint != "" {
+		foot = frame.Render("└" + strings.Repeat("─", max(w-ansi.StringWidth(hint)-3, 0)))
+		foot += " " + dimStyle.Render(hint) + frame.Render("┘")
+	}
 	out := []string{head}
 	for i := range h - 2 {
 		line := ""
@@ -69,19 +71,44 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 	return modalContent{}, false
 }
 
+const (
+	cardWidth     = 100
+	wideCardWidth = 150
+)
+
+func (m *model) fullModal() bool {
+	return m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
+		m.chapterOpen == "" && !m.focusPlan && !m.help
+}
+
 func (m *model) drawModal(out []string) {
 	if len(out) < 4 {
 		return
 	}
-	w, h := max(m.width, 8), len(out)-2
-	if c, ok := m.modal(w-4, h-2); ok {
-		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), 1, 0)
+	room := len(out) - 2
+	w, h := max(m.width, 8), room
+	if !m.fullModal() {
+		w = min(max(m.width-4, 8), cardWidth)
+		if m.help && m.helpAll {
+			w = min(max(m.width-4, 8), wideCardWidth)
+		}
+	}
+	c, ok := m.modal(w-4, h-2)
+	if !ok {
+		if m.popup != nil && m.popup.kind == "hover" {
+			m.drawHover(out)
+		}
+		m.drawPalette(out)
 		return
 	}
-	if m.popup != nil && m.popup.kind == "hover" {
-		m.drawHover(out)
+	if !m.fullModal() {
+		h = min(len(c.body)+2, room)
 	}
-	m.drawPalette(out)
+	for i := 1; i < len(out)-1; i++ {
+		out[i] = faintTone.fg().Render(ansi.Strip(out[i]))
+	}
+	m.modalY = 1 + (room-h)/2
+	overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), m.modalY, (m.width-w)/2)
 }
 
 const paletteRows = 8
@@ -184,8 +211,6 @@ func (m *model) chapterModal(w int) modalContent {
 	return modalContent{m.chapterOpen, "enter close · I reopens", append(body, steps...)}
 }
 
-const modalBodyTop = 2
-
 func (m *model) planModal(w, h int) modalContent {
 	items := m.planItems()
 	m.planCursor = max(0, min(m.planCursor, len(items)-1))
@@ -225,7 +250,7 @@ func (m *model) filesModal(w, h int) modalContent {
 func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 	wheel := map[tea.MouseButton]int{tea.MouseButtonWheelUp: -1, tea.MouseButtonWheelDown: 1}
 	press := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
-	r := msg.Y - modalBodyTop
+	r := msg.Y - m.modalY - 1
 	switch {
 	case m.focusPlan && wheel[msg.Button] != 0:
 		m.planCursor = max(0, min(m.planCursor+wheel[msg.Button], len(m.planItems())-1))

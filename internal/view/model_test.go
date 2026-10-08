@@ -1519,7 +1519,7 @@ func TestClickChatInput(t *testing.T) {
 
 	r := &state.Review{ID: "mr-1"}
 	intake := &model{review: r, width: 100, height: 20, send: func(inbox.Event) error { return nil }}
-	intake.handleMouse(tea.MouseMsg{X: 30, Y: 18, Action: tea.MouseActionPress,
+	intake.handleMouse(tea.MouseMsg{X: 30, Y: 17, Action: tea.MouseActionPress,
 		Button: tea.MouseButtonLeft})
 	if !intake.composing {
 		t.Fatal("a click on the intake answer field must open the input")

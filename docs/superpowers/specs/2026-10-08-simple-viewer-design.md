@@ -42,9 +42,11 @@ s3/7 ●●○○○○○ Transfers › validate amount           ? keys
 
 ## Modals
 
-One overlay component, drawn over the code and right column, header line left visible.
-It has a bordered box, a title, a single-line hint in the bottom border, `esc` closes.
-Used by:
+One overlay component with a bordered box, a title and a one-line hint in the bottom
+border; `esc` closes. Information modals (chapter, plan, keys, files, note details) are a
+card centred over a dimmed screen, sized to their content and at most 100 columns wide
+(150 for the full key list). LSP lists and peeks take the whole screen below the header,
+since they need room for code. Used by:
 
 - **Chapter intro.** Opens on entering the first step of a chapter whose intro this
   viewer process has not shown yet (kept in memory, not in state): chapter name, `Intro`,
@@ -122,3 +124,8 @@ first file; end-of-step row and `enter` → next only on it; inline composer anc
 `I`; plan modal navigation; LSP modal (single result → peek, `/` filter, `esc` closes
 the stack); palette filtering and running an action; typed commands unchanged. Then a
 live run on a real MR.
+
+## Intake, finish and replies screens
+
+They keep a readable column (100–110 columns) on wide terminals and draw it as a framed
+card with the title in the top border, so the narrow column reads as intended.
