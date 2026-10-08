@@ -1496,8 +1496,9 @@ func TestDetailPopupUX(t *testing.T) {
 	}
 	m.refreshDetail()
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "late note") || strings.Contains(v, "e editor") {
-		t.Fatalf("the noted line must stay above the popup, without an editor hint:\n%s", v)
+	if !strings.Contains(v, "┌ details · a.go:59") || !strings.Contains(v, "detail line") ||
+		strings.Contains(v, "e editor") {
+		t.Fatalf("details open in a modal titled with the line, without an editor hint:\n%s", v)
 	}
 	m.handleMouse(tea.MouseMsg{Button: tea.MouseButtonWheelDown})
 	if m.popup.top == 0 {
@@ -2097,5 +2098,39 @@ func TestEndRowWhileViewing(t *testing.T) {
 	m.Update(key("enter"))
 	if len(*sent) != 0 {
 		t.Fatalf("enter on a viewed step's end only goes back: %+v", *sent)
+	}
+}
+
+func TestLSPModal(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.Update(lspMsg{kind: "references", locs: []lspLoc{
+		{Path: "wallet/reserve.go", Line: 3, Text: "w.Reserve(amt)"},
+		{Path: "wallet/charge.go", Line: 8, Text: "w.Reserve(fee)"},
+		{Path: "api/transfer.go", Line: 12, Text: "Reserve(x)"},
+	}})
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "┌ references · 3") || !strings.Contains(v, "enter open · / filter") {
+		t.Fatalf("references open in a modal:\n%s", v)
+	}
+	m.Update(key("/"))
+	typeText(m, "charge")
+	m.Update(key("enter"))
+	if len(m.popup.items) != 1 || m.popup.items[0].Path != "wallet/charge.go" {
+		t.Fatalf("/ filters the list: %+v", m.popup.items)
+	}
+	m.Update(key("enter"))
+	if m.popup.kind != "peek" || len(m.popupStack) != 1 {
+		t.Fatalf("enter peeks the filtered item: %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	if m.popup != nil || len(m.popupStack) != 0 {
+		t.Fatal("esc closes the whole stack")
+	}
+	m.Update(lspMsg{kind: "hover", hover: "func Reserve(amt int) error"})
+	v = ansi.Strip(m.View())
+	if !strings.Contains(v, "┌ hover") || !strings.Contains(v, "func Reserve") ||
+		strings.Count(v, "│") > m.height {
+		t.Fatalf("hover is a small box:\n%s", v)
 	}
 }

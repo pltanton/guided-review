@@ -570,10 +570,6 @@ func (m *model) View() string {
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
-	ph := min(max(bodyH*3/5, 6), bodyH-len(m.header()))
-	if room := bodyH - ph - len(m.header()) - 1; m.popup != nil && room > 0 {
-		m.offset = max(m.offset, m.topFor(m.cursor, room))
-	}
 
 	if !m.help {
 		m.markShown()
@@ -615,10 +611,6 @@ func (m *model) View() string {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
-	if m.popup != nil {
-		box := m.popupLines(mw, ph)
-		copy(main[len(main)-len(box):], box)
-	}
 	if m.pendingKey != "" {
 		overlayRight(main[:len(main)-1], m.keyHints(m.pendingKey), mw)
 	}

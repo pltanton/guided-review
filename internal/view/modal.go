@@ -55,6 +55,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.planModal(w, h), true
 	case m.focusFiles && m.chatWidth() == 0:
 		return m.filesModal(w, h), true
+	case m.popup != nil && m.popup.kind != "hover":
+		return modalContent{m.popup.title, m.popupHint(), m.popupBody(w, h)}, true
 	}
 	if m.help {
 		lines := m.helpLines(w)
@@ -71,10 +73,34 @@ func (m *model) drawModal(out []string) {
 	if len(out) < 4 {
 		return
 	}
-	w, h := max(m.width-2, 8), len(out)-2
+	w, h := max(m.width, 8), len(out)-2
 	if c, ok := m.modal(w-4, h-2); ok {
-		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), 1, 1)
+		overlayAt(out, modalBox(w, h, c.title, c.hint, c.body), 1, 0)
+		return
 	}
+	if m.popup != nil && m.popup.kind == "hover" {
+		m.drawHover(out)
+	}
+}
+
+func (m *model) drawHover(out []string) {
+	mw := m.mainWidth()
+	w := min(max(mw-4, 20), detailWidth)
+	lines := m.popup.lines[min(m.popup.top, max(len(m.popup.lines)-1, 0)):]
+	h := min(len(lines)+2, max((len(out)-2)/2, 3))
+	y := m.cursorY() + 1
+	if y+h > len(out)-1 {
+		y = max(m.cursorY()-h, 1)
+	}
+	overlayAt(out, modalBox(w, h, "hover", "esc close", lines), y, 2)
+}
+
+func (m *model) cursorY() int {
+	y := len(m.header())
+	for i := m.offset; i < m.cursor && i < len(m.lines); i++ {
+		y += m.lineHeight(i)
+	}
+	return y
 }
 
 func (m *model) chapterIntro(st *state.Step) string {

@@ -68,6 +68,10 @@ type popup struct {
 	gKey   bool
 	added  map[int]bool
 	refs   []lspLoc
+
+	all       []lspLoc
+	filter    string
+	filtering bool
 }
 
 type lspManager struct {
@@ -470,9 +474,47 @@ func (m *model) addedLines(path string) map[int]bool {
 	return out
 }
 
+func (m *model) handleFilterKey(msg tea.KeyMsg) {
+	p := m.popup
+	switch msg.Type {
+	case tea.KeyEnter:
+		p.filtering = false
+		return
+	case tea.KeyEsc:
+		p.filtering, p.filter = false, ""
+	case tea.KeyBackspace:
+		if r := []rune(p.filter); len(r) > 0 {
+			p.filter = string(r[:len(r)-1])
+		}
+	case tea.KeyRunes, tea.KeySpace:
+		p.filter += string(msg.Runes)
+	default:
+		return
+	}
+	if p.all == nil {
+		p.all = p.items
+	}
+	q := strings.ToLower(p.filter)
+	p.items, p.sel = []lspLoc{}, 0
+	for _, it := range p.all {
+		text := strings.ToLower(fmt.Sprintf("%s:%d %s", it.Path, it.Line, ansi.Strip(it.Text)))
+		if strings.Contains(text, q) {
+			p.items = append(p.items, it)
+		}
+	}
+}
+
 func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 	p := m.popup
 	isList := p.items != nil
+	if p.filtering {
+		m.handleFilterKey(msg)
+		return nil
+	}
+	if isList && msg.String() == "/" {
+		p.filtering = true
+		return nil
+	}
 	if p.kind == "peek" {
 		if cmd, handled := m.peekKey(p, msg.String()); handled {
 			return cmd
@@ -532,37 +574,39 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *model) popupLines(width, height int) []string {
+func (m *model) popupHint() string {
 	p := m.popup
-	border := dimStyle.Render("│ ")
-	hint := "esc close"
-	switch p.kind {
-	case "references", "definition", "implementation", "typeDefinition", "callers",
-		"symbols", "workspace":
-		hint = "j/k select · enter peek · e editor · esc close"
-	case "peek":
-		hint = "j/k w/b move · g… K lsp · e editor · ctrl+o back · tab forward · esc close"
-	case "detail":
-		hint = "j/k or wheel scroll · esc close"
-		if len(p.refs) > 0 {
-			hint = "1-9 open code · j/k scroll · esc close"
-		}
+	switch {
+	case p.filtering:
+		return "type to filter · enter done · esc clear"
+	case p.items != nil:
+		return "enter open · / filter · e editor · esc close"
+	case p.kind == "peek":
+		return "g… K lsp · ctrl+o back · tab forward · e editor · esc close"
+	case p.kind == "detail" && len(p.refs) > 0:
+		return "1-9 open code · j/k scroll · esc close"
 	}
-	head := fmt.Sprintf("┌─ %s ", p.title)
-	fill := max(width-ansi.StringWidth(head)-ansi.StringWidth(hint)-3, 1)
-	head += strings.Repeat("─", fill) + " " + hint
-	out := []string{hotStyle.Render(ansi.Truncate(head, width, ""))}
-	rows := height - 1
+	return "j/k scroll · esc close"
+}
+
+func (m *model) popupBody(width, rows int) []string {
+	p := m.popup
+	var out []string
 	switch {
 	case p.items != nil:
-		listW := width - 2
+		if p.filtering || p.filter != "" {
+			out = append(out, cursorStyle.Render("/")+p.filter+"█")
+			rows--
+		}
+		listW := width
 		var code []string
 		if width >= minPreviewWidth && len(p.items) > 0 {
 			listW = width * 2 / 5
-			code = m.refPreview(p, p.items[p.sel], width-listW-5, rows)
+			code = m.refPreview(p, p.items[p.sel], width-listW-3, rows)
 		}
 		start := max(0, min(p.sel-rows/2, len(p.items)-rows))
-		for i := start; i < len(p.items) && len(out) <= rows; i++ {
+		var list []string
+		for i := start; i < len(p.items) && len(list) < rows; i++ {
 			it := p.items[i]
 			line := fmt.Sprintf("%s:%d  %s", it.Path, it.Line, dimStyle.Render(it.Text))
 			if i == p.sel {
@@ -570,42 +614,42 @@ func (m *model) popupLines(width, height int) []string {
 			} else {
 				line = "  " + line
 			}
-			out = append(out, border+line)
+			list = append(list, line)
 		}
-		for len(out) <= rows {
-			out = append(out, border)
+		for len(list) < rows {
+			list = append(list, "")
 		}
-		if code != nil {
-			for i := 1; i < len(out); i++ {
+		for i, l := range list {
+			if code != nil {
 				right := ""
-				if i-1 < len(code) {
-					right = code[i-1]
+				if i < len(code) {
+					right = code[i]
 				}
-				out[i] = fit(out[i], listW) + dimStyle.Render(" │ ") + right
+				l = fit(l, listW) + dimStyle.Render(" │ ") + right
 			}
+			out = append(out, l)
 		}
 	case p.kind == "peek":
 		p.top = max(0, min(p.top, p.cursor), p.cursor-rows+1)
 		if p.added == nil {
 			p.added = m.addedLines(p.loc.Path)
 		}
-		for i, l := range markedCodeLines(p.lines, p.top, p.target, rows, p.added, width-2) {
+		for i, l := range markedCodeLines(p.lines, p.top, p.target, rows, p.added, width) {
 			if p.top+i == p.cursor {
 				from, to := wordBounds(ansi.Strip(p.lines[p.cursor]), p.col)
-				l = paint(fit(underline(l, peekGutter+from, peekGutter+to), width-2), cursorTone)
+				l = paint(fit(underline(l, peekGutter+from, peekGutter+to), width), cursorTone)
 			}
-			out = append(out, border+l)
+			out = append(out, l)
 		}
 	default:
-		for i := p.top; i < len(p.lines) && len(out) <= rows; i++ {
-			out = append(out, border+p.lines[i])
+		p.top = max(0, min(p.top, len(p.lines)-1))
+		out = p.lines[p.top:]
+	}
+	if p.kind == "peek" && p.gKey && len(out) > 0 {
+		for len(out) < rows {
+			out = append(out, "")
 		}
-	}
-	for len(out) <= rows {
-		out = append(out, border)
-	}
-	if p.kind == "peek" && p.gKey {
-		overlayRight(out[1:], hintBox("g", peekGHints), width)
+		overlayRight(out, hintBox("g", peekGHints), width)
 	}
 	return out
 }

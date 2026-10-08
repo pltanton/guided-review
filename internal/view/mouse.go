@@ -49,6 +49,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case m.popup != nil && msg.Button == tea.MouseButtonWheelDown:
 		m.popup.top = min(m.popup.top+wheelStep, max(len(m.popup.lines)-1, 0))
 		m.popup.sel = min(m.popup.sel+1, max(len(m.popup.items)-1, 0))
+	case m.popup != nil && m.popup.kind != "hover":
 	case msg.Button == tea.MouseButtonWheelUp && m.sideWheel(msg.X, msg.Y, -wheelStep):
 	case msg.Button == tea.MouseButtonWheelDown && m.sideWheel(msg.X, msg.Y, wheelStep):
 	case msg.Button == tea.MouseButtonWheelUp && m.overChat(msg.X, msg.Y):
