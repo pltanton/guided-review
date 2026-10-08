@@ -21,11 +21,10 @@ import (
 )
 
 const (
-	defaultContext  = 3
-	minSplitWidth   = 80
-	minCodeWidth    = 70
-	messageLines    = 5
-	collapsedBottom = 2
+	defaultContext = 3
+	minSplitWidth  = 80
+	minCodeWidth   = 70
+	messageLines   = 5
 )
 
 type (

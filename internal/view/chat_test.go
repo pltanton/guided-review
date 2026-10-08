@@ -41,6 +41,11 @@ func TestChatSelectAndCopyKeys(t *testing.T) {
 	}
 	m.Update(key("k"))
 	m.Update(key("y"))
+	if m.status != "nothing to copy here" {
+		t.Fatalf("the gap between messages has nothing to copy: %q", m.status)
+	}
+	m.Update(key("k"))
+	m.Update(key("y"))
 	if *copied != longAnswer {
 		t.Fatalf("y copies the whole wrapped message as written: %q", *copied)
 	}
@@ -91,11 +96,8 @@ func TestChatMouseDragCopies(t *testing.T) {
 		}
 
 		*copied = ""
-		lines = strings.Split(ansi.Strip(m.View()), "\n")
-		row := at("second thought")
-		m.Update(tea.MouseMsg{X: x, Y: row, Button: tea.MouseButtonLeft,
-			Action: tea.MouseActionPress})
-		m.Update(tea.MouseMsg{X: x, Y: row, Action: tea.MouseActionRelease})
+		m.Update(press)
+		m.Update(tea.MouseMsg{X: x, Y: from, Action: tea.MouseActionRelease})
 		if *copied != "" || m.composing || m.chatFocus {
 			t.Fatalf("width %d: a click without a drag copies nothing", width)
 		}

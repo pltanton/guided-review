@@ -155,26 +155,84 @@ func (m *model) cursorHint() string {
 }
 
 func (m *model) mainWidth() int {
-	return m.width - m.filesWidth()
+	return m.width - m.chatWidth()
 }
+
+const (
+	collapsedChatRows = 6
+	collapsedBottom   = 2
+)
 
 func (m *model) chatOpen() bool {
 	return m.chatting || m.chatFocus || m.composing && m.cmdMode == 0 && !m.inlineCompose()
 }
 
-func (m *model) filesWidth() int {
-	w := max(30, m.width/6)
-	if m.sideW > 0 {
-		w = max(24, m.sideW)
-	}
+func (m *model) chatWidth() int {
 	if m.width-max(36, m.width/4) < minCodeWidth {
 		return 0
 	}
-	return min(w, m.width-minCodeWidth)
+	small := max(30, m.width/6)
+	if !m.chatOpen() {
+		return small
+	}
+	w := max(48, m.width*2/5)
+	if m.sideW > 0 {
+		w = max(24, min(m.sideW, m.width*2/3))
+	}
+	return max(small, min(w, m.width-minCodeWidth))
 }
 
 func (m *model) chatScrollHint() string {
 	return m.keys().key("chat-up") + "/" + m.keys().key("chat-down") + " scroll"
+}
+
+func (m *model) sidePrompt(w int) []string {
+	rule := dimStyle.Render(strings.Repeat("─", max(w, 1)))
+	km := m.keys()
+	switch {
+	case m.inputInSideChat():
+		return append([]string{rule}, m.promptLines(w)...)
+	case len(m.answerOptions()) > 0:
+		pills, _ := m.optionPills(w)
+		return append([]string{rule}, pills...)
+	}
+	return []string{rule, dimStyle.Render(fmt.Sprintf("› %s chat · %s without a line",
+		km.key("message"), km.key("message-general")))}
+}
+
+func (m *model) sideChatLines(h, w int) []string {
+	var lines []string
+	for _, e := range m.sideFiles(h, w+2) {
+		lines = append(lines, e.text)
+	}
+	row, plain, _ := sideRows(w + 2)
+	label, hint := labelStyle.Render("CHAT"), m.keys().key("message")+" opens"
+	switch {
+	case m.chatFocus:
+		label, hint = cursorStyle.Render("CHAT"), m.chatFocusHint()
+	case m.chatOpen():
+		label, hint = cursorStyle.Render("CHAT"), "esc closes"
+	}
+	lines = append(lines, plain(row(label, dimStyle.Render(hint))))
+	prompt := m.sidePrompt(w)
+	chatH := max(h-len(lines)-len(prompt), 0)
+	if !m.chatOpen() {
+		chatH = min(chatH, collapsedChatRows)
+	}
+	lines = append(lines, m.chatWindow(m.chatRows(w, true), chatH, w)...)
+	for len(lines)+len(prompt) < h {
+		lines = append(lines, "")
+	}
+	lines = append(lines, prompt...)
+	return lines[max(len(lines)-h, 0):]
+}
+
+func (m *model) sideChatTop() int {
+	return len(m.sideFiles(m.height-len(m.bottomLines()), m.chatWidth())) + 1
+}
+
+func (m *model) inputInSideChat() bool {
+	return m.chatWidth() > 0 && m.composing && m.cmdMode == 0 && !m.inlineCompose()
 }
 
 func (m *model) bodyHeight() int {
@@ -373,27 +431,20 @@ func windowRange(n, height, fromBottom int) (start, end int) {
 	return max(end-height, 0), end
 }
 
-func (m *model) chatLimit() int {
-	switch {
-	case m.step == nil:
-		return max(m.height-4, 1)
-	case m.chatOpen():
-		return max(messageLines, (m.height-4)/3)
-	}
-	return collapsedBottom
-}
-
 func (m *model) bottomLines() []string {
-	limit := m.chatLimit()
+	limit := messageLines
+	if !m.chatOpen() {
+		limit = collapsedBottom
+	}
+	if m.step == nil {
+		limit = max(m.height-4, 1)
+	}
 	var lines []string
 	chat := m.chatRows(m.width, m.step == nil)
-	if len(chat) > 0 {
-		label, style := "── CHAT · "+m.keys().key("message")+" opens ", dimStyle
-		switch {
-		case m.chatFocus:
-			label, style = "── CHAT · "+m.chatFocusHint()+" ", chatStyle
-		case m.chatOpen():
-			label, style = "── CHAT · "+m.chatScrollHint()+" · esc closes ", chatStyle
+	if len(chat) > 0 && m.chatWidth() == 0 {
+		label, style := "── chat · "+m.chatScrollHint()+" ", dimStyle
+		if m.chatFocus {
+			label, style = "── chat · "+m.chatFocusHint()+" ", chatStyle
 		}
 		label += strings.Repeat("─", max(m.width-ansi.StringWidth(label), 1))
 		lines = append(lines, style.Render(ansi.Truncate(label, m.width, "")))
@@ -402,6 +453,10 @@ func (m *model) bottomLines() []string {
 			pills, _ := m.optionPills(m.width)
 			lines = append(lines, pills...)
 		}
+	}
+	if m.inputInSideChat() {
+		footer, _ := m.footer()
+		return append(lines, footer)
 	}
 	return append(lines, m.promptLines(m.width)...)
 }
@@ -605,21 +660,15 @@ func (m *model) View() string {
 		overlayRight(main[:len(main)-1], m.keyHints(m.pendingKey), mw)
 	}
 
-	var side []string
-	if fw := m.filesWidth(); fw > 0 {
-		for _, e := range m.sideFiles(len(main), fw) {
-			side = append(side, e.text)
-		}
+	var chat []string
+	if cw := m.chatWidth(); cw > 0 {
+		chat = m.sideChatLines(len(main), cw-2)
 	}
 	out := make([]string, 0, m.height)
 	for i, line := range main {
 		line = fit(line, mw)
-		if side != nil {
-			text := ""
-			if i < len(side) {
-				text = side[i]
-			}
-			line += faintTone.fg().Render("│") + " " + text
+		if chat != nil {
+			line += faintTone.fg().Render("│") + " " + chat[i]
 		}
 		out = append(out, line)
 	}
@@ -712,7 +761,7 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 		return nil
 	}
 	flow := m.flowEntries(row, plain)
-	limit := max(h, 4)
+	limit := max(h/2, 4)
 	rows := min(len(files), limit-2)
 	key := fmt.Sprint(rows, " ", files[at].file)
 	top := scrollWindow(&m.fileTop, &m.fileFollow, key, m.focusFiles, at, rows, len(files))

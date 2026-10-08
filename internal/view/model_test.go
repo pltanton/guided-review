@@ -1109,17 +1109,17 @@ func TestChatPanel(t *testing.T) {
 		)
 	}
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "── CHAT") || !strings.Contains(out, "message 29") ||
-		strings.Contains(out, "message 27") {
-		t.Fatalf("the chat sits folded under the code:\n%s", out)
+	if !strings.Contains(out, "│  CHAT") || !strings.Contains(out, "message 29") ||
+		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width {
+		t.Fatalf("side chat:\n%s", out)
 	}
-	m.handleMouse(tea.MouseMsg{X: 5, Y: m.height - 2, Button: tea.MouseButtonWheelUp})
+	m.handleMouse(tea.MouseMsg{X: m.width - 2, Y: 5, Button: tea.MouseButtonWheelUp})
 	if m.chatTop == 0 {
 		t.Fatal("wheel over the side chat must scroll it")
 	}
 	m.chatTop = 0
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
-	if m.chatTop == 0 || !strings.Contains(ansi.Strip(m.View()), "message 26") {
+	if m.chatTop == 0 || !strings.Contains(ansi.Strip(m.View()), "message 25") {
 		t.Fatal("ctrl+y must scroll the chat up")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlE})
@@ -1127,13 +1127,13 @@ func TestChatPanel(t *testing.T) {
 		t.Fatal("ctrl+e must scroll the chat back down")
 	}
 	m.width = 90
-	if n := len(m.bottomLines()); n != collapsedBottom+2 {
-		t.Fatalf("a folded chat is two lines under the code: %d lines", n)
+	if n := len(m.bottomLines()); n < 3 || n > messageLines+2 {
+		t.Fatalf("a narrow terminal keeps a small chat under the code: %d lines", n)
 	}
 	m.Update(key("c"))
 	typeText(m, strings.Repeat("long words here ", 20))
 	if lines := len(m.bottomLines()); lines < messageLines+3 {
-		t.Fatal("an open chat is taller and long input wraps")
+		t.Fatal("long input must wrap")
 	}
 }
 
@@ -1387,6 +1387,32 @@ func TestGeneralMessage(t *testing.T) {
 	}
 }
 
+func TestSideChatInput(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 150
+	if !strings.Contains(ansi.Strip(m.View()), "› c chat · C without a line") {
+		t.Fatal("the side chat must always show where to write")
+	}
+	m.Update(key("C"))
+	typeText(m, "hello there")
+	v := ansi.Strip(m.View())
+	lines := strings.Split(v, "\n")
+	last := lines[len(lines)-1]
+	if strings.Contains(last, "hello there") {
+		t.Fatalf("input must move into the side chat, bottom line is %q", last)
+	}
+	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "▌ hello there") })
+	if i < 0 || strings.Index(lines[i], "▌ hello there") < m.width-m.chatWidth() {
+		t.Fatalf("input must sit in the right column:\n%s", v)
+	}
+	m.Update(key("esc"))
+	m.Update(key(":"))
+	v = ansi.Strip(m.View())
+	if lines := strings.Split(v, "\n"); !strings.HasPrefix(lines[len(lines)-1], ":") {
+		t.Fatalf("command line stays at the bottom:\n%s", v)
+	}
+}
+
 func TestDragResize(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 200
@@ -1398,9 +1424,10 @@ func TestDragResize(t *testing.T) {
 			Button: tea.MouseButtonLeft})
 		m.handleMouse(tea.MouseMsg{X: toX, Y: toY, Action: tea.MouseActionRelease})
 	}
-	drag(m.width-m.filesWidth()-1, 3, m.width-61, 3)
-	if got := m.filesWidth(); got != 60 {
-		t.Fatalf("files column width after drag = %d, want 60", got)
+	m.chatFocus = true
+	drag(m.width-m.chatWidth(), 3, m.width-60, 3)
+	if got := m.chatWidth(); got != 60 {
+		t.Fatalf("side chat width after drag = %d, want 60", got)
 	}
 	if m.visual || m.resizing != "" {
 		t.Fatal("resizing must not select lines and must stop on release")
@@ -1514,12 +1541,11 @@ func TestDetailPopupUX(t *testing.T) {
 func TestClickChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
-	m.review.Messages = []state.Message{{Step: "s1", Text: "hi"}}
 	bodyH := m.height - len(m.bottomLines())
-	m.handleMouse(tea.MouseMsg{X: 5, Y: bodyH, Action: tea.MouseActionPress,
+	m.handleMouse(tea.MouseMsg{X: m.width - 5, Y: bodyH - 1, Action: tea.MouseActionPress,
 		Button: tea.MouseButtonLeft})
-	if !m.composing || !m.chatting {
-		t.Fatal("a click on the chat's header opens the chat")
+	if !m.composing || m.composeKind != inbox.KindMessage {
+		t.Fatal("a click on the side chat's input line must open the input")
 	}
 
 	r := &state.Review{ID: "mr-1"}
@@ -2277,19 +2303,19 @@ func TestChatCollapsed(t *testing.T) {
 		m.review.Messages = append(m.review.Messages,
 			state.Message{Step: "s1", Text: fmt.Sprintf("message %02d", i)})
 	}
+	small := m.chatWidth()
 	v := ansi.Strip(m.View())
-	if strings.Contains(v, "message 17") || !strings.Contains(v, "message 19") ||
-		!strings.Contains(v, "── CHAT · c opens") {
-		t.Fatalf("a folded chat shows two lines at the bottom:\n%s", v)
+	if strings.Contains(v, "message 10") || !strings.Contains(v, "message 19") ||
+		!strings.Contains(v, "c opens") {
+		t.Fatalf("a collapsed chat shows only its tail:\n%s", v)
 	}
-	folded := len(m.bottomLines())
 	m.Update(key("c"))
-	if len(m.bottomLines()) <= folded || !strings.Contains(ansi.Strip(m.View()), "message 12") {
-		t.Fatalf("c opens the chat taller: %d rows, folded %d", len(m.bottomLines()), folded)
+	if m.chatWidth() <= small || !strings.Contains(ansi.Strip(m.View()), "message 10") {
+		t.Fatalf("c opens the chat wide and tall: width %d, was %d", m.chatWidth(), small)
 	}
 	m.Update(key("esc"))
-	if len(m.bottomLines()) != folded {
-		t.Fatal("esc folds it again")
+	if m.chatWidth() != small {
+		t.Fatal("esc collapses it again")
 	}
 }
 
