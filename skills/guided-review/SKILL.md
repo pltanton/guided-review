@@ -228,7 +228,7 @@ check off each open hotspot (`x`); `gr step show` marks the checked ones. You on
    - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,
      word for word (the viewer's default for a comment; an ai comment reaches you as a
      message instead). Do not add, edit or rephrase it and do not reply; if the
-     text lists stale steps, handle it as a blocker (step 3). `[comment] sN: comment #N
+     text lists stale steps, the viewer has already asked whether to go on or finish. `[comment] sN: comment #N
      updated` / `comment #N deleted` is the human editing or deleting their own comment:
      nothing to do.
 

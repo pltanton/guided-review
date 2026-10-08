@@ -10,7 +10,7 @@ const wheelStep = 3
 
 func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
-	case m.gateOpen || m.finishCard:
+	case m.gateOpen || m.finishCard || len(m.staleSteps) > 0:
 		return nil
 	case m.chapterOpen != "":
 		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {

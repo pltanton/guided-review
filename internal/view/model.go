@@ -143,6 +143,8 @@ type model struct {
 	raw         bool
 	deleteArmed int
 	gateOpen    bool
+	staleSteps  []string
+	staleSel    int
 	finishCard  bool
 	finishSel   int
 	approvePick int
@@ -886,6 +888,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleGateKey(msg)
 	case m.finishCard:
 		return m.handleFinishCardKey(msg)
+	case len(m.staleSteps) > 0:
+		return m.handleStaleKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
 	case m.threads && !m.composing:

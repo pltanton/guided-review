@@ -401,6 +401,10 @@ func (m *model) saveRaw(text string) {
 		return
 	}
 	out, err := m.runGr(args...)
+	if _, ids, ok := strings.Cut(out, "stale (depend on a blocked step): "); ok && err == nil {
+		first, _, _ := strings.Cut(ids, "\n")
+		m.staleSteps, m.staleSel = strings.Fields(first), 0
+	}
 	out = strings.Join(strings.Split(strings.TrimSpace(out), "\n"), " · ")
 	if err != nil {
 		m.err = fmt.Errorf("%v: %s", err, out)

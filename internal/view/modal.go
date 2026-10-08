@@ -66,6 +66,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.gateModal(w), true
 	case m.finishCard:
 		return m.finishCardModal(w), true
+	case len(m.staleSteps) > 0:
+		return m.staleModal(w), true
 	case m.focusPlan:
 		return m.planModal(w, h), true
 	case m.focusFiles && m.chatWidth() == 0:
@@ -83,7 +85,8 @@ const (
 
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		m.chapterOpen == "" && !m.gateOpen && !m.finishCard && !m.focusPlan
+		m.chapterOpen == "" && !m.gateOpen && !m.finishCard && len(m.staleSteps) == 0 &&
+		!m.focusPlan
 }
 
 func (m *model) drawModal(out []string) {
@@ -313,6 +316,44 @@ func (m *model) gateModal(w int) modalContent {
 }
 
 func (m *model) blocked() bool {
-	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard || m.focusPlan ||
+	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard ||
+		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"
+}
+
+var staleItems = []string{"continue with the other steps", "finish now"}
+
+func (m *model) staleModal(w int) modalContent {
+	body := []string{
+		hotStyle.Render("a blocker: these steps may change once it is fixed"),
+		"   " + strings.Join(m.staleSteps, " "),
+		dimStyle.Render("they stay in the plan marked ~ and go to the next round if you finish now"),
+		"",
+	}
+	for i, it := range staleItems {
+		line := " " + it
+		if i == m.staleSel {
+			line = paint(fit(accentTone.fg().Render("▌")+it, w), cursorTone)
+		}
+		body = append(body, line)
+	}
+	return modalContent{"blocker", "enter · esc continue", body}
+}
+
+func (m *model) handleStaleKey(msg tea.KeyMsg) tea.Cmd {
+	switch msg.String() {
+	case "j", "down":
+		m.staleSel = 1
+	case "k", "up":
+		m.staleSel = 0
+	case "esc", "q":
+		m.staleSteps = nil
+	case "enter":
+		finish := m.staleSel == 1
+		m.staleSteps = nil
+		if finish {
+			m.openFinish()
+		}
+	}
+	return nil
 }

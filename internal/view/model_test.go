@@ -2456,3 +2456,23 @@ func TestLessThanShowsPreviousStep(t *testing.T) {
 		t.Fatalf("< looks at the previous step: step %s current %s", m.step.ID, m.review.Current)
 	}
 }
+
+func TestBlockerAsksContinueOrFinish(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.runGr = func(args ...string) (string, error) {
+		return "comment #2 blocker a.go:2\nstale (depend on a blocked step): s2 s3\n", nil
+	}
+	m.cursor = 2
+	m.Update(key("enter"))
+	typeText(m, "this breaks retries")
+	m.Update(key("enter"))
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "┌ blocker") || !strings.Contains(v, "s2 s3") {
+		t.Fatalf("a saved blocker asks continue or finish, without the agent:\n%s", v)
+	}
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if len(m.staleSteps) != 0 || !m.finishCard {
+		t.Fatal("finish now opens the finish card")
+	}
+}
