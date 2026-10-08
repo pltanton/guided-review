@@ -42,6 +42,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if fs.NArg() > 1 {
+		return fmt.Errorf("unexpected arguments %q: flags go before the target", fs.Args()[1:])
+	}
 	s, err := openSession(ctx, e.dir)
 	if err != nil {
 		return err
@@ -108,6 +111,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		r.Mode = modeSelf
 	}
 	if files != nil || *self {
+		if err := checkNothingUnmarked(s.exportDir(r.ID)); err != nil {
+			return err
+		}
 		if err := os.RemoveAll(s.exportDir(r.ID)); err != nil {
 			return err
 		}
@@ -123,12 +129,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	if files == nil {
-		e.printf("review %s already exists, resuming (--force to start over)\n", r.ID)
-		if planOutdated(r) {
-			e.println("plan outdated: made without chapters and step messages, nothing reviewed " +
-				"yet — build a new plan and pipe it to `gr plan set`")
-		}
-		e.println()
+		e.printf("review %s already exists, resuming (--force to start over)\n\n", r.ID)
 		return cmdStatus(ctx, e, nil)
 	}
 	printIntro(e, s, r, files)
@@ -608,18 +609,6 @@ func needCommits(ctx context.Context, repo gitx.Repo, shaFetch ...[2]string) err
 	}
 	return fmt.Errorf("commit %s not found locally: run %s",
 		strings.Join(missing, ", "), strings.Join(fetch, " && "))
-}
-
-func planOutdated(r *state.Review) bool {
-	if len(r.Steps) == 0 {
-		return false
-	}
-	for _, st := range r.Steps {
-		if st.Status != state.StatusPending || st.Chapter != "" && st.Message != "" {
-			return false
-		}
-	}
-	return true
 }
 
 type gitRef struct {

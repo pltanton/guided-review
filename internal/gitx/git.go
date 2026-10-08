@@ -75,6 +75,7 @@ var stableDiff = []string{
 	"-c", "diff.mnemonicPrefix=false",
 	"-c", "diff.relative=false",
 	"-c", "diff.interHunkContext=0",
+	"-c", "diff.submodule=short",
 }
 
 func (r Repo) DiffWith(

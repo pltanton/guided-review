@@ -77,16 +77,8 @@ func (m *model) handlePublishKey(msg tea.KeyMsg) tea.Cmd {
 	if p.running {
 		return nil
 	}
-	k := msg.String()
-	if i, ok := digitPick(k, len(items)); ok {
-		p.sel, k = i, "enter"
-	}
-	switch k {
-	case "j", "down":
-		p.sel = min(p.sel+1, len(items)-1)
-	case "k", "up":
-		p.sel = max(p.sel-1, 0)
-	case "esc", "q":
+	switch cardNav(msg.String(), len(items), &p.sel) {
+	case "esc":
 		if !p.done {
 			m.pub = nil
 		}

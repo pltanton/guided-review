@@ -118,13 +118,3 @@ func undecidedThreads(r *state.Review) []string {
 	}
 	return ids
 }
-
-func openThreads(r *state.Review) []string {
-	var ids []string
-	for _, d := range r.MyThreads() {
-		if t := r.ThreadState(d); !t.Decided() || t.Verdict != state.VerdictResolve {
-			ids = append(ids, d.ID)
-		}
-	}
-	return ids
-}

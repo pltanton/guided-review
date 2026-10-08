@@ -1718,22 +1718,6 @@ func TestLSPFromPeek(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSymbolsCommand(t *testing.T) {
-	m, _ := newTestModel(t)
-	var asked []string
-	m.lspDo = func(kind, file string, line, col int) tea.Cmd {
-		asked = append(asked, kind)
-		return nil
-	}
-	m.cursor = 2
-	m.Update(key(":"))
-	typeText(m, "sym Transfer")
-	m.Update(key("enter"))
-	if !slices.Contains(asked, "workspace:Transfer") {
-		t.Fatalf(":sym must search the workspace: %q", asked)
-	}
-}
-
 func TestSeenLines(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.review.Steps[0].Message = "s1"

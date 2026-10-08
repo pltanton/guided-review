@@ -19,7 +19,7 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case m.newsOpen:
 		return nil
 	case m.gateOpen || m.finishCard || m.pub != nil || m.threadCard != "" ||
-		len(m.staleSteps) > 0:
+		m.themeWas != "" || len(m.staleSteps) > 0:
 		return nil
 	case m.chapterOpen != "":
 		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {

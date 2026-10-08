@@ -29,12 +29,7 @@ func SuggestVerdict(r *state.Review) (verdict, why string) {
 			majors = append(majors, at)
 		}
 	}
-	open := 0
-	for _, d := range r.MyThreads() {
-		if t := r.ThreadState(d); !t.Decided() || t.Verdict != state.VerdictResolve {
-			open++
-		}
-	}
+	open := len(r.OpenThreads())
 	switch {
 	case len(blockers) > 0:
 		return VerdictBlocked, counted(len(blockers), "blocker") + ": " + strings.Join(blockers, ", ")

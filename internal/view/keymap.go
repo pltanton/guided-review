@@ -158,7 +158,7 @@ func DefaultActions() []Action {
 		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
 			run: do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
 		{Name: "skip", Group: rev, Desc: "skip the step with a reason", Keys: k("S"),
-			run: do(func(m *model) { m.startCompose(inbox.KindSkip) })},
+			run: do(func(m *model) { m.startCompose(kindSkip) })},
 		{Name: "edit-comment", Group: rev, Desc: "edit the comment under the cursor", Keys: k("E"),
 			run: do((*model).startEdit)},
 		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (twice)",

@@ -397,20 +397,14 @@ func severityCounts(r *state.Review) string {
 
 func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 	items := m.finishItems()
-	if i, ok := digitPick(msg.String(), len(items)); ok {
-		m.finishSel = i
-		return m.handleFinishCardKey(tea.KeyMsg{Type: tea.KeyEnter})
-	}
-	switch msg.String() {
-	case "j", "down":
-		m.finishSel = min(m.finishSel+1, len(items)-1)
-	case "k", "up":
-		m.finishSel = max(m.finishSel-1, 0)
-	case "esc", "q":
-		m.finishCard = false
-	case m.keys().key("replies"):
+	if k := msg.String(); k == m.keys().key("replies") {
 		m.finishCard = false
 		m.openThreads()
+		return nil
+	}
+	switch cardNav(msg.String(), len(items), &m.finishSel) {
+	case "esc":
+		m.finishCard = false
 	case "enter":
 		if len(items) == 2 {
 			m.approvePick = m.finishSel + 1

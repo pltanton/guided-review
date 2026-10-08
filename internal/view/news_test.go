@@ -38,7 +38,7 @@ func TestWhatsNewOnce(t *testing.T) {
 	typeText(again, "changelog")
 	again.Update(key("enter"))
 	if v := ansi.Strip(again.View()); !again.newsOpen || !strings.Contains(v, "┌ changelog") ||
-		!strings.Contains(v, "v0.1.0") {
+		!strings.Contains(v, "v"+guidedreview.Version) {
 		t.Fatalf(":changelog shows every version:\n%s", v)
 	}
 }

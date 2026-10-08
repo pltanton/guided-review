@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -60,12 +59,6 @@ func TestGopls(t *testing.T) {
 	if err != nil || len(syms) != 1 || syms[0].Name != "Transfer" || syms[0].Kind != "func" ||
 		syms[0].Line != 3 {
 		t.Fatalf("DocumentSymbols = %+v, %v", syms, err)
-	}
-	found, err := c.WorkspaceSymbols(ctx, "Transfer")
-	if err != nil || !slices.ContainsFunc(found, func(s Symbol) bool {
-		return s.Name == "Transfer" && filepath.Base(s.Path) == "b.go"
-	}) {
-		t.Fatalf("WorkspaceSymbols = %+v, %v", found, err)
 	}
 	in, out, err := c.Calls(ctx, a, 2, 5)
 	if err != nil || len(in) != 0 || len(out) != 1 || out[0].Name != "Transfer" {

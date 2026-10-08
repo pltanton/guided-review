@@ -351,16 +351,8 @@ func (m *model) staleModal(w int) modalContent {
 }
 
 func (m *model) handleStaleKey(msg tea.KeyMsg) tea.Cmd {
-	if i, ok := digitPick(msg.String(), len(staleItems)); ok {
-		m.staleSel = i
-		return m.handleStaleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	}
-	switch msg.String() {
-	case "j", "down":
-		m.staleSel = 1
-	case "k", "up":
-		m.staleSel = 0
-	case "esc", "q":
+	switch cardNav(msg.String(), len(staleItems), &m.staleSel) {
+	case "esc":
 		m.staleSteps = nil
 	case "enter":
 		finish := m.staleSel == 1
@@ -387,6 +379,23 @@ func digitPick(k string, n int) (int, bool) {
 	return int(k[0] - '1'), true
 }
 
+// cardNav moves sel over n items; it reports "enter" (a digit picks too) or "esc".
+func cardNav(k string, n int, sel *int) string {
+	if i, ok := digitPick(k, n); ok {
+		*sel = i
+		return "enter"
+	}
+	switch k {
+	case "j", "down":
+		*sel = min(*sel+1, max(n-1, 0))
+	case "k", "up":
+		*sel = max(*sel-1, 0)
+	case "esc", "q", "enter":
+		return k
+	}
+	return ""
+}
+
 const themeCardWidth = 34
 
 func (m *model) openThemes() {
@@ -406,25 +415,20 @@ func (m *model) themeModal() modalContent {
 
 func (m *model) handleThemeKey(msg tea.KeyMsg) tea.Cmd {
 	names := Themes()
-	switch msg.String() {
-	case "j", "down":
-		m.themeSel = min(m.themeSel+1, len(names)-1)
-	case "k", "up":
-		m.themeSel = max(m.themeSel-1, 0)
-	case "esc", "q":
+	k := msg.String()
+	if i, ok := digitPick(k, len(names)); ok {
+		m.themeSel, k = i, ""
+	}
+	switch cardNav(k, len(names), &m.themeSel) {
+	case "esc":
 		m.setTheme(m.themeWas)
 		m.themeWas = ""
-		return nil
 	case "enter":
 		m.themeWas = ""
 		m.saveTheme(names[m.themeSel])
-		return nil
 	default:
-		if i, ok := digitPick(msg.String(), len(names)); ok {
-			m.themeSel = i
-		}
+		m.setTheme(names[m.themeSel])
 	}
-	m.setTheme(names[m.themeSel])
 	return nil
 }
 

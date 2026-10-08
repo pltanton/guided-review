@@ -44,9 +44,7 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
      is a full review of the MR's code. Tell the human in one line that without glab/gh
      there are no MR discussions and the result is a local review.md to post by hand, and
      that installing glab/gh and logging in gives the full flow — do not install it unasked.
-   - "already exists, resuming": `gr step show`, then continue the step loop. If it also
-     printed "plan outdated", build the plan again from scratch (Plan below) — the old
-     one predates chapters and step messages and nothing has been reviewed yet.
+   - "already exists, resuming": `gr step show`, then continue the step loop.
    - "round N": this is a re-review, see below.
    - Never pass `--force` on your own: it throws away the plan and progress. Only the
      user may ask to start over.

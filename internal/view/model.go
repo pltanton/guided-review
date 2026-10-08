@@ -160,7 +160,6 @@ type model struct {
 	approvePick   int
 	autoVerdict   bool
 	gateSel       int
-	notice        string
 	lspStep       string
 	seen          map[string]bool
 	flow          []flowEntry
@@ -237,6 +236,7 @@ func (m *model) reload() {
 	if err != nil {
 		m.closed = m.review != nil && errors.Is(err, state.ErrNoReview)
 		m.review, m.step, m.rows, m.lines, m.err = nil, nil, nil, nil, err
+		m.closeCards()
 		return
 	}
 	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
@@ -258,6 +258,7 @@ func (m *model) reload() {
 	m.step = m.stepByID(target)
 	if m.step == nil {
 		m.rows, m.lines = nil, nil
+		m.closeCards()
 		return
 	}
 	changed := m.step.ID != prev
@@ -268,6 +269,11 @@ func (m *model) reload() {
 	m.rebuild(changed)
 	m.refreshDetail()
 	m.refreshPreview()
+}
+
+func (m *model) closeCards() {
+	m.gateOpen, m.finishCard, m.pub, m.threadCard = false, false, nil, ""
+	m.focusPlan, m.focusFiles, m.staleSteps = false, false, nil
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
@@ -360,7 +366,7 @@ func (m *model) pending(e inbox.Event) bool {
 		return false
 	}
 	switch e.Kind {
-	case inbox.KindMessage, inbox.KindExplain, inbox.KindSkip, inbox.KindAsk:
+	case inbox.KindMessage, inbox.KindExplain, inbox.KindAsk:
 		return e.Time.After(m.lastWait)
 	}
 	return false
@@ -810,33 +816,27 @@ func (m *model) toggleRisk(n int) {
 
 func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
 	risks := len(m.step.Hotspots)
-	if i, ok := digitPick(msg.String(), risks+1); ok {
-		m.gateSel = i
-		return m.handleGateKey(tea.KeyMsg{Type: tea.KeyEnter})
-	}
-	switch msg.String() {
-	case "j", "down":
-		m.gateSel = min(m.gateSel+1, risks)
-	case "k", "up":
-		m.gateSel = max(m.gateSel-1, 0)
-	case "x":
+	switch k := msg.String(); {
+	case k == "x":
 		m.toggleRisk(m.gateSel + 1)
-	case "enter":
-		if m.gateSel >= risks {
-			m.next()
-			return nil
-		}
-		m.toggleRisk(m.gateSel + 1)
-		if open := m.openRisks(); len(open) > 0 {
-			m.gateSel = open[0]
-		} else {
-			m.gateSel = risks
-		}
-	case "esc", "q":
-		m.gateOpen = false
-	case m.keys().key("replies"):
+	case k == m.keys().key("replies"):
 		m.gateOpen = false
 		m.openThreads()
+	default:
+		switch cardNav(k, risks+1, &m.gateSel) {
+		case "esc":
+			m.gateOpen = false
+		case "enter":
+			if m.gateSel >= risks {
+				m.next()
+				return nil
+			}
+			m.toggleRisk(m.gateSel + 1)
+			m.gateSel = risks
+			if open := m.openRisks(); len(open) > 0 {
+				m.gateSel = open[0]
+			}
+		}
 	}
 	return nil
 }
@@ -862,7 +862,7 @@ func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	case "quit":
 		return tea.Quit
 	case "down":
-		m.fileCursor = min(m.fileCursor+1, len(files)-1)
+		m.fileCursor = max(0, min(m.fileCursor+1, len(files)-1))
 	case "up":
 		m.fileCursor = max(m.fileCursor-1, 0)
 	case "top":
@@ -870,7 +870,7 @@ func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 	case "bottom":
 		m.fileCursor = max(len(files)-1, 0)
 	case "act", "message", "open":
-		if m.fileCursor < len(files) {
+		if m.fileCursor >= 0 && m.fileCursor < len(files) {
 			m.jumpToFile(files[m.fileCursor])
 		}
 		m.focusFiles = false
@@ -922,12 +922,13 @@ func (m *model) handOver(text string) tea.Cmd {
 }
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	m.status, m.notice = "", ""
+	m.status = ""
 	if m.keys().name(msg.String()) != "delete-comment" {
 		m.deleteArmed = 0
 	}
 	filtering := m.popup != nil && m.popup.filtering
-	if k := msg.String(); !m.help && !filtering && (k == "?" || k == "f1") {
+	overlay := m.step != nil && !m.threads && m.preview == ""
+	if k := msg.String(); overlay && !m.help && !filtering && (k == "?" || k == "f1") {
 		m.help, m.helpAll, m.helpTop = true, false, 0
 		return nil
 	}
@@ -988,6 +989,7 @@ func (m *model) jump(dir int, match func(line) bool) {
 
 func (m *model) clamp() {
 	m.cursor = max(0, min(m.cursor, len(m.lines)-1))
+	m.anchor = max(0, min(m.anchor, len(m.lines)-1))
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}

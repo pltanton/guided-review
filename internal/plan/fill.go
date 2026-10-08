@@ -23,7 +23,7 @@ func Fill(r *state.Review, p Plan, files []diff.File) []error {
 			continue
 		}
 		st := r.Steps[i]
-		if ps.Intro != "" && i > 0 && r.Steps[i-1].Chapter == st.Chapter {
+		if ps.Intro != "" && st.Chapter != "" && i > 0 && r.Steps[i-1].Chapter == st.Chapter {
 			fail("step %s: intro belongs on the first step of chapter %q", ps.ID, st.Chapter)
 		}
 		for _, a := range ps.Annotations {

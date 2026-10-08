@@ -14,9 +14,7 @@ import (
 	"github.com/pltanton/guided-review/internal/inbox"
 )
 
-var commandNames = []string{
-	"q", "all", "boilerplate", "generated", "f", "sym", "set", "msg", "skip",
-}
+var commandNames = []string{"q", "all", "boilerplate", "generated", "f", "set", "msg", "skip"}
 
 var setOptions = []string{"context=", "diff=", "wrap", "nowrap"}
 
@@ -88,34 +86,20 @@ func (m *model) execCommand(line string) tea.Cmd {
 	case "f":
 		m.jumpToFileMatch(arg)
 		return nil
-	case "sym":
-		file := m.current().File
-		switch {
-		case arg == "":
-			m.status = "usage: :sym <name>"
-		case file == "" || m.lspDo == nil:
-			m.status = "put the cursor on code of the language to search"
-		default:
-			m.lspBusy = "symbols"
-			return m.lspDo("workspace:"+arg, file, max(m.current().Line, 1), 0)
-		}
-		return nil
 	case "set":
 		m.setOption(arg)
 		return nil
 	case "msg", "skip":
-		kind := inbox.KindMessage
-		if name == "skip" {
-			kind = inbox.KindSkip
-		}
 		if arg == "" {
 			m.status = "usage: :" + name + " <text>"
 			return nil
 		}
-		e := inbox.Event{Kind: kind, Text: arg}
-		if kind == inbox.KindMessage {
-			e.File, e.Lines, e.Comment = m.anchorAt()
+		if name == "skip" {
+			m.moveStep("skip", "--reason", arg)
+			return nil
 		}
+		e := inbox.Event{Kind: inbox.KindMessage, Text: arg}
+		e.File, e.Lines, e.Comment = m.anchorAt()
 		m.emit(e)
 		return nil
 	}

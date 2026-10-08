@@ -1209,17 +1209,6 @@ func TestStepMessagesFromPlan(t *testing.T) {
 	}
 }
 
-func TestOutdatedPlanOnResume(t *testing.T) {
-	h := newHarness(t)
-	h.mustRun("", "init")
-	h.mustRun(goodPlan, "plan", "set")
-	assertContains(t, h.mustRun("", "init"), "plan outdated")
-	h.mustRun("", "step", "next")
-	if out := h.mustRun("", "init"); strings.Contains(out, "plan outdated") {
-		t.Fatal("a plan with reviewed steps is kept")
-	}
-}
-
 func TestSayOptions(t *testing.T) {
 	h := newHarness(t)
 	h.mustRun("", "init")

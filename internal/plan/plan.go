@@ -91,12 +91,12 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 	}
 	closed := map[string]bool{}
 	for i, s := range steps {
-		if s.Intro != "" && i > 0 && steps[i-1].Chapter == s.Chapter {
+		if s.Intro != "" && s.Chapter != "" && i > 0 && steps[i-1].Chapter == s.Chapter {
 			fail("step %s: intro belongs on the first step of chapter %q", s.ID, s.Chapter)
 		}
 		if i > 0 && steps[i-1].Chapter != s.Chapter {
 			closed[steps[i-1].Chapter] = true
-			if closed[s.Chapter] {
+			if s.Chapter != "" && closed[s.Chapter] {
 				fail("step %s: chapter %q is split; keep its steps together", s.ID, s.Chapter)
 			}
 		}
@@ -215,14 +215,20 @@ func changedLines(s state.Step, files []diff.File) int {
 		if err != nil {
 			continue
 		}
+		deleted := files[i].Status == diff.Deleted
 		for _, h := range files[i].Hunks {
 			line := h.NewStart
+			if deleted {
+				line = h.OldStart
+			}
+			if h.NewLines == 0 && !deleted {
+				line = removalAt(h)
+			}
 			for _, l := range h.Lines {
-				inRange := from == 0 || from <= line && line <= to+1
-				if l.Kind != ' ' && inRange {
+				if from == 0 || from <= line && line <= to+1 {
 					n++
 				}
-				if l.Kind != '-' {
+				if deleted || l.Kind == '+' {
 					line++
 				}
 			}
@@ -284,7 +290,7 @@ func uncovered(f diff.File, steps []state.Step) []string {
 			gaps(h.NewStart, h.NewEnd())
 		}
 		if h.OldLines > 0 && !in(removalAt(h), 1) {
-			out = append(out, fmt.Sprintf("%s:%d(del)", f.Path, h.NewStart))
+			out = append(out, fmt.Sprintf("%s:%d(del)", f.Path, max(h.NewStart, 1)))
 		}
 	}
 	return out

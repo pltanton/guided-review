@@ -30,6 +30,7 @@ type Client struct {
 	nextID  atomic.Int64
 	mu      sync.Mutex
 	pending map[int64]chan response
+	dead    error
 	cmd     *exec.Cmd
 }
 
@@ -142,6 +143,7 @@ func (c *Client) read(r *bufio.Reader) {
 func (c *Client) failPending(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.dead = err
 	for id, ch := range c.pending {
 		ch <- response{Error: &rpcError{Message: err.Error()}}
 		delete(c.pending, id)
@@ -170,8 +172,12 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 	id := c.nextID.Add(1)
 	ch := make(chan response, 1)
 	c.mu.Lock()
+	dead := c.dead
 	c.pending[id] = ch
 	c.mu.Unlock()
+	if dead != nil {
+		return nil, fmt.Errorf("%s: server gone: %w", method, dead)
+	}
 	forget := func() {
 		c.mu.Lock()
 		delete(c.pending, id)
@@ -192,6 +198,13 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 		}
 		return r.Result, nil
 	}
+}
+
+// Dead reports the error that ended the server's output, if any.
+func (c *Client) Dead() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.dead
 }
 
 func (c *Client) notify(method string, params any) error {
@@ -551,20 +564,6 @@ func (c *Client) DocumentSymbols(ctx context.Context, path string) ([]Symbol, er
 	}
 	var out []Symbol
 	flatten(syms, path, 0, &out)
-	return out, nil
-}
-
-func (c *Client) WorkspaceSymbols(ctx context.Context, query string) ([]Symbol, error) {
-	raw, err := c.call(ctx, "workspace/symbol", map[string]any{"query": query})
-	if err != nil {
-		return nil, err
-	}
-	var syms []docSymbol
-	if err := json.Unmarshal(raw, &syms); err != nil {
-		return nil, err
-	}
-	var out []Symbol
-	flatten(syms, "", 0, &out)
 	return out, nil
 }
 

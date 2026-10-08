@@ -86,7 +86,7 @@ func (m *model) toggleSuggestion() {
 
 func (m *model) composedTexts() (comment, suggestion string) {
 	switch {
-	case !m.sugOn:
+	case !m.sugOn || !m.canSuggest():
 		return string(m.input), ""
 	case m.sugFocus:
 		return string(m.altInput), string(m.input)
@@ -265,6 +265,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 	case tea.KeyEsc:
 		m.composing, m.input, m.composeThread, m.chatting = false, nil, "", false
 		m.chatAbout, m.chatTopic = "", ""
+		m.sugOn, m.sugFocus, m.altInput = false, false, nil
 		m.resume()
 	case tea.KeyCtrlJ:
 		m.insert([]rune{'\n'})
@@ -276,11 +277,11 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		defer m.resume()
 		comment, suggestion := m.composedTexts()
 		text := strings.TrimSpace(comment)
-		thread, raw := m.composeThread, m.rawMode()
+		thread, raw, chatting := m.composeThread, m.rawMode(), m.chatting
 		m.sugOn, m.sugFocus, m.altInput = false, false, nil
-		m.composing, m.input, m.composeThread = false, nil, ""
-		if m.chatting && text != "" {
-			defer func() { m.composing = m.err == nil }()
+		m.composing, m.input, m.composeThread, m.chatting = false, nil, "", false
+		if chatting && text != "" {
+			defer func() { m.composing, m.chatting = m.err == nil, m.err == nil }()
 			text, m.chatAbout = m.chatAbout+text, ""
 		}
 		switch {
@@ -291,7 +292,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":
 			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":
-		case m.composeKind == inbox.KindSkip:
+		case m.composeKind == kindSkip:
 			m.moveStep("skip", "--reason", text)
 		case raw:
 			m.saveRaw(text, suggestion)
@@ -300,10 +301,6 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 				Kind: m.composeKind, Text: text, File: m.anchorFile, Lines: m.anchorLines,
 				Comment: m.composeRef,
 			})
-		}
-	case tea.KeyCtrlR:
-		if m.inlineCompose() {
-			m.raw = !m.raw
 		}
 	case tea.KeyTab:
 		switch {
@@ -316,6 +313,12 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 			m.composeKind = inbox.KindAsk
 		case m.composeKind == inbox.KindAsk:
 			m.composeKind, m.raw = inbox.KindMessage, true
+		}
+		if m.sugOn && !m.canSuggest() {
+			if m.sugFocus {
+				m.input, m.inputPos = m.altInput, m.altPos
+			}
+			m.sugOn, m.sugFocus, m.altInput = false, false, nil
 		}
 	case tea.KeyShiftTab:
 		if m.rawMode() && m.composeKind == inbox.KindMessage {

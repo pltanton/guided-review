@@ -30,6 +30,24 @@ func (r *Review) MyThreads() []Discussion {
 	return append(answered, silent...)
 }
 
+// OpenThreads lists the reviewer's unresolved threads that no viewer decision resolves,
+// published ones included.
+func (r *Review) OpenThreads() []string {
+	if r.MR == nil {
+		return nil
+	}
+	var ids []string
+	for _, d := range r.Discussions {
+		if d.Author != r.MR.Me || !d.Resolvable || d.Resolved {
+			continue
+		}
+		if t := r.ThreadState(d); !t.Decided() || t.Verdict != VerdictResolve {
+			ids = append(ids, d.ID)
+		}
+	}
+	return ids
+}
+
 func (r *Review) Answered(d Discussion) bool {
 	return len(d.Notes) > 0 && d.Notes[len(d.Notes)-1].Author != r.MR.Me
 }
@@ -147,6 +165,9 @@ func (r *Review) Decide(id, verdict, reply string, now time.Time) error {
 		return fmt.Errorf("no thread %q", id)
 	}
 	t := r.ThreadState(*d)
+	if i := slices.IndexFunc(r.Threads, func(x Thread) bool { return x.ID == id }); i >= 0 {
+		t.Resolves = r.Threads[i].Resolves
+	}
 	if i := slices.IndexFunc(r.Comments, func(c Comment) bool { return c.ID == t.Resolves }); i >= 0 {
 		r.Comments[i].Resolved, r.Comments[i].ResolvedRound = false, 0
 	}

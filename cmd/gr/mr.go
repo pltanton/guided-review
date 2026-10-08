@@ -85,12 +85,17 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 		return fmt.Errorf("answered threads without the reviewer's decision: %s "+
 			"(R in the viewer)", strings.Join(ids, " "))
 	}
-	if ids := openThreads(r); *verdict == "approve" && len(ids) > 0 {
+	if ids := r.OpenThreads(); *verdict == "approve" && len(ids) > 0 {
 		return fmt.Errorf("approve with your threads still open: %s "+
 			"(resolve them or use --verdict changes)", strings.Join(ids, " "))
 	}
 	err = s.store.Update(r.ID, func(r *state.Review) error {
-		r.Publish = &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
+		p := &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
+		if old := r.Publish; old != nil {
+			p.Approved = old.Approved
+			p.VerdictSent = old.VerdictSent && old.Verdict == *verdict
+		}
+		r.Publish = p
 		return nil
 	})
 	if err != nil {
@@ -474,7 +479,7 @@ func exportGitHub(
 		req.Body = "See the inline comments."
 	case req.Event == "REQUEST_CHANGES":
 		req.Body = "Changes still requested."
-		if n := len(openThreads(r)); n > 0 {
+		if n := len(r.OpenThreads()); n > 0 {
 			req.Body = fmt.Sprintf("Changes still requested: %d open threads.", n)
 		}
 	}

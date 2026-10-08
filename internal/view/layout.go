@@ -75,7 +75,7 @@ func (m *model) footerButtons() []button {
 		b("next", "next", (*model).next),
 		b("comment", "act", (*model).startComment),
 		b("ask", "ask", func(m *model) { m.startCompose(inbox.KindAsk) }),
-		b("skip", "skip", func(m *model) { m.startCompose(inbox.KindSkip) }),
+		b("skip", "skip", func(m *model) { m.startCompose(kindSkip) }),
 	}
 	if n := m.pendingThreads(); n > 0 {
 		label := fmt.Sprintf("replies %d", n)
@@ -127,9 +127,6 @@ func (m *model) footer() (string, []span) {
 		spans = append(spans, span{x, x + w, b})
 		line += buttonStyle.Render(" "+b.label+" · ") + keyStyle.Render(b.key+" ") + " "
 		x += w + 1
-	}
-	if m.notice != "" {
-		return line + " " + hotStyle.Render(m.notice), spans
 	}
 	return line + " " + dimStyle.Render(tail), spans
 }
@@ -183,7 +180,7 @@ func (m *model) chatOpen() bool {
 }
 
 func (m *model) chatWidth() int {
-	if m.width-max(36, m.width/4) < minCodeWidth {
+	if m.step == nil || m.width-max(36, m.width/4) < minCodeWidth {
 		return 0
 	}
 	small := max(30, m.width/6)
@@ -370,7 +367,7 @@ func (m *model) conversation(all bool) []chatLine {
 		}
 	}
 	for _, e := range m.events {
-		if !keep(e.Step, e.Time) || e.Kind == inbox.KindGoto {
+		if !keep(e.Step, e.Time) {
 			continue
 		}
 		text := e.Text
@@ -530,7 +527,7 @@ func (m *model) composeMode() (
 	badge, style, anchor = "MSG", keyStyle, loc
 	hints = []composeHint{{"enter", "send"}}
 	switch {
-	case m.composeKind == inbox.KindSkip:
+	case m.composeKind == kindSkip:
 		badge, hints[0].desc = "SKIP", "skip"
 	case m.composeKind == kindThreadReply:
 		badge, anchor, hints[0].desc = "REPLY", m.threadLabel(), "reply, thread stays open"

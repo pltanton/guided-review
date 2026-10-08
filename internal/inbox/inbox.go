@@ -17,9 +17,6 @@ import (
 const (
 	KindMessage  = "message"
 	KindExplain  = "explain"
-	KindNext     = "next"
-	KindSkip     = "skip"
-	KindGoto     = "goto"
 	KindEdit     = "edit"
 	KindFinished = "finished"
 	KindComment  = "comment"

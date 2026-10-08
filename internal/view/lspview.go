@@ -118,7 +118,11 @@ func (lm *lspManager) client(ctx context.Context, path string) (*lsp.Client, str
 	lm.mu.Lock()
 	defer lm.mu.Unlock()
 	if c, ok := lm.clients[lang]; ok {
-		return c, lang, nil
+		if c.Dead() == nil {
+			return c, lang, nil
+		}
+		_ = c.Shutdown(ctx)
+		clear(lm.opened)
 	}
 	c, err := lsp.Start(ctx, argv, lm.root)
 	if err != nil {
@@ -190,10 +194,6 @@ func (m *model) defaultLSP(kind, file string, line, col int) tea.Cmd {
 		char := 0
 		if line-1 < len(lines) {
 			char = lsp.UTF16Column(lines[line-1], col, 4)
-		}
-		if q, ok := strings.CutPrefix(kind, "workspace:"); ok {
-			syms, err := c.WorkspaceSymbols(ctx, q)
-			return lspMsg{kind: "workspace", locs: symbolLocs(root, abs, syms), err: err}
 		}
 		switch kind {
 		case "symbols":
@@ -576,7 +576,7 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 			m.popupForward = append(m.popupForward, p)
 			m.popup, m.popupStack = m.popupStack[n-1], m.popupStack[:n-1]
 		} else {
-			m.popup = nil
+			m.popup, m.popupForward = nil, nil
 		}
 	}
 	return nil
@@ -728,11 +728,10 @@ var lspNames = map[string]string{
 	"typeDefinition": "type definitions",
 	"callers":        "callers",
 	"symbols":        "symbols",
-	"workspace":      "symbols",
 }
 
 var listKinds = map[string]bool{
-	"references": true, "callers": true, "symbols": true, "workspace": true,
+	"references": true, "callers": true, "symbols": true,
 }
 
 var peekG = map[string]string{

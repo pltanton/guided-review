@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- An agent killed while `gr wait` ran left the viewer on "your turn" for good; the marker
+  now expires with the wait.
+- A key conflict or an unknown theme in the config shows in the viewer on start, not only
+  in `gr config`.
+- `gr help` lists `plan set --route` and `plan fill`.
+
 ## v0.1.1
 
 - **Threads in the code.** A thread on a line shows whose it is and what was decided:

@@ -12,7 +12,7 @@ import (
 
 func TestFilesArePrivate(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "mr-1")
-	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindNext}); err != nil {
+	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindAsk}); err != nil {
 		t.Fatal(err)
 	}
 	if err := inbox.MarkIdle(dir); err != nil {
@@ -41,13 +41,13 @@ func TestAppendReadWait(t *testing.T) {
 	if err := inbox.Append(dir, ev); err != nil {
 		t.Fatal(err)
 	}
-	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindNext, Step: "s1"}); err != nil {
+	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindAsk, Step: "s1"}); err != nil {
 		t.Fatal(err)
 	}
 
 	ctx := context.Background()
 	evs, err := inbox.Wait(ctx, dir, time.Second, 10*time.Millisecond)
-	if err != nil || len(evs) != 2 || evs[0].Text != "why?" || evs[1].Kind != inbox.KindNext ||
+	if err != nil || len(evs) != 2 || evs[0].Text != "why?" || evs[1].Kind != inbox.KindAsk ||
 		evs[0].Time.IsZero() {
 		t.Fatalf("Wait = %+v, %v", evs, err)
 	}
@@ -94,9 +94,7 @@ func TestFormat(t *testing.T) {
 			inbox.Event{Kind: inbox.KindExplain, Step: "s3", File: "a.go", Lines: "40-52"},
 			"[explain] s3 a.go:40-52",
 		},
-		{inbox.Event{Kind: inbox.KindNext, Step: "s3"}, "[next] s3"},
-		{inbox.Event{Kind: inbox.KindSkip, Step: "s3", Text: "trivial"}, "[skip] s3: trivial"},
-		{inbox.Event{Kind: inbox.KindGoto, Step: "s5"}, "[goto] s5"},
+		{inbox.Event{Kind: inbox.KindAsk, Step: "s3", Text: "why?"}, "[ask] s3: why?"},
 		{
 			inbox.Event{
 				Kind:    inbox.KindMessage,
@@ -141,7 +139,7 @@ func TestWaitingMarker(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	_ = inbox.Append(dir, inbox.Event{Kind: inbox.KindNext})
+	_ = inbox.Append(dir, inbox.Event{Kind: inbox.KindAsk})
 	<-done
 	if inbox.Waiting(dir) {
 		t.Fatal("marker must be removed after Wait returns")

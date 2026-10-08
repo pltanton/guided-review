@@ -13,7 +13,10 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-const kindThreadReply = "thread-reply"
+const (
+	kindThreadReply = "thread-reply"
+	kindSkip        = "skip"
+)
 
 func (m *model) myThreads() []state.Discussion {
 	if m.review == nil {
@@ -335,16 +338,9 @@ func (m *model) handleThreadCardKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	}
 	items := m.threadCardItems(d)
-	k := msg.String()
-	if i, ok := digitPick(k, len(items)); ok {
-		m.threadCardSel, k = i, "enter"
-	}
-	switch k {
-	case "j", "down":
-		m.threadCardSel = min(m.threadCardSel+1, len(items)-1)
-	case "k", "up":
-		m.threadCardSel = max(m.threadCardSel-1, 0)
-	case "esc", "q":
+	m.threadCardSel = max(0, min(m.threadCardSel, len(items)-1))
+	switch cardNav(msg.String(), len(items), &m.threadCardSel) {
+	case "esc":
 		m.threadCard = ""
 	case "enter":
 		m.threadCard = ""

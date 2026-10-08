@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -124,5 +125,22 @@ func TestUTF16Column(t *testing.T) {
 		if got := UTF16Column(tt.line, tt.display, 4); got != tt.want {
 			t.Errorf("UTF16Column(%q, %d) = %d, want %d", tt.line, tt.display, got, tt.want)
 		}
+	}
+}
+
+func TestDeadServerFailsCallsAtOnce(t *testing.T) {
+	c := NewClient(strings.NewReader(""), io.Discard)
+	deadline := time.Now().Add(time.Second)
+	for c.Dead() == nil && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if c.Dead() == nil {
+		t.Fatal("EOF from the server must mark the client dead")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	start := time.Now()
+	if _, err := c.Hover(ctx, "/a.go", 0, 0); err == nil || time.Since(start) > time.Second {
+		t.Fatalf("Hover on a dead client = %v after %s, want an immediate error", err, time.Since(start))
 	}
 }
