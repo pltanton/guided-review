@@ -1190,8 +1190,8 @@ func TestRawComment(t *testing.T) {
 		m.Update(k)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-x stays, exactly")})
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ -x stays, exactly") ||
-		!strings.Contains(v, " COMMENT nit a.go:2 ") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "│ -x stays, exactly") ||
+		!strings.Contains(v, " COMMENT nit  a.go:2 ") {
 		t.Fatalf("raw prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))
@@ -1219,7 +1219,7 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 	m.cursor = 2
 	m.Update(key("a"))
 	typeText(m, "why 1?")
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ why 1?") || !strings.Contains(v, " ASK a.go:2 ") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "│ why 1?") || !strings.Contains(v, " ASK  a.go:2 ") {
 		t.Fatalf("ask prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))

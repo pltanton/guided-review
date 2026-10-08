@@ -250,20 +250,20 @@ func TestInlineComposer(t *testing.T) {
 	typeText(m, "why x")
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	at := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "x := 1") })
-	if at < 0 || at+2 >= len(lines) || !strings.Contains(lines[at+1], "▌ why x█") ||
-		!strings.Contains(lines[at+2], "COMMENT minor a.go:2") ||
-		!strings.Contains(lines[at+2], "tab ai comment") {
+	if at < 0 || at+3 >= len(lines) || !strings.Contains(lines[at+1], "COMMENT minor  a.go:2") ||
+		!strings.Contains(lines[at+2], "│ why x█") ||
+		!strings.Contains(lines[at+3], "tab ai comment") {
 		t.Fatalf("enter opens a plain comment under its line:\n%s", strings.Join(lines, "\n"))
 	}
 	if strings.Contains(lines[len(lines)-1], "COMMENT") {
 		t.Fatal("the bottom prompt stays the footer while composing inline")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.raw || !strings.Contains(ansi.Strip(m.View()), "AI COMMENT a.go:2") {
+	if m.raw || !strings.Contains(ansi.Strip(m.View()), "AI COMMENT  a.go:2") {
 		t.Fatal("tab switches to an ai comment")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.composeKind != inbox.KindAsk || !strings.Contains(ansi.Strip(m.View()), "ASK a.go:2") {
+	if m.composeKind != inbox.KindAsk || !strings.Contains(ansi.Strip(m.View()), "ASK  a.go:2") {
 		t.Fatal("tab again switches to ask")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})

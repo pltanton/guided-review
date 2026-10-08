@@ -94,15 +94,42 @@ func (m *model) inlineCompose() bool {
 }
 
 func (m *model) composerRows(w int) []string {
-	bar := accentTone
-	if m.rawMode() {
-		bar = badTone
+	const indent = "       "
+	bw := max(w-len(indent), 24)
+	t, placeholder := accentTone, "write a comment, it is saved as you type it"
+	switch {
+	case m.composeKind == inbox.KindAsk:
+		t, placeholder = blueTone, "ask the agent; enter alone explains the line"
+	case m.composeKind == inbox.KindEdit && m.rawMode():
+		placeholder = "the comment as it should read"
+	case !m.rawMode():
+		t, placeholder = agentTone, "say what is wrong, the agent writes the comment"
 	}
-	lines := m.inputLines("       "+bar.fg().Render("▌")+" ", "", w)
-	for i, l := range lines {
-		lines[i] = paint(fit(l, w), surfaceTone)
+	frame := t.fg()
+	badge, _, anchor, hints := m.composeMode()
+	head := frame.Render("╭─") + inkTone.fg().Background(t.color()).Bold(true).Render(" "+badge+" ")
+	if anchor != "" {
+		head += " " + dimStyle.Render(anchor)
 	}
-	return append(lines, "        "+m.composeStatus(max(w-8, 8)))
+	head += " " + frame.Render(strings.Repeat("─", max(bw-ansi.StringWidth(head)-2, 0))+"╮")
+	var body []string
+	if len(m.input) == 0 {
+		body = []string{withCursor(nil, 0) + dimStyle.Render(" "+placeholder)}
+	} else {
+		body = m.inputLines("", "", bw-4)
+	}
+	out := []string{indent + head}
+	for _, l := range body {
+		out = append(out, indent+frame.Render("│ ")+fit(l, bw-4)+frame.Render(" │"))
+	}
+	parts := make([]string, len(hints))
+	for i, h := range hints {
+		parts[i] = cursorStyle.Render(h.key) + dimStyle.Render(" "+h.desc)
+	}
+	keys := ansi.Truncate(strings.Join(parts, dimStyle.Render(" · ")), bw-4, "…")
+	foot := frame.Render("╰ ") + keys + " "
+	foot += frame.Render(strings.Repeat("─", max(bw-ansi.StringWidth(foot)-1, 0)) + "╯")
+	return append(out, indent+foot)
 }
 
 func (m *model) anchorAt() (file, lines string, ref int) {
