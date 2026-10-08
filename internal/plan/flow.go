@@ -115,7 +115,20 @@ func AddComment(r *state.Review, c state.Comment) (state.Comment, Impact, error)
 	}
 	c.ID++
 	r.Comments = append(r.Comments, c)
+	checkCommentedHotspots(r.Step(c.Step), c)
 	return c, recomputeStale(r), nil
+}
+
+func checkCommentedHotspots(st *state.Step, c state.Comment) {
+	from, to, err := state.ParseLines(c.Lines)
+	if err != nil {
+		return
+	}
+	for i, h := range st.Hotspots {
+		if file, _ := st.HotspotFile(h); h.Line >= from && h.Line <= max(to, from) && file == c.File {
+			st.Hotspots[i].Checked, st.Hotspots[i].Comment = true, c.ID
+		}
+	}
 }
 
 func recomputeStale(r *state.Review) Impact {

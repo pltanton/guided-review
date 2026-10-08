@@ -306,3 +306,20 @@ func TestEarlierRoundBlockerDoesNotStaleNewSteps(t *testing.T) {
 		t.Fatalf("DeleteComment = %+v", imp)
 	}
 }
+
+func TestCommentOnARiskChecksItOff(t *testing.T) {
+	r := &state.Review{Current: "s1", Files: []state.File{{Path: "a.go"}}, Steps: []state.Step{{
+		ID: "s1", Hunks: []state.StepHunk{{File: "a.go", Lines: "1-20"}},
+		Hotspots: []state.Hotspot{{Q: "retry?", Line: 7}, {Q: "rounding?", Line: 15}, {Q: "step-wide"}},
+	}}}
+	c, _, err := plan.AddComment(r, state.Comment{
+		File: "a.go", Lines: "5-8", Severity: state.SeverityMajor, Body: "retry charges twice",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := r.Steps[0].Hotspots
+	if !h[0].Checked || h[0].Comment != c.ID || h[1].Checked || h[2].Checked {
+		t.Fatalf("only the risk the comment covers is checked off: %+v", h)
+	}
+}

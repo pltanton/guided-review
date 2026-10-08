@@ -280,7 +280,10 @@ func (m *model) notes() []Note {
 	}
 	for i, h := range m.step.Hotspots {
 		label := ""
-		if h.Checked {
+		switch {
+		case h.Checked && h.Comment > 0:
+			label = fmt.Sprintf("RISK ✓ #%d", h.Comment)
+		case h.Checked:
 			label = "RISK ✓"
 		}
 		if h.Line == 0 {

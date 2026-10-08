@@ -202,6 +202,7 @@ type Hotspot struct {
 	Line    int    `yaml:"line,omitempty"`
 	Detail  string `yaml:"detail,omitempty"`
 	Checked bool   `yaml:"checked,omitempty"`
+	Comment int    `yaml:"comment,omitempty"`
 }
 
 type Detail struct {
