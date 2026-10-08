@@ -143,6 +143,7 @@ type model struct {
 	raw         bool
 	deleteArmed int
 	gateOpen    bool
+	pub         *publishCard
 	staleSteps  []string
 	staleSel    int
 	finishCard  bool
@@ -516,6 +517,11 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relist()
 		m.cursor = firstFocus(m.lines)
 		m.clamp()
+	case publishedMsg:
+		if m.pub != nil {
+			m.pub.running, m.pub.out, m.pub.err, m.pub.done = false, msg.out, msg.err, msg.err == nil
+			m.pub.sel = 0
+		}
 	case tickMsg:
 		m.frame++
 		m.refreshAgent()
@@ -873,7 +879,15 @@ func (m *model) finish() tea.Cmd {
 		return nil
 	}
 	m.preview = ""
-	if m.emit(inbox.Event{Kind: inbox.KindFinished, Text: out}); m.err != nil {
+	if m.review.MR != nil {
+		m.pub = &publishCard{dir: out}
+		return nil
+	}
+	return m.handOver(out)
+}
+
+func (m *model) handOver(text string) tea.Cmd {
+	if m.emit(inbox.Event{Kind: inbox.KindFinished, Text: text}); m.err != nil {
 		return nil
 	}
 	return tea.Quit
@@ -899,6 +913,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleGateKey(msg)
 	case m.finishCard:
 		return m.handleFinishCardKey(msg)
+	case m.pub != nil:
+		return m.handlePublishKey(msg)
 	case len(m.staleSteps) > 0:
 		return m.handleStaleKey(msg)
 	case m.preview != "":

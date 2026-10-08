@@ -1,6 +1,7 @@
 package view
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"slices"
@@ -2494,5 +2495,47 @@ func TestCardDigits(t *testing.T) {
 	m.Update(key("3"))
 	if len(ran) == 0 || ran[0][0] != "prepare" || slices.Contains(ran[0], "--approve") {
 		t.Fatalf("3 shows the result without approve: %q", ran)
+	}
+}
+
+func TestPublishFromViewer(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.MR = &state.MR{URL: "https://gitlab/x/-/merge_requests/1"}
+	m.review.Publish = &state.PublishPlan{Verdict: "changes"}
+	m.preview = "--- summary\n"
+	var ran [][]string
+	fail := true
+	m.runGr = func(args ...string) (string, error) {
+		ran = append(ran, args)
+		switch {
+		case args[0] == "export":
+			return "/tmp/exports/mr-1\n", nil
+		case args[0] == "publish" && fail:
+			return "posting drafts\n", errors.New("exit status 1")
+		}
+		return "posted 3 drafts\n", nil
+	}
+	m.finish()
+	if m.pub == nil || !strings.Contains(ansi.Strip(m.View()), "1  publish to the MR now") {
+		t.Fatalf("after writing the export the viewer offers to publish:\n%s", ansi.Strip(m.View()))
+	}
+	_, cmd := m.Update(key("1"))
+	if cmd == nil || !m.pub.running {
+		t.Fatal("1 starts publishing in the background")
+	}
+	m.Update(key("1"))
+	m.Update(cmd())
+	if m.pub.err == nil || !strings.Contains(ansi.Strip(m.View()), "publishing stopped") {
+		t.Fatal("a failed publish says so")
+	}
+	fail = false
+	_, cmd = m.Update(key("1"))
+	m.Update(cmd())
+	if !m.pub.done || !slices.Equal(ran[len(ran)-2], []string{"export"}) {
+		t.Fatalf("try again exports what did not go out, then publishes: %q", ran)
+	}
+	if _, cmd := m.Update(key("enter")); cmd == nil || len(*sent) != 1 ||
+		(*sent)[0].Text != "published /tmp/exports/mr-1" {
+		t.Fatalf("closing tells the agent it is published: %+v", *sent)
 	}
 }

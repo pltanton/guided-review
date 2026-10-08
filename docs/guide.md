@@ -97,13 +97,15 @@ the step under its files. Results open over the code; `/` filters a list, `esc` 
 <details>
 <summary>Publishing</summary>
 
-`gr` never writes to GitLab or GitHub. At the end it writes inline comments and a
-summary (verdict, decisions, what was skipped and why) to
-`<git common dir>/guided-review/exports/<id>/` (`gr export --dir` prints it).
-You review and edit it (in the preview `v` cycles the verdict and `a` turns approve on
-or off; approve goes only with the approve verdict), then the agent posts it: GitLab
-draft notes in one batch or one GitHub review. If posting stops halfway, the next
-attempt sends only what did not go out. A `guided-review-notify` skill, if present, then
+After the last step the viewer derives the verdict from your comments (blocker →
+blocked, major or an open thread → changes, else approve), lists what was skipped and
+which risks you checked, and asks whether to approve the MR. It writes inline comments
+and the summary to `<git common dir>/guided-review/exports/<id>/` (`gr export --dir`
+prints it). You review and edit it (in the preview `v` changes the verdict, `a` approve,
+`s` a comment's severity, and the verdict follows severity until you change it), then
+publish it from the viewer or hand it to the agent; both run `gr publish`, which needs
+`glab` or `gh` and `jq`: GitLab draft notes in one batch or one GitHub review. If posting
+stops halfway, the next attempt sends only what did not go out. A `guided-review-notify` skill, if present, then
 tells the author. A local branch without an MR ends in `fixes.json` instead, which the
 agent applies right away or leaves for later (`gr list` shows where it is).
 

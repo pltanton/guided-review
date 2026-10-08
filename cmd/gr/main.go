@@ -34,6 +34,7 @@ review
           [--approve] [--partial]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
                        and print that dir (--dir: only print it)
+  publish              post the export to the MR with glab or gh (resumes what did not go out)
   mark-published       mark what the publish script logged to <export dir>/published.jsonl
   done
   list
@@ -68,6 +69,7 @@ func init() {
 		"prepare":        cmdPrepare,
 		"export":         cmdExport,
 		"mark-published": cmdMarkPublished,
+		"publish":        cmdPublish,
 		"done":           cmdDone,
 		"list":           cmdList,
 		"view":           cmdView,

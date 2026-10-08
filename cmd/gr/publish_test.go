@@ -136,7 +136,7 @@ func fakeForge(args []string) int {
 	return 0
 }
 
-func (h *harness) publishScript(provider string, set func(*forge)) (forge, string, error) {
+func (h *harness) publish(set func(*forge)) (forge, string, error) {
 	h.t.Helper()
 	for _, tool := range []string{"bash", "jq"} {
 		if _, err := exec.LookPath(tool); err != nil {
@@ -167,12 +167,7 @@ func (h *harness) publishScript(provider string, set func(*forge)) (forge, strin
 	if err := f.save(); err != nil {
 		t.Fatal(err)
 	}
-	script, err := filepath.Abs(filepath.Join("..", "..", "skills", "guided-review", "scripts",
-		"publish-"+provider+".sh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("bash", script)
+	cmd := exec.Command(filepath.Join(dir, "bin", "gr"), "publish")
 	cmd.Dir = h.repo.Dir
 	cmd.Env = append(os.Environ(), "PATH="+filepath.Join(dir, "bin")+":"+os.Getenv("PATH"))
 	out, runErr := cmd.CombinedOutput()
@@ -194,7 +189,7 @@ func TestPublishGitLabRetriesOnlyTheRest(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "approve", "--approve")
 	h.mustRun("", "export")
 
-	f, out, err := h.publishScript("gitlab", func(f *forge) { f.FailDraft = 2 })
+	f, out, err := h.publish(func(f *forge) { f.FailDraft = 2 })
 	if err == nil || len(f.Drafts) != 1 || len(f.Notes) != 0 {
 		t.Fatalf("the second draft fails and nothing is published: %+v\n%s", f, out)
 	}
@@ -205,7 +200,7 @@ func TestPublishGitLabRetriesOnlyTheRest(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "approve", "--approve")
 
 	h.mustRun("", "export")
-	f, out, err = h.publishScript("gitlab", func(f *forge) { f.FailApprove = true })
+	f, out, err = h.publish(func(f *forge) { f.FailApprove = true })
 	if err == nil || len(f.Notes) != 3 || len(f.Drafts) != 0 || f.Approved {
 		t.Fatalf("the retry reuses the waiting draft and stops at approve: %+v\n%s", f, out)
 	}
@@ -223,7 +218,7 @@ func TestPublishGitLabRetriesOnlyTheRest(t *testing.T) {
 		t.Fatalf("the next export holds only the approve: %s %v", data, err)
 	}
 
-	f, out, err = h.publishScript("gitlab", func(*forge) {})
+	f, out, err = h.publish(func(*forge) {})
 	if err != nil || len(f.Notes) != 3 || !f.Approved {
 		t.Fatalf("the last run approves without new notes: %+v %v\n%s", f, err, out)
 	}
@@ -251,13 +246,13 @@ func TestPublishGitHubThreadRetry(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "changes")
 	h.mustRun("", "export")
 
-	f, out, err := h.publishScript("github", func(f *forge) { f.FailReply = true })
+	f, out, err := h.publish(func(f *forge) { f.FailReply = true })
 	if err == nil || f.Reviews != 1 || f.Replies != 0 {
 		t.Fatalf("the review goes out, the reply fails: %+v\n%s", f, out)
 	}
 	assertContains(t, out, "marked 1 comments and 0 threads", "not published: thread t1")
 	h.mustRun("", "export")
-	f, out, err = h.publishScript("github", func(*forge) {})
+	f, out, err = h.publish(func(*forge) {})
 	if err != nil || f.Reviews != 1 || f.Replies != 1 || f.Resolves != 1 {
 		t.Fatalf("the retry sends only the thread: %+v %v\n%s", f, err, out)
 	}

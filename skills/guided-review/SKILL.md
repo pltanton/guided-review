@@ -340,25 +340,25 @@ After `[finished]`:
    (find the spot by content if the file changed); report one line per fix and run the
    tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
    the review is open), so any agent in this repo can pick it up later. Then step 4.
-2. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
+2. Publish. `[finished] sN: published <dir>` means the human already published it from the
+   viewer: go to step 3 with the MR link. `[finished] sN: <dir>` means they handed it to
+   you. The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or
-   not — and ask «publish?». Only on a clear yes, run the script for the provider from
-   this skill's `scripts/` directory, in the repository:
-   `bash <this skill's dir>/scripts/publish-gitlab.sh` or `…/publish-github.sh`.
+   not — and ask «publish?». Only on a clear yes, run `gr publish` in the repository.
    It posts the review (GitLab: draft notes, then one bulk publish, then approve; GitHub:
    one review request with the summary, the verdict and every comment), then replies to and
    resolves your threads, logs each write that went through to `<dir>/published.jsonl`, and
    ends with `gr mark-published`, which marks exactly what is logged and prints
    `not published: …` for the rest.
    If it stops, say the error and what went out. Once the cause is fixed (a login, the
-   network), run `gr export` and the script again: the new export holds only what did not
+   network), run `gr export` and `gr publish` again: the new export holds only what did not
    go out, and on GitLab the script reuses drafts that already sit on the MR instead of
    posting them twice. If the MR holds draft notes that are not from this export, the
    script stops before publishing, because bulk publish would post them too: ask the
    reviewer what to do with them. Never write `published.jsonl` or run `gr mark-published`
    by hand. GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set
-   `"event": "COMMENT"` in `review-request.json` and run the script again without
+   `"event": "COMMENT"` in `review-request.json` and run `gr publish` again without
    `gr export`. After success give the link.
 3. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
