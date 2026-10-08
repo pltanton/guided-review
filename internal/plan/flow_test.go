@@ -322,4 +322,15 @@ func TestCommentOnARiskChecksItOff(t *testing.T) {
 	if !h[0].Checked || h[0].Comment != c.ID || h[1].Checked || h[2].Checked {
 		t.Fatalf("only the risk the comment covers is checked off: %+v", h)
 	}
+	r.Steps = append(r.Steps, state.Step{ID: "s2", Hunks: []state.StepHunk{{File: "b.go"}},
+		Hotspots: []state.Hotspot{{Q: "lock order?", File: "b.go", Line: 3}}})
+	r.Files = append(r.Files, state.File{Path: "b.go"})
+	if _, _, err := plan.AddComment(r, state.Comment{
+		File: "b.go", Lines: "3", Severity: state.SeverityMinor, Body: "locks a then b",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !r.Steps[1].Hotspots[0].Checked {
+		t.Fatal("a comment filed under another step still checks the risk on its line")
+	}
 }
