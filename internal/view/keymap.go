@@ -25,9 +25,9 @@ const finishGroup = "finish preview"
 
 var (
 	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
-	previewActions = []string{"finish", "edit-comment", "delete-comment", "message"}
+	previewActions = []string{"finish", "edit-comment", "delete-comment", "message", "act"}
 	essentials     = []string{
-		"down", "up", "next-hunk", "prev-hunk", "message", "ask", "next", "skip",
+		"down", "up", "next-hunk", "prev-hunk", "act", "message", "ask", "next", "skip",
 		"details", "plan", "finish", "command", "quit",
 	}
 )
@@ -141,8 +141,10 @@ func DefaultActions() []Action {
 
 		{Name: "next", Group: rev, Desc: "done with this step, go on", Keys: k(">"),
 			run: do((*model).next)},
+		{Name: "act", Group: rev, Desc: "comment here · edit your comment · details of a note ·" +
+			" open ⋯ / ▸ · next step at the end", Keys: k("enter"), run: (*model).act},
 		{Name: "message", Group: rev, Desc: "message the agent (line attached); opens ⋯ / ▸",
-			Keys: k("c", "enter"), run: do((*model).messageOrOpen)},
+			Keys: k("c"), run: do((*model).messageOrOpen)},
 		{Name: "message-general", Group: rev, Desc: "message the agent without a line",
 			Keys: k("C"), run: do(func(m *model) {
 				m.startCompose(inbox.KindMessage)

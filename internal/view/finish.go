@@ -221,7 +221,7 @@ func (m *model) handlePreviewKey(msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case km.previewKey("finish", k):
 		return m.finish()
-	case km.previewKey("message", k):
+	case km.previewKey("message", k) || km.previewKey("act", k):
 		m.startCompose(inbox.KindMessage)
 		m.anchorFile, m.anchorLines, m.composeRef = "", "", selected
 		return nil

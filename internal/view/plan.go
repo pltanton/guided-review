@@ -132,7 +132,7 @@ func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {
 		m.planCursor = 0
 	case "bottom":
 		m.planCursor = len(items) - 1
-	case "message", "open":
+	case "act", "message", "open":
 		if it.head {
 			m.setChapterOpen(it.chapter, !it.open)
 			break

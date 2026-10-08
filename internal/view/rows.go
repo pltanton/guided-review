@@ -23,6 +23,7 @@ const (
 	RowNote
 	RowFold
 	RowSpacer
+	RowEnd
 )
 
 type Row struct {

@@ -942,6 +942,8 @@ func renderUnified(r Row) string {
 		return fileStyle.Render("▍ "+r.Text) + info
 	case RowSpacer:
 		return ""
+	case RowEnd:
+		return addStyle.Render("  ✓ ") + dimStyle.Render(r.Text)
 	case RowGap:
 		if r.GapTo == 0 {
 			return dimStyle.Render("      ⋯")

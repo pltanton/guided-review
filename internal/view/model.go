@@ -341,10 +341,41 @@ func (m *model) relist() {
 		}
 		m.lines = unifiedLines(expandNotes(rows, width, m.folded))
 	}
+	if m.step != nil && len(m.rows) > 0 {
+		m.lines = append(m.lines, line{Row: Row{Kind: RowEnd, Text: m.endText()}})
+	}
 	if keep.File != "" {
 		m.focus(keep)
 	}
 	m.clamp()
+}
+
+func (m *model) endText() string {
+	if m.viewStep != "" {
+		return fmt.Sprintf("end of %s · enter → back to %s", m.step.ID, m.review.Current)
+	}
+	return fmt.Sprintf("end of %s · enter → next step", m.step.ID)
+}
+
+func (m *model) act() tea.Cmd {
+	cur := m.current()
+	switch {
+	case m.step == nil || len(m.lines) == 0 || m.visual:
+		m.startCompose(inbox.KindMessage)
+	case cur.Kind == RowEnd && m.viewStep != "":
+		return m.back()
+	case cur.Kind == RowEnd:
+		m.next()
+	case cur.GapTo > 0 || cur.Kind == RowFold:
+		m.toggleFold()
+	case cur.Kind == RowNote && cur.Ref > 0:
+		m.startEdit()
+	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
+		m.noteDetails()
+	default:
+		m.startCompose(inbox.KindMessage)
+	}
+	return nil
 }
 
 func (m *model) current() line {
@@ -719,7 +750,7 @@ func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
 		m.fileCursor = 0
 	case "bottom":
 		m.fileCursor = max(len(files)-1, 0)
-	case "message", "open":
+	case "act", "message", "open":
 		if m.fileCursor < len(files) {
 			m.jumpToFile(files[m.fileCursor])
 		}

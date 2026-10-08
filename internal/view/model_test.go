@@ -68,7 +68,7 @@ func TestNavigation(t *testing.T) {
 	steps := []struct {
 		key  string
 		want int
-	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 5}, {"gg", 0}}
+	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 6}, {"gg", 0}}
 	for _, s := range steps {
 		m.Update(key(s.key))
 		if m.cursor != s.want {
@@ -577,7 +577,7 @@ func TestFoldKeys(t *testing.T) {
 	}
 	m.cursor = 1
 	m.Update(key("o"))
-	if len(m.lines) != len(m.rows) {
+	if len(m.lines) != len(m.rows)+1 {
 		t.Fatalf("o must unfold: %d rows", len(m.lines))
 	}
 	m.cursor = 2
@@ -586,7 +586,7 @@ func TestFoldKeys(t *testing.T) {
 		t.Fatal("o on an unfolded removed row must fold it back")
 	}
 	m.Update(key("O"))
-	if len(m.lines) != len(m.rows) {
+	if len(m.lines) != len(m.rows)+1 {
 		t.Fatal("O must show every removed line")
 	}
 }
@@ -645,7 +645,7 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.Update(key("enter"))
 
 	m.cursor = 3
-	m.Update(key("enter"))
+	m.Update(key("c"))
 	typeText(m, "why nit?")
 	m.Update(key("enter"))
 
@@ -988,7 +988,7 @@ func TestEnterOpensFolds(t *testing.T) {
 	m := foldModel(t)
 	m.cursor = 1
 	m.Update(key("enter"))
-	if m.composing || len(m.lines) != len(m.rows) {
+	if m.composing || len(m.lines) != len(m.rows)+1 {
 		t.Fatalf(
 			"enter on a fold row must open it: composing %v rows %d",
 			m.composing,
@@ -2059,5 +2059,58 @@ func TestChapterModal(t *testing.T) {
 	m.Update(key("I"))
 	if m.chapterOpen != "" {
 		t.Fatal("a chapter without intro has no modal")
+	}
+}
+
+func TestEndRowAndEnter(t *testing.T) {
+	m, sent := newTestModel(t)
+	last := m.lines[len(m.lines)-1]
+	if last.Kind != RowEnd || !strings.Contains(ansi.Strip(m.View()), "✓ end of s1 · enter → next step") {
+		t.Fatalf("the step ends with the end row: %+v", last)
+	}
+	m.cursor = 2
+	m.Update(key("enter"))
+	if !m.composing || m.anchorFile != "a.go" || m.anchorLines != "2" || len(*sent) != 0 {
+		t.Fatalf("enter on code composes there: composing %v at %s:%s sent %+v",
+			m.composing, m.anchorFile, m.anchorLines, *sent)
+	}
+	m.Update(key("esc"))
+	m.cursor = 3
+	m.Update(key("enter"))
+	if m.popup == nil || m.popup.kind != "detail" {
+		t.Fatal("enter on an agent note opens its details")
+	}
+	m.Update(key("esc"))
+	m.Update(key("G"))
+	m.Update(key("enter"))
+	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
+		t.Fatalf("enter on the end row moves on: %+v", *sent)
+	}
+}
+
+func TestEnterEditsOwnComment(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Comments = []state.Comment{{ID: 7, File: "a.go", Lines: "2", Body: "rename x"}}
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: "rename x",
+		NoteKind: "comment", Ref: 7})
+	m.relist()
+	m.cursor = 4
+	m.Update(key("enter"))
+	if m.composeKind != inbox.KindEdit || string(m.input) != "rename x" {
+		t.Fatalf("enter on own comment edits it: kind %q input %q", m.composeKind, string(m.input))
+	}
+}
+
+func TestEndRowWhileViewing(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.viewStep, m.step = "s2", &m.review.Steps[1]
+	m.relist()
+	if !strings.Contains(m.lines[len(m.lines)-1].Text, "back to s1") {
+		t.Fatalf("end row while viewing: %q", m.lines[len(m.lines)-1].Text)
+	}
+	m.Update(key("G"))
+	m.Update(key("enter"))
+	if len(*sent) != 0 {
+		t.Fatalf("enter on a viewed step's end only goes back: %+v", *sent)
 	}
 }
