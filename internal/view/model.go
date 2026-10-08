@@ -152,6 +152,7 @@ type model struct {
 	anchorFile  string
 	anchorLines string
 	inlineAt    int
+	listW       int
 	chatting    bool
 	chatAbout   string
 
@@ -338,7 +339,8 @@ func (m *model) useSplit() bool {
 
 func (m *model) relist() {
 	keep := m.current()
-	width := m.mainWidth() - noteIndent
+	m.listW = m.mainWidth()
+	width := m.listW - noteIndent
 	if m.useSplit() {
 		m.lines = pairRows(expandNotes(m.rows, width, m.folded))
 	} else {

@@ -73,7 +73,7 @@ func TestChatSelectAndCopyKeys(t *testing.T) {
 func TestChatMouseDragCopies(t *testing.T) {
 	for _, width := range []int{150, 120} {
 		m, copied := chatModel(t)
-		m.width = width
+		m.width, m.chatFocus = width, true
 		lines := strings.Split(ansi.Strip(m.View()), "\n")
 		at := func(s string) int {
 			return slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, s) })

@@ -158,15 +158,28 @@ func (m *model) mainWidth() int {
 	return m.width - m.chatWidth()
 }
 
+const (
+	collapsedChatRows = 6
+	collapsedBottom   = 2
+)
+
+func (m *model) chatOpen() bool {
+	return m.chatting || m.chatFocus || m.composing && m.cmdMode == 0 && !m.inlineCompose()
+}
+
 func (m *model) chatWidth() int {
-	w := max(36, m.width/4)
+	if m.width-max(36, m.width/4) < minCodeWidth {
+		return 0
+	}
+	small := max(30, m.width/6)
+	if !m.chatOpen() {
+		return small
+	}
+	w := max(48, m.width*2/5)
 	if m.sideW > 0 {
 		w = max(24, min(m.sideW, m.width*2/3))
 	}
-	if m.width-w < minCodeWidth {
-		return 0
-	}
-	return w
+	return max(small, min(w, m.width-minCodeWidth))
 }
 
 func (m *model) chatScrollHint() string {
@@ -183,8 +196,8 @@ func (m *model) sidePrompt(w int) []string {
 		pills, _ := m.optionPills(w)
 		return append([]string{rule}, pills...)
 	}
-	return []string{rule, dimStyle.Render(fmt.Sprintf("› %s to write · %s without a line",
-		km.key("act"), km.key("message-general")))}
+	return []string{rule, dimStyle.Render(fmt.Sprintf("› %s chat · %s without a line",
+		km.key("message"), km.key("message-general")))}
 }
 
 func (m *model) sideChatLines(h, w int) []string {
@@ -192,13 +205,20 @@ func (m *model) sideChatLines(h, w int) []string {
 	for _, e := range m.sideFiles(h, w+2) {
 		lines = append(lines, e.text)
 	}
-	title := labelStyle.Render("CHAT")
-	if m.chatFocus {
-		title = chatStyle.Render("CHAT") + "  " + dimStyle.Render(m.chatFocusHint())
+	row, plain, _ := sideRows(w + 2)
+	label, hint := labelStyle.Render("CHAT"), m.keys().key("message")+" opens"
+	switch {
+	case m.chatFocus:
+		label, hint = cursorStyle.Render("CHAT"), m.chatFocusHint()
+	case m.chatOpen():
+		label, hint = cursorStyle.Render("CHAT"), "esc closes"
 	}
-	lines = append(lines, title, dimStyle.Render(strings.Repeat("─", max(w, 1))))
+	lines = append(lines, plain(row(label, dimStyle.Render(hint))))
 	prompt := m.sidePrompt(w)
 	chatH := max(h-len(lines)-len(prompt), 0)
+	if !m.chatOpen() {
+		chatH = min(chatH, collapsedChatRows)
+	}
 	lines = append(lines, m.chatWindow(m.chatRows(w, true), chatH, w)...)
 	for len(lines)+len(prompt) < h {
 		lines = append(lines, "")
@@ -208,7 +228,7 @@ func (m *model) sideChatLines(h, w int) []string {
 }
 
 func (m *model) sideChatTop() int {
-	return len(m.sideFiles(m.height-len(m.bottomLines()), m.chatWidth())) + 2
+	return len(m.sideFiles(m.height-len(m.bottomLines()), m.chatWidth())) + 1
 }
 
 func (m *model) inputInSideChat() bool {
@@ -413,6 +433,9 @@ func windowRange(n, height, fromBottom int) (start, end int) {
 
 func (m *model) bottomLines() []string {
 	limit := messageLines
+	if !m.chatOpen() {
+		limit = collapsedBottom
+	}
 	if m.step == nil {
 		limit = max(m.height-4, 1)
 	}
@@ -585,6 +608,9 @@ func (m *model) View() string {
 	}
 	if m.preview != "" {
 		return m.finishView()
+	}
+	if m.listW != m.mainWidth() {
+		m.relist()
 	}
 	bottom := m.bottomLines()
 	bodyH := max(m.height-len(bottom), 1)

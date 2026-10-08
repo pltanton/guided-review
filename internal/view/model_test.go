@@ -1109,7 +1109,7 @@ func TestChatPanel(t *testing.T) {
 		)
 	}
 	out := ansi.Strip(m.View())
-	if !strings.Contains(out, "│ CHAT") || !strings.Contains(out, "message 29") ||
+	if !strings.Contains(out, "│  CHAT") || !strings.Contains(out, "message 29") ||
 		len(m.bottomLines()) != 1 || m.mainWidth() >= m.width {
 		t.Fatalf("side chat:\n%s", out)
 	}
@@ -1390,7 +1390,7 @@ func TestGeneralMessage(t *testing.T) {
 func TestSideChatInput(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 150
-	if !strings.Contains(ansi.Strip(m.View()), "› enter to write · C without a line") {
+	if !strings.Contains(ansi.Strip(m.View()), "› c chat · C without a line") {
 		t.Fatal("the side chat must always show where to write")
 	}
 	m.Update(key("C"))
@@ -1424,6 +1424,7 @@ func TestDragResize(t *testing.T) {
 			Button: tea.MouseButtonLeft})
 		m.handleMouse(tea.MouseMsg{X: toX, Y: toY, Action: tea.MouseActionRelease})
 	}
+	m.chatFocus = true
 	drag(m.width-m.chatWidth(), 3, m.width-60, 3)
 	if got := m.chatWidth(); got != 60 {
 		t.Fatalf("side chat width after drag = %d, want 60", got)
@@ -2292,5 +2293,28 @@ func TestInfoModalScrollStopsAtTheEnd(t *testing.T) {
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "paragraph 28") ||
 		strings.Contains(v, "paragraph 29") && strings.Contains(v, "paragraph 23") {
 		t.Fatalf("one k moves back right away:\n%s", v)
+	}
+}
+
+func TestChatCollapsed(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 200
+	for i := range 20 {
+		m.review.Messages = append(m.review.Messages,
+			state.Message{Step: "s1", Text: fmt.Sprintf("message %02d", i)})
+	}
+	small := m.chatWidth()
+	v := ansi.Strip(m.View())
+	if strings.Contains(v, "message 10") || !strings.Contains(v, "message 19") ||
+		!strings.Contains(v, "c opens") {
+		t.Fatalf("a collapsed chat shows only its tail:\n%s", v)
+	}
+	m.Update(key("c"))
+	if m.chatWidth() <= small || !strings.Contains(ansi.Strip(m.View()), "message 10") {
+		t.Fatalf("c opens the chat wide and tall: width %d, was %d", m.chatWidth(), small)
+	}
+	m.Update(key("esc"))
+	if m.chatWidth() != small {
+		t.Fatal("esc collapses it again")
 	}
 }
