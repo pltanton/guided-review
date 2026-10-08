@@ -9,13 +9,16 @@ You lead a human through a code review. They judge the code. You plan the route,
 explain each piece in a few lines, catch spec mismatches and risky spots, and record
 their remarks.
 
+Speak the human's language: the one they write to you in (in self mode, the one the
+prompt names). Every quoted phrase in this skill is an English example — translate it.
+
 The viewer pane (`gr view`) is the main interface: the human sees the plan, the code
 with your annotations, your messages, and types replies there. You talk to them with
 `gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
 turn: the human glances at it, so it has to stay readable at a glance.
 
 When you ask a question with a few likely answers, offer them:
-`gr say --option "да" --option "нет, поправлю" "…"`. They become buttons in the viewer
+`gr say --option "yes" --option "no, let me fix" "…"`. They become buttons in the viewer
 (the human can still type anything). Two to four options, a few words each, in the
 human's language; the chosen text arrives as an ordinary `[message]`.
 
@@ -25,7 +28,7 @@ sit unread. Once the human finishes in the viewer (`[finished]`, see Wrap-up) it
 and the rest happens in the terminal chat.
 
 `gr` holds all review state: when unsure where you are, run `gr step show` or
-`gr status` instead of relying on memory. Answer in the user's language.
+`gr status` instead of relying on memory.
 
 ## Setup — no questions
 
@@ -48,8 +51,8 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
    - Never pass `--force` on your own: it throws away the plan and progress. Only the
      user may ask to start over.
    - "state of review … is unreadable": show the human the error as gr printed it (here
-     in the terminal, the viewer is not open yet) and offer «начать заново (--force)» or
-     «разберусь сам». Run `gr init --force` only after they chose it.
+     in the terminal, the viewer is not open yet) and offer «start over (--force)» or
+     «I'll sort it out». Run `gr init --force` only after they chose it.
 2. `gr open` — opens the viewer full screen in a tmux window `review-<id>` next to you,
    restarting it if it is already there. It finds your tmux pane by itself, also when
    `$TMUX` is not set in your shell. If it prints "not in tmux", give the human the
@@ -59,7 +62,7 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
 
 Before anything that takes more than a few seconds — reading the diff, building the
 plan, reading a step's code, answering an explain — run
-`gr progress "<what you are doing>"` (e.g. `строю план: читаю diff, 58 файлов`). The
+`gr progress "<what you are doing>"` (e.g. `planning: reading the diff, 58 files`). The
 viewer shows it with a spinner and a timer; without it the human stares at a frozen
 screen. `gr say` and `gr plan set` clear it.
 
@@ -71,9 +74,9 @@ the unresolved MR discussions (`gr discussions` prints them in full), and
 `git diff --stat <base> <head>`. Do not read code yet.
 
 `gr say` at most three lines: the task in one line, how the change solves it in one
-line, then «верно понял?» with options such as «да» and «нет, поправлю». When `gr init`
+line, then «got it right?» with options such as «yes» and «no, let me fix». When `gr init`
 listed generated files, add one line naming them — the ⚠ ones first, they are generated
-only by a comment in the file — and ask «ок, не смотрим?». Everything else you noticed — failing checks, open
+only by a comment in the file — and ask «ok to skip them?». Everything else you noticed — failing checks, open
 discussions, spec mismatches, stale examples in the description — is not intake:
 keep it for the step it belongs to and put it there as a `spec` annotation or the
 step's question. Then `gr wait` (below). Read code only after they confirm.
@@ -94,7 +97,7 @@ explanations while they read.
    `summary`, `boilerplate`, and per step `id`, `title`, `kind`, `chapter`, `hunks`,
    `depends_on`, `why_big` — to `gr plan set --route`. If gr rejects it, fix exactly what
    it lists. The viewer shows the steps at once; `gr say` the plan: one line per chapter
-   with its steps (`Переводы: s1 s2`) plus a line for boilerplate and generated files.
+   with its steps (`Transfers: s1 s2`) plus a line for boilerplate and generated files.
 3. Fill s1 now: read its code with enough surrounding code to be sure of what it does,
    look for problems per references/checklist.md, write its explanations (below) and pipe
    them to `gr plan fill`. It posts s1's message.
@@ -133,7 +136,7 @@ summary: "task → how it is solved"
 boilerplate: [internal/di/wire.go]
 steps:
   - id: s1
-    chapter: "Переводы между счетами"
+    chapter: "Transfers between accounts"
     intro: |- # first step of a chapter only: before → after, and the path the request takes
       Before: a retried POST /transfers debited twice.
       After: the idempotency key returns the first result.
@@ -142,7 +145,7 @@ steps:
     hunks:
       - { file: api/openapi.yaml, lines: 120-168 } # omit lines for the whole file
   - id: s2
-    chapter: "Переводы между счетами"
+    chapter: "Transfers between accounts"
     title: "A repeated key returns the first result"
     kind: entry
     message: |-
@@ -206,7 +209,7 @@ before leaving a step. You only hear about what needs you.
      approach, major is local rework, minor, nit),
      `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY` (BODY per
      references/style.md: readable for an author who was not here), then
-     `gr say` one line: `записал: nit, transfer.go:57–58`. A question: `gr say` a short
+     `gr say` one line: `noted: nit, transfer.go:57–58`. A question: `gr say` a short
      answer. Unsure which: ask one short question.
    - `[message] sN: text` — the same without a line anchor; ask for the lines if a
      remark needs them.
@@ -238,7 +241,7 @@ before leaving a step. You only hear about what needs you.
    against that line. `re #N` means a reply to comment #N — answer it, and if the reply
    changes the remark, `gr comment edit N [--severity S] TEXT`. `[edit] sN #N: text` is
    the human rewriting their comment: `gr comment edit N TEXT` (keep the severity unless
-   the new text clearly changes it) and `gr say` one line: `обновил #N`.
+   the new text clearly changes it) and `gr say` one line: `updated #N`.
 
    Step ids starting with `~` (`~boilerplate`, `~generated`, `~all`) come from the
    viewer's views outside the plan: treat the event as a remark on that file and record
@@ -249,7 +252,7 @@ before leaving a step. You only hear about what needs you.
    and do not move the current step; they return to it themselves.
 
 3. After a blocker gr prints the stale steps. `gr say` once, with both answers as
-   options: «дальше смотрим независимые (N шагов) или завершаем?», and wait.
+   options: «continue with the independent ones (N steps) or finish?», and wait.
 4. If the human writes in the terminal chat instead, handle it the same way, then
    return to `gr wait`.
 
@@ -280,7 +283,7 @@ human decides each one; you prepare the decision. Before planning:
    sentences — fixed (where), the answer convinces (why), or it does not (what is still
    wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
    author asked something; keep it to the style of a review comment.
-2. `gr say` one line per answered thread (`d1 a.go:5: не исправлено, предлагаю оставить`)
+2. `gr say` one line per answered thread (`d1 a.go:5: not fixed, suggest keeping it open`)
    and ask them to press `R` to decide. Decisions are the human's: the viewer records
    them itself and there is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
@@ -297,7 +300,7 @@ by their coding agent — as a subagent or in its own window — with a fresh co
 stranger would. Do not look for or ask about how it was written.
 
 - The prompt that started you gives the review id, the task (ticket, spec, a line or
-  two) and the pane of the author's agent. Open the viewer with
+  two), the author's language and the pane of the author's agent. Open the viewer with
   `gr open --return <that pane>`, so finishing lands the human back in their coding session.
 - `gr init --self` was already run for you; `gr init --self` again just resumes.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
@@ -327,17 +330,17 @@ line, say whether the code answers it.
    `P` previews the result, `P` again writes it to the review's export dir
    (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
    returning the human to your pane.
-   `gr say` «готово: P во вьювере» and `gr wait`. While the human reads the result they
+   `gr say` «done: P in the viewer» and `gr wait`. While the human reads the result they
    can message you from it — `re #N …` about one comment (`gr comment edit N`), or about
    the summary or decisions (run `gr prepare` again with the new text); the viewer
-   refreshes the preview by itself. If they say «заканчиваем» in chat
+   refreshes the preview by itself. If they say «let's finish» in chat
    instead, run `gr export` yourself: it prints the same dir.
    From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
    `gr say` / `gr wait` — and ending your turn with a question is fine.
 4. A local branch without an MR (`gr init` without a URL, not self mode): there is
    nothing to publish. The dir holds `fixes.json` (`verdict`, `decisions`, `fixes` with
    `id`, `severity`, `file`, `lines`, `body`, `suggestion`) and `review.md`. Tell them the
-   counts and ask «применить сейчас / оставить». Apply now: every fix was agreed during
+   counts and ask «apply now / leave». Apply now: every fix was agreed during
    the review, `suggestion` is the exact replacement, lines refer to the reviewed commit
    (find the spot by content if the file changed); report one line per fix and run the
    tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
@@ -345,7 +348,7 @@ line, say whether the code answers it.
 5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or
-   not — and ask «публикую?». Only on a clear yes, run the script for the provider from
+   not — and ask «publish?». Only on a clear yes, run the script for the provider from
    this skill's `scripts/` directory, in the repository:
    `bash <this skill's dir>/scripts/publish-gitlab.sh` or `…/publish-github.sh`.
    It posts the review (GitLab: draft notes, then one bulk publish, then approve; GitHub:
@@ -366,5 +369,5 @@ line, say whether the code answers it.
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
    human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
-7. Ask «закрываем ревью?». On yes, `gr done` (removes the worktree, keeps the state for a
+7. Ask «close the review?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

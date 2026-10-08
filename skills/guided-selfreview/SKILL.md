@@ -20,6 +20,7 @@ through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
    ```
    Guided review, self mode. Use the guided-review skill.
    Review id: <id>. Author agent pane: <what `gr pane` prints>.
+   Language: <the language the human writes to you in>.
    Task: <one to three lines: what the change must do, where the ticket or spec is>
    ```
    Only the goal. Not how you implemented it and not what you think is fragile: the
@@ -55,7 +56,7 @@ reading.
 - Lines refer to the reviewed commit; if the file changed since, find the spot by content.
 - Report one line per fix: done, or not done and why. Run the tests.
 - `unreviewed` in `fixes.json` lists steps the human left for later (a partial finish).
-  Then, after the fixes, offer «досмотреть остаток»: commit, `gr init --self` (the new
+  Then, after the fixes, offer «review the rest»: commit, `gr init --self` (the new
   round starts with these fixes and carries the unreviewed steps), same flow from step 3.
 - Otherwise offer another round: after a commit, `gr init --self` shows only what changed
   and starts by checking these fixes. Same flow from step 3.

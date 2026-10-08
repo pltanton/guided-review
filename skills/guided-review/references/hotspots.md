@@ -15,10 +15,10 @@ reserves or displays money gets a `money` hotspot.
 
 Ask, do not assert. The question must be answerable by reading the code:
 
-- good: «Повтор с тем же idempotency key после таймаута — второе списание?»
-- good: «Сумма в float64 до записи в БД — где округление?»
-- bad: «Тут может быть гонка» (no scenario)
-- bad: «Проверьте безопасность» (no question)
+- good: «Retry with the same idempotency key after a timeout — a second charge?»
+- good: «Amount is a float64 until it hits the DB — where is it rounded?»
+- bad: «There may be a race here» (no scenario)
+- bad: «Check the security» (no question)
 
 A hotspot is never boilerplate and never goes stale automatically; only the human
 drops it.
