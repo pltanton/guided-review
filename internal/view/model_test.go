@@ -2134,3 +2134,41 @@ func TestLSPModal(t *testing.T) {
 		t.Fatalf("hover is a small box:\n%s", v)
 	}
 }
+
+func TestPalette(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.Update(key(":"))
+	typeText(m, "algorithm")
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "┌ actions") || !strings.Contains(v, "diff-algorithm") ||
+		!strings.Contains(v, "next diff algorithm") {
+		t.Fatalf(": lists matching actions with their description:\n%s", v)
+	}
+	algo := m.algo
+	m.Update(key("enter"))
+	if m.algo == algo || m.composing {
+		t.Fatalf("enter runs the selected action: algo %q", m.algo)
+	}
+
+	m.Update(key(":"))
+	typeText(m, "fold")
+	if n := len(m.paletteItems()); n < 2 {
+		t.Fatalf("fold matches several actions, got %d", n)
+	}
+	second := m.paletteItems()[1].Name
+	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.paletteItems()[m.paletteSel].Name != second {
+		t.Fatal("down moves the selection")
+	}
+	m.Update(key("esc"))
+
+	m.Update(key(":"))
+	typeText(m, "s2")
+	if len(m.paletteItems()) != 0 {
+		t.Fatal("a step id is a command, not a search")
+	}
+	m.Update(key("enter"))
+	if m.step.ID != "s2" {
+		t.Fatalf(":s2 still shows s2, step %s", m.step.ID)
+	}
+}

@@ -112,16 +112,25 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case tea.KeyTab:
 			m.complete()
 			return nil
-		case tea.KeyUp:
-			m.historyMove(-1)
+		case tea.KeyUp, tea.KeyCtrlP:
+			if n := len(m.paletteItems()); n > 0 {
+				m.paletteSel = (m.paletteSel + n - 1) % n
+			} else {
+				m.historyMove(-1)
+			}
 			return nil
-		case tea.KeyDown:
-			m.historyMove(1)
+		case tea.KeyDown, tea.KeyCtrlN:
+			if n := len(m.paletteItems()); n > 0 {
+				m.paletteSel = (m.paletteSel + 1) % n
+			} else {
+				m.historyMove(1)
+			}
 			return nil
 		case tea.KeyEsc:
 			m.composing, m.input, m.cmdMode = false, nil, 0
 			return nil
 		}
+		m.paletteSel = 0
 	}
 	switch msg.Type {
 	case tea.KeyEsc:

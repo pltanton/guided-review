@@ -134,6 +134,7 @@ type model struct {
 	cmdMode     rune
 	history     []string
 	histIdx     int
+	paletteSel  int
 	search      string
 	input       []rune
 	inputPos    int

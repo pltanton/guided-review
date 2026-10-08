@@ -22,11 +22,41 @@ var setOptions = []string{"context=", "diff=", "wrap", "nowrap"}
 
 func (m *model) startCmd(mode rune) {
 	m.composing, m.composeKind, m.cmdMode = true, "", mode
-	m.input, m.inputPos, m.histIdx = nil, 0, len(m.history)
+	m.input, m.inputPos, m.histIdx, m.paletteSel = nil, 0, len(m.history), 0
+}
+
+func (m *model) paletteItems() []Action {
+	q := strings.ToLower(strings.TrimSpace(string(m.input)))
+	if m.cmdMode != ':' || q == "" || strings.Contains(q, " ") || m.knownCommand(q) {
+		return nil
+	}
+	var first, rest []Action
+	for _, a := range m.keys().actions {
+		switch {
+		case a.Group == finishGroup:
+		case strings.HasPrefix(a.Name, q):
+			first = append(first, a)
+		case strings.Contains(a.Name, q) || strings.Contains(strings.ToLower(a.Desc), q):
+			rest = append(rest, a)
+		}
+	}
+	return append(first, rest...)
+}
+
+func (m *model) knownCommand(line string) bool {
+	name, _, _ := strings.Cut(line, " ")
+	if _, err := strconv.Atoi(name); err == nil || slices.Contains(commandNames, name) {
+		return true
+	}
+	return m.review != nil && m.stepByID(name) != nil ||
+		slices.ContainsFunc(m.keys().actions, func(a Action) bool { return a.Name == name })
 }
 
 func (m *model) submitCmd() tea.Cmd {
 	line := strings.TrimSpace(string(m.input))
+	if items := m.paletteItems(); len(items) > 0 {
+		line = items[min(m.paletteSel, len(items)-1)].Name
+	}
 	mode := m.cmdMode
 	m.composing, m.input, m.cmdMode = false, nil, 0
 	if line == "" {

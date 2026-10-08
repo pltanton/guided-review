@@ -81,6 +81,35 @@ func (m *model) drawModal(out []string) {
 	if m.popup != nil && m.popup.kind == "hover" {
 		m.drawHover(out)
 	}
+	m.drawPalette(out)
+}
+
+const paletteRows = 8
+
+func (m *model) drawPalette(out []string) {
+	items := m.paletteItems()
+	if len(items) == 0 {
+		return
+	}
+	sel := min(m.paletteSel, len(items)-1)
+	start := max(0, min(sel-paletteRows/2, len(items)-paletteRows))
+	w := min(m.width, 100)
+	var body []string
+	for i := start; i < len(items) && len(body) < paletteRows; i++ {
+		a := items[i]
+		key := ""
+		if len(a.Keys) > 0 {
+			key = strings.ReplaceAll(a.Keys[0], " ", "")
+		}
+		row := fmt.Sprintf("%-16s %s", a.Name, dimStyle.Render(a.Desc))
+		row = fit(row, max(w-4-ansi.StringWidth(key)-1, 1)) + " " + cursorStyle.Render(key)
+		if i == sel {
+			row = paint(fit(row, w-4), cursorTone)
+		}
+		body = append(body, row)
+	}
+	box := modalBox(w, len(body)+2, "actions", "↑/↓ choose · enter run · esc", body)
+	overlayAt(out, box, max(len(out)-1-len(box), 0), 0)
 }
 
 func (m *model) drawHover(out []string) {

@@ -190,7 +190,7 @@ func DefaultActions() []Action {
 		{
 			Name:  "command",
 			Group: vw,
-			Desc:  "command line (:42, :s3, :f name, any action)",
+			Desc:  "find an action by name; also :42, :s3, :f name",
 			Keys:  k(":"),
 			run:   do(func(m *model) { m.startCmd(':') }),
 		},
