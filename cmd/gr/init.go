@@ -97,8 +97,13 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 			return err
 		}
 	default:
-		if r, files, err = newReview(ctx, s, t); err != nil {
+		var stateFiles []state.File
+		if files, stateFiles, err = reviewFiles(ctx, s, t.base, t.head); err != nil {
 			return err
+		}
+		r = &state.Review{
+			ID: t.id, Source: t.source, BaseSHA: t.base, StartSHA: t.start, HeadSHA: t.head,
+			MR: t.mr, Domain: s.cfg.Domain, Files: stateFiles,
 		}
 		if exists && len(old.Comments) > 0 {
 			r.Comments = old.Comments
@@ -177,7 +182,7 @@ func resolveTarget(
 		if err != nil {
 			return gitFallback(ctx, repo, gitRef{
 				arg: arg, id: fmt.Sprintf("mr-%d", ref.IID), label: fmt.Sprintf("!%d", ref.IID),
-				ref: fmt.Sprintf("merge-requests/%d/head", ref.IID), tool: "glab", base: base,
+				ref: fmt.Sprintf("merge-requests/%d/head", ref.IID), tool: "glab",
 			}, err)
 		}
 		refs := mr.DiffRefs
@@ -285,24 +290,6 @@ func ensureWorktree(ctx context.Context, e env, s session, t target, prev string
 		return path, nil
 	}
 	return path, s.repo.WorktreeCheckout(ctx, path, t.head)
-}
-
-func newReview(ctx context.Context, s session, t target) (*state.Review, []diff.File, error) {
-	files, stateFiles, err := reviewFiles(ctx, s, t.base, t.head)
-	if err != nil {
-		return nil, nil, err
-	}
-	r := &state.Review{
-		ID:       t.id,
-		Source:   t.source,
-		BaseSHA:  t.base,
-		StartSHA: t.start,
-		HeadSHA:  t.head,
-		MR:       t.mr,
-		Domain:   s.cfg.Domain,
-		Files:    stateFiles,
-	}
-	return r, files, nil
 }
 
 func reviewFiles(
@@ -532,26 +519,25 @@ func syncDiscussions(ctx context.Context, e env, r *state.Review) error {
 	if r.MR == nil {
 		return nil
 	}
-	var err error
-	var ds []state.Discussion
-	if r.MR.Provider == state.ProviderGitHub {
-		if r.MR.Me == "" {
-			if r.MR.Me, err = github.CurrentUser(ctx, e.gh, r.MR.Host); err != nil {
-				return fmt.Errorf("who you are on %s: %w", r.MR.Host, err)
-			}
-		}
-		ref := github.PRRef{Host: r.MR.Host, Project: r.MR.Project, Number: r.MR.IID}
-		ds, err = github.FetchDiscussions(ctx, e.gh, ref)
-	} else {
-		if r.MR.Me == "" {
-			if r.MR.Me, err = gitlab.CurrentUser(ctx, e.glab, r.MR.Host); err != nil {
-				return fmt.Errorf("who you are on %s: %w", r.MR.Host, err)
-			}
-		}
-		ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
-		ds, err = gitlab.FetchDiscussions(ctx, e.glab, ref)
+	mr := r.MR
+	whoami := func(ctx context.Context) (string, error) { return gitlab.CurrentUser(ctx, e.glab, mr.Host) }
+	fetch := func(ctx context.Context) ([]state.Discussion, error) {
+		return gitlab.FetchDiscussions(ctx, e.glab, gitlab.MRRef{Host: mr.Host, Project: mr.Project, IID: mr.IID})
 	}
-	r.Discussions = ds
+	if mr.Provider == state.ProviderGitHub {
+		whoami = func(ctx context.Context) (string, error) { return github.CurrentUser(ctx, e.gh, mr.Host) }
+		fetch = func(ctx context.Context) ([]state.Discussion, error) {
+			ref := github.PRRef{Host: mr.Host, Project: mr.Project, Number: mr.IID}
+			return github.FetchDiscussions(ctx, e.gh, ref)
+		}
+	}
+	var err error
+	if mr.Me == "" {
+		if mr.Me, err = whoami(ctx); err != nil {
+			return fmt.Errorf("who you are on %s: %w", mr.Host, err)
+		}
+	}
+	r.Discussions, err = fetch(ctx)
 	r.LinkComments()
 	return err
 }
@@ -607,7 +593,7 @@ func needCommits(ctx context.Context, repo gitx.Repo, shaFetch ...[2]string) err
 }
 
 type gitRef struct {
-	arg, id, label, ref, tool, base string
+	arg, id, label, ref, tool string
 }
 
 func gitFallback(ctx context.Context, repo gitx.Repo, g gitRef, cause error) (target, error) {
@@ -618,11 +604,9 @@ func gitFallback(ctx context.Context, repo gitx.Repo, g gitRef, cause error) (ta
 	if err != nil {
 		return target{}, err
 	}
-	base := g.base
-	if base == "" {
-		if base, err = defaultBase(ctx, repo); err != nil {
-			return target{}, err
-		}
+	base, err := defaultBase(ctx, repo)
+	if err != nil {
+		return target{}, err
 	}
 	baseSHA, err := repo.MergeBase(ctx, base, head)
 	if err != nil {

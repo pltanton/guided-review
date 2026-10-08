@@ -2,10 +2,7 @@ package state_test
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/pltanton/guided-review/internal/state"
@@ -25,9 +22,6 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if err := s.Save(r); err != nil {
 		t.Fatal(err)
-	}
-	if !s.Exists("mr-7") {
-		t.Fatal("Exists = false after Save")
 	}
 	if err := s.SetCurrent("mr-7"); err != nil {
 		t.Fatal(err)
@@ -120,43 +114,6 @@ func TestHotspotFile(t *testing.T) {
 	one := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
 	if got, sure := one.HotspotFile(state.Hotspot{Line: 99}); got != "a.go" || !sure {
 		t.Fatalf("a single-file step owns its hotspots, got %q", got)
-	}
-}
-
-func TestLoadMovesOldDetailsIntoNotes(t *testing.T) {
-	s := state.Store{Dir: t.TempDir()}
-	old := `id: mr-1
-steps:
-  - id: s1
-    hunks: [{file: a.go}]
-    hotspots: [{cat: money, q: "?", file: a.go, line: 7, detail: plan text}]
-    annotations: [{file: a.go, line: 3, to: 5, kind: note, text: t}]
-    details:
-      - {file: a.go, line: 5, text: note detail}
-      - {file: a.go, line: 7, text: edited hotspot detail}
-      - {file: a.go, line: 9, text: nothing there}
-`
-	if err := os.MkdirAll(s.ReviewDir("mr-1"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(s.ReviewDir("mr-1"), state.FileName)
-	if err := os.WriteFile(path, []byte(old), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	r, err := s.Load("mr-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	st := r.Step("s1")
-	if st.Annotations[0].Detail != "note detail" ||
-		st.Hotspots[0].Detail != "edited hotspot detail" {
-		t.Fatalf("details must move into their notes: %+v", st)
-	}
-	if err := s.Save(r); err != nil {
-		t.Fatal(err)
-	}
-	if data, _ := os.ReadFile(path); strings.Contains(string(data), "details:") {
-		t.Fatalf("details must not be written back:\n%s", data)
 	}
 }
 

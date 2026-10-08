@@ -91,8 +91,12 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 	}
 	closed := map[string]bool{}
 	for i, s := range steps {
-		if s.Intro != "" && s.Chapter != "" && i > 0 && steps[i-1].Chapter == s.Chapter {
-			fail("step %s: intro belongs on the first step of chapter %q", s.ID, s.Chapter)
+		prev := ""
+		if i > 0 {
+			prev = steps[i-1].Chapter
+		}
+		for _, err := range checkExplanations(s, prev, inDiff) {
+			fail("step %s: %v", s.ID, err)
 		}
 		if i > 0 && steps[i-1].Chapter != s.Chapter {
 			closed[steps[i-1].Chapter] = true
@@ -134,28 +138,6 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 				MaxStepLines,
 			)
 		}
-		for _, a := range s.Annotations {
-			if err := checkAnnotation(a, inDiff); err != nil {
-				fail("step %s: %v", s.ID, err)
-			}
-		}
-		for _, h := range s.Hotspots {
-			if _, sure := s.HotspotFile(h); h.Line > 0 && !sure {
-				fail("step %s: hotspot at line %d needs file: several files in the step",
-					s.ID, h.Line)
-			}
-			if !slices.Contains(state.HotspotCategories, h.Cat) {
-				fail(
-					"step %s: hotspot category %q, want one of %v",
-					s.ID,
-					h.Cat,
-					state.HotspotCategories,
-				)
-			}
-			if strings.TrimSpace(h.Q) == "" {
-				fail("step %s: hotspot %s has no question", s.ID, h.Cat)
-			}
-		}
 	}
 	for _, s := range steps {
 		for _, d := range s.DependsOn {
@@ -179,6 +161,34 @@ func Validate(p Plan, r *state.Review, files []diff.File) []error {
 		}
 		for _, u := range uncovered(f, slices.Concat(steps, r.Carried)) {
 			fail("not covered: %s", u)
+		}
+	}
+	return errs
+}
+
+// checkExplanations checks a step's intro, annotations and hotspots; prevChapter is the
+// chapter of the step before it in the plan.
+func checkExplanations(s state.Step, prevChapter string, inDiff map[string]bool) []error {
+	var errs []error
+	if s.Intro != "" && s.Chapter != "" && prevChapter == s.Chapter {
+		errs = append(errs, fmt.Errorf("intro belongs on the first step of chapter %q", s.Chapter))
+	}
+	for _, a := range s.Annotations {
+		if err := checkAnnotation(a, inDiff); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	for _, h := range s.Hotspots {
+		if _, sure := s.HotspotFile(h); h.Line > 0 && !sure {
+			errs = append(errs, fmt.Errorf("hotspot at line %d needs file: several files in the step",
+				h.Line))
+		}
+		if !slices.Contains(state.HotspotCategories, h.Cat) {
+			errs = append(errs, fmt.Errorf("hotspot category %q, want one of %v", h.Cat,
+				state.HotspotCategories))
+		}
+		if strings.TrimSpace(h.Q) == "" {
+			errs = append(errs, fmt.Errorf("hotspot %s has no question", h.Cat))
 		}
 	}
 	return errs

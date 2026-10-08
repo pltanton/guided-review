@@ -12,12 +12,8 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-var (
-	//go:embed publish-gitlab.sh
-	publishGitLab []byte
-	//go:embed publish-github.sh
-	publishGitHub []byte
-)
+//go:embed publish.sh
+var publishScript string
 
 func cmdPublish(ctx context.Context, e env, _ []string) error {
 	_, r, err := loadReview(ctx, e.dir)
@@ -30,28 +26,16 @@ func cmdPublish(ctx context.Context, e env, _ []string) error {
 	if r.Publish == nil || r.Publish.Export == "" {
 		return errors.New("nothing exported yet: run gr export first")
 	}
-	tool, script := "glab", publishGitLab
+	tool := "glab"
 	if r.MR.Provider == state.ProviderGitHub {
-		tool, script = "gh", publishGitHub
+		tool = "gh"
 	}
 	for _, name := range []string{tool, "jq"} {
 		if _, err := exec.LookPath(name); err != nil {
 			return fmt.Errorf("publishing needs %s on PATH", name)
 		}
 	}
-	f, err := os.CreateTemp("", "gr-publish-*.sh")
-	if err != nil {
-		return err
-	}
-	defer func() { _ = os.Remove(f.Name()) }()
-	if _, err := f.Write(script); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	cmd := exec.CommandContext(ctx, "bash", f.Name())
+	cmd := exec.CommandContext(ctx, "bash", "-c", publishScript)
 	cmd.Dir, cmd.Stdout, cmd.Stderr = e.dir, e.stdout, e.stdout
 	if self, err := os.Executable(); err == nil {
 		path := filepath.Dir(self) + string(os.PathListSeparator) + os.Getenv("PATH")

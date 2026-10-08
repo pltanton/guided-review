@@ -78,11 +78,7 @@ var stableDiff = []string{
 	"-c", "diff.submodule=short",
 }
 
-func (r Repo) DiffWith(
-	ctx context.Context,
-	algo, base, head string,
-	paths ...string,
-) (string, error) {
+func (r Repo) DiffWith(ctx context.Context, algo, base, head string) (string, error) {
 	if !slices.Contains(DiffAlgorithms, algo) {
 		return "", fmt.Errorf("diff algorithm %q, want one of %v", algo, DiffAlgorithms)
 	}
@@ -99,9 +95,6 @@ func (r Repo) DiffWith(
 		base,
 		head,
 	)
-	if len(paths) > 0 {
-		args = append(append(args, "--"), paths...)
-	}
 	return r.Run(ctx, args...)
 }
 
@@ -110,12 +103,9 @@ type Change struct {
 	Path, OldPath string
 }
 
-func (r Repo) Changes(ctx context.Context, base, head string, paths ...string) ([]Change, error) {
+func (r Repo) Changes(ctx context.Context, base, head string) ([]Change, error) {
 	args := append(slices.Clone(stableDiff),
 		"diff", "--no-ext-diff", "--name-status", "-z", "-M", base, head)
-	if len(paths) > 0 {
-		args = append(append(args, "--"), paths...)
-	}
 	out, err := r.Run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -139,12 +129,8 @@ func (r Repo) Changes(ctx context.Context, base, head string, paths ...string) (
 	return changes, nil
 }
 
-func (r Repo) Files(
-	ctx context.Context,
-	algo, base, head string,
-	paths ...string,
-) ([]diff.File, error) {
-	raw, err := r.DiffWith(ctx, algo, base, head, paths...)
+func (r Repo) Files(ctx context.Context, algo, base, head string) ([]diff.File, error) {
+	raw, err := r.DiffWith(ctx, algo, base, head)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +138,7 @@ func (r Repo) Files(
 	if err != nil {
 		return nil, err
 	}
-	changes, err := r.Changes(ctx, base, head, paths...)
+	changes, err := r.Changes(ctx, base, head)
 	if err != nil {
 		return nil, err
 	}

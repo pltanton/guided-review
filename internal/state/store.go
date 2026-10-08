@@ -44,11 +44,6 @@ func (s Store) path(id string) string {
 	return filepath.Join(s.Dir, id, FileName)
 }
 
-func (s Store) Exists(id string) bool {
-	_, err := os.Stat(s.path(id))
-	return err == nil
-}
-
 func (s Store) Load(id string) (*Review, error) {
 	data, err := os.ReadFile(s.path(id))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -146,7 +141,7 @@ func (s Store) List() ([]string, error) {
 	}
 	var ids []string
 	for _, e := range entries {
-		if e.IsDir() && s.Exists(e.Name()) {
+		if _, err := os.Stat(s.path(e.Name())); e.IsDir() && err == nil {
 			ids = append(ids, e.Name())
 		}
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -155,10 +156,11 @@ func TestFilesFromGit(t *testing.T) {
 
 func TestNoNewlineAtEnd(t *testing.T) {
 	tr, base, head, _ := oddRepo(t)
-	files, err := gitx.Repo{Dir: tr.Dir}.Files(context.Background(), "histogram", base, head, "nonl.txt")
+	files, err := gitx.Repo{Dir: tr.Dir}.Files(context.Background(), "histogram", base, head)
 	if err != nil {
 		t.Fatal(err)
 	}
+	files = slices.DeleteFunc(files, func(f diff.File) bool { return f.Path != "nonl.txt" })
 	want := []diff.Line{{Kind: '-', Text: "b"}, {Kind: '+', Text: "b"}}
 	if len(files) != 1 || len(files[0].Hunks) != 1 ||
 		fmt.Sprint(files[0].Hunks[0].Lines) != fmt.Sprint(want) {

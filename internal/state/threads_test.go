@@ -18,22 +18,6 @@ func linkReview() *state.Review {
 	}
 }
 
-func TestCommentForExactBody(t *testing.T) {
-	r := linkReview()
-	d := state.Discussion{ID: "d4", Author: "me", File: "a.go", Body: "**nit** Опечатка. И ещё…"}
-	if c := r.CommentFor(d); c == nil || c.ID != 4 {
-		t.Fatalf("a longer body must not link to #1: %+v", c)
-	}
-	d.Body = "`a.go:3` **nit** Опечатка.\n\n```suggestion:-0+0\nx\n```"
-	if c := r.CommentFor(d); c == nil || c.ID != 1 {
-		t.Fatalf("a general note with a suggestion links by its text: %+v", c)
-	}
-	d.Author = "alice"
-	if c := r.CommentFor(d); c != nil {
-		t.Fatalf("someone else's thread is not a gr comment: %+v", c)
-	}
-}
-
 func TestCommentForMarkerSurvivesEdits(t *testing.T) {
 	r := linkReview()
 	body := "**nit** Опечатка, поправил текст\n\n" + state.CommentMarker(1)
@@ -56,8 +40,10 @@ func TestCommentForMarkerSurvivesEdits(t *testing.T) {
 func TestDecideTouchesOnlyItsOwnResolve(t *testing.T) {
 	r := linkReview()
 	r.Discussions = []state.Discussion{
-		{ID: "d1", Author: "me", File: "a.go", Body: "**nit** Опечатка.", Resolvable: true},
-		{ID: "d4", Author: "me", File: "a.go", Body: "**nit** Опечатка. И ещё…", Resolvable: true},
+		{ID: "d1", Author: "me", File: "a.go", Body: "**nit** Опечатка.", Resolvable: true,
+			Comment: 1},
+		{ID: "d4", Author: "me", File: "a.go", Body: "**nit** Опечатка. И ещё…", Resolvable: true,
+			Comment: 4},
 	}
 	now := time.Now()
 	r.Comments[0].Resolved = true

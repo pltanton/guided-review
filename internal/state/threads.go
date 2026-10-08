@@ -121,30 +121,13 @@ func (r *Review) CommentFor(d Discussion) *Comment {
 	if r.MR == nil || d.Author != r.MR.Me {
 		return nil
 	}
-	if d.Comment > 0 {
-		i := slices.IndexFunc(r.Comments, func(c Comment) bool {
-			return c.ID == d.Comment && c.Published && c.ThreadID == ""
-		})
-		if i < 0 {
-			return nil
-		}
-		return &r.Comments[i]
+	i := slices.IndexFunc(r.Comments, func(c Comment) bool {
+		return d.Comment > 0 && c.ID == d.Comment && c.Published && c.ThreadID == ""
+	})
+	if i < 0 {
+		return nil
 	}
-	text := strings.TrimSpace(severityPrefix.ReplaceAllString(d.Body, ""))
-	text, _, _ = strings.Cut(text, "\n\n```suggestion")
-	var found *Comment
-	for i := range r.Comments {
-		c := &r.Comments[i]
-		if !c.Published || c.ThreadID != "" || strings.TrimSpace(c.Body) != text ||
-			d.File != "" && d.File != c.File {
-			continue
-		}
-		if found != nil {
-			return nil
-		}
-		found = c
-	}
-	return found
+	return &r.Comments[i]
 }
 
 func (r *Review) LinkComments() {

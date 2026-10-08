@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"gopkg.in/yaml.v3"
 )
 
 type Tier string
@@ -301,22 +299,6 @@ func ParseLines(s string) (start, end int, err error) {
 		return 0, 0, bad
 	}
 	return start, end, nil
-}
-
-func (s *Step) UnmarshalYAML(n *yaml.Node) error {
-	type plain Step
-	var old struct {
-		plain   `yaml:",inline"`
-		Details []Detail `yaml:"details"`
-	}
-	if err := n.Decode(&old); err != nil {
-		return err
-	}
-	*s = Step(old.plain)
-	for _, d := range old.Details {
-		s.SetDetail(d.File, d.Line, d.Text)
-	}
-	return nil
 }
 
 func (s *Step) Detail(file string, line int) (string, bool) {

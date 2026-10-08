@@ -2,8 +2,6 @@ package plan
 
 import (
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/pltanton/guided-review/internal/diff"
 	"github.com/pltanton/guided-review/internal/state"
@@ -22,27 +20,14 @@ func Fill(r *state.Review, p Plan, files []diff.File) []error {
 			fail("step %s: not in the plan", ps.ID)
 			continue
 		}
-		st := r.Steps[i]
-		if ps.Intro != "" && st.Chapter != "" && i > 0 && r.Steps[i-1].Chapter == st.Chapter {
-			fail("step %s: intro belongs on the first step of chapter %q", ps.ID, st.Chapter)
+		filled := r.Steps[i]
+		filled.Intro, filled.Annotations, filled.Hotspots = ps.Intro, ps.Annotations, ps.Hotspots
+		prev := ""
+		if i > 0 {
+			prev = r.Steps[i-1].Chapter
 		}
-		for _, a := range ps.Annotations {
-			if err := checkAnnotation(a, inDiff); err != nil {
-				fail("step %s: %v", ps.ID, err)
-			}
-		}
-		for _, h := range ps.Hotspots {
-			if _, sure := st.HotspotFile(h); h.Line > 0 && !sure {
-				fail("step %s: hotspot at line %d needs file: several files in the step",
-					ps.ID, h.Line)
-			}
-			if !slices.Contains(state.HotspotCategories, h.Cat) {
-				fail("step %s: hotspot category %q, want one of %v", ps.ID, h.Cat,
-					state.HotspotCategories)
-			}
-			if strings.TrimSpace(h.Q) == "" {
-				fail("step %s: hotspot %s has no question", ps.ID, h.Cat)
-			}
+		for _, err := range checkExplanations(filled, prev, inDiff) {
+			fail("step %s: %v", ps.ID, err)
 		}
 	}
 	if len(errs) > 0 {

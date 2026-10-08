@@ -267,37 +267,36 @@ func exportGitLab(
 	ref := gitlab.MRRef{Host: r.MR.Host, Project: r.MR.Project, IID: r.MR.IID}
 	x.Provider, x.Host, x.API = "gitlab", ref.Host, ref.Path("")
 	var md strings.Builder
-	var notes []gitlab.DraftNote
-	var kinds []sent
+	out := exportFiles{}
+	add := func(n gitlab.DraftNote, s sent) error {
+		name := fmt.Sprintf("drafts/%02d.json", len(x.Drafts)+1)
+		x.Drafts = append(x.Drafts, draft{File: name, sent: s})
+		return out.json(name, n)
+	}
 	for _, c := range r.Comments {
 		if c.Published || c.Resolved {
 			continue
 		}
 		note, where := commentDraft(r, c, mrFiles)
 		fmt.Fprintf(&md, "--- #%d %s\n%s\n\n", c.ID, where, note.Note)
-		notes = append(notes, note)
-		kinds = append(kinds, sentComment(c.ID))
 		x.Comments = append(x.Comments, c.ID)
+		if err := add(note, sentComment(c.ID)); err != nil {
+			return nil, err
+		}
 	}
 	x.Threads = threadActions(r, &md)
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
 		summary := summaryMarkdown(r, x.Verdict, r.Publish.Decisions)
 		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
-		notes = append(notes, gitlab.DraftNote{Note: summary})
-		kinds = append(kinds, sent{Kind: "summary"})
+		if err := add(gitlab.DraftNote{Note: summary}, sent{Kind: "summary"}); err != nil {
+			return nil, err
+		}
 	}
 	if dryRun {
 		e.printf("%s", md.String())
 		return nil, nil
 	}
-	out := exportFiles{"review.md": []byte(md.String())}
-	for i, n := range notes {
-		name := fmt.Sprintf("drafts/%02d.json", i+1)
-		if err := out.json(name, n); err != nil {
-			return nil, err
-		}
-		x.Drafts = append(x.Drafts, draft{File: name, sent: kinds[i]})
-	}
+	out["review.md"] = []byte(md.String())
 	return out, nil
 }
 

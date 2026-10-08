@@ -21,6 +21,8 @@
   can draw, cards close when the review or step disappears.
 - Gone: `:sym` (workspace symbol search), `ctrl+r` in the composer (`tab` does it); `:skip`
   runs `gr step skip` like `S` does. `gr help` lists `plan set --route` and `plan fill`.
+- Gone: the reading of state files and MR threads written before 2026-10-01 (step
+  `details:` lists, threads without the `gr:comment` marker).
 
 ## v0.1.1
 

@@ -3,14 +3,26 @@ set -uo pipefail
 
 dir=$(gr export --dir) || exit 1
 x=$dir/review.json
+provider=$(jq -r .provider "$x")
 host=$(jq -r .host "$x")
 api=$(jq -r .api "$x")
 log=$dir/published.jsonl
 ok=1
+tool=glab
+[ "$provider" = github ] && tool=gh
 
 drafts() { jq -r '.drafts[]?.file' "$x"; }
 
-if [ -n "$(drafts)" ]; then
+if [ "$provider" = github ]; then
+	req=$(jq -r '.request // ""' "$x")
+	if [ -n "$req" ]; then
+		if gh api --hostname "$host" -X POST "$api" --input "$dir/$req" >/dev/null; then
+			jq -c '.review[]' "$x" >>"$log"
+		else
+			ok=0
+		fi
+	fi
+elif [ -n "$(drafts)" ]; then
 	if have=$(glab api --hostname "$host" --paginate "$api/draft_notes?per_page=100" | jq -s 'add // [] | map(.note)'); then
 		ours=$(drafts | while read -r f; do jq .note "$dir/$f"; done | jq -s .)
 		foreign=$(jq -n --argjson have "$have" --argjson ours "$ours" \
@@ -41,7 +53,7 @@ if [ -n "$(drafts)" ]; then
 	fi
 fi
 
-if [ $ok = 1 ] && [ "$(jq -r .approve "$x")" = true ]; then
+if [ $ok = 1 ] && [ "$provider" != github ] && [ "$(jq -r .approve "$x")" = true ]; then
 	if glab api --hostname "$host" -X POST "$api/approve" >/dev/null; then
 		echo '{"kind":"approve"}' >>"$log"
 	else
@@ -49,15 +61,24 @@ if [ $ok = 1 ] && [ "$(jq -r .approve "$x")" = true ]; then
 	fi
 fi
 
+resolve() {
+	if [ "$provider" = github ]; then
+		gh api --hostname "$host" graphql -f id="$1" \
+			-f query='mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}'
+	else
+		glab api --hostname "$host" -X PUT "$2" -f resolved=true
+	fi
+}
+
 while [ $ok = 1 ] && read -r t; do
 	id=$(jq -r .id <<<"$t")
 	reply=$(jq -r '.reply // ""' <<<"$t")
 	if [ -n "$reply" ]; then
-		glab api --hostname "$host" -X POST "$(jq -r .reply_api <<<"$t")" -f body="$reply" >/dev/null || { ok=0; break; }
+		$tool api --hostname "$host" -X POST "$(jq -r .reply_api <<<"$t")" -f body="$reply" >/dev/null || { ok=0; break; }
 		jq -nc --arg id "$id" '{kind: "thread", id: $id, part: "reply"}' >>"$log"
 	fi
 	if [ "$(jq -r .resolve <<<"$t")" = true ]; then
-		glab api --hostname "$host" -X PUT "$(jq -r .api <<<"$t")" -f resolved=true >/dev/null || { ok=0; break; }
+		resolve "$id" "$(jq -r '.api // ""' <<<"$t")" >/dev/null || { ok=0; break; }
 		jq -nc --arg id "$id" '{kind: "thread", id: $id, part: "resolve"}' >>"$log"
 	fi
 done < <(jq -c '.threads[]?' "$x")

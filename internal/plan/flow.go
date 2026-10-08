@@ -180,9 +180,9 @@ func Gate(r *state.Review) []string {
 }
 
 type Coverage struct {
-	Total, Done, Skipped, Stale, Pending int
-	Hotspots, HotspotsReviewed           int
-	Boilerplate, Generated               int
+	Total, Done, Skipped, Stale int
+	Hotspots, HotspotsReviewed  int
+	Boilerplate, Generated      int
 }
 
 func CoverageOf(r *state.Review) Coverage {
@@ -196,8 +196,6 @@ func CoverageOf(r *state.Review) Coverage {
 			c.Skipped++
 		case state.StatusStale:
 			c.Stale++
-		default:
-			c.Pending++
 		}
 		c.Hotspots += len(s.Hotspots)
 		for _, h := range s.Hotspots {
@@ -259,7 +257,7 @@ func SetDetail(r *state.Review, stepID string, d state.Detail) error {
 func ResolveComment(r *state.Review, id int) (Impact, error) {
 	for i := range r.Comments {
 		if r.Comments[i].ID == id {
-			r.Comments[i].Resolved = true
+			r.Comments[i].Resolved, r.Comments[i].ResolvedRound = true, max(r.Round, 1)
 			return recomputeStale(r), nil
 		}
 	}
