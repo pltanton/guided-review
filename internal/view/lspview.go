@@ -72,6 +72,7 @@ type popup struct {
 	all       []lspLoc
 	filter    string
 	filtering bool
+	risk      int
 }
 
 type lspManager struct {
@@ -515,6 +516,10 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 		p.filtering = true
 		return nil
 	}
+	if p.risk > 0 && msg.String() == "x" {
+		m.toggleRisk(p.risk)
+		return nil
+	}
 	if p.kind == "peek" {
 		if cmd, handled := m.peekKey(p, msg.String()); handled {
 			return cmd
@@ -583,6 +588,12 @@ func (m *model) popupHint() string {
 		return "enter open · / filter · e editor · esc close"
 	case p.kind == "peek":
 		return "g… K lsp · ctrl+o back · tab forward · e editor · esc close"
+	case p.kind == "detail" && p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots):
+		verb := "check off the risk"
+		if m.step.Hotspots[p.risk-1].Checked {
+			verb = "reopen the risk"
+		}
+		return "x " + verb + " · j/k scroll · esc close"
 	case p.kind == "detail" && len(p.refs) > 0:
 		return "1-9 open code · j/k scroll · esc close"
 	}

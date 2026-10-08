@@ -138,6 +138,16 @@ func TestGateAndCoverage(t *testing.T) {
 	r.Steps[2].Status = state.StatusSkipped
 	r.Steps[3].Status = state.StatusDone
 	r.Steps[4].Status = state.StatusDone
+	for _, st := range r.Steps {
+		for i := range st.Hotspots {
+			if err := plan.CheckHotspot(r, st.ID, i+1, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := plan.CheckHotspot(r, "s1", 9, true); err == nil {
+		t.Fatal("CheckHotspot: want an error for a hotspot the step does not have")
+	}
 	if got := plan.Gate(r); len(got) != 0 {
 		t.Fatalf("Gate = %v, want pass", got)
 	}

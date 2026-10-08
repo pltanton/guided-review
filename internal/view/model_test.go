@@ -82,8 +82,9 @@ func TestNavigation(t *testing.T) {
 
 func TestEventsFromKeys(t *testing.T) {
 	m, sent := newTestModel(t)
+	m.View()
 	m.cursor = 2
-	m.Update(key("A"))
+	m.Update(key("a"))
 	m.Update(key("enter"))
 	m.Update(key("v"))
 	m.Update(key("j"))
@@ -328,6 +329,7 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 
 func TestButtons(t *testing.T) {
 	m, sent := newTestModel(t)
+	m.View()
 	m.Update(key(" "))
 	if len(*sent) != 0 {
 		t.Fatalf("space must do nothing: %+v", *sent)
@@ -338,7 +340,7 @@ func TestButtons(t *testing.T) {
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"next · >", "comment · c", "ask · A", "skip · S"} {
+	for _, b := range []string{"next · >", "comment · c", "ask · a", "skip · S"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
@@ -1184,7 +1186,7 @@ func TestRawComment(t *testing.T) {
 func TestAskDeleteAndChatSize(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.cursor = 2
-	m.Update(key("A"))
+	m.Update(key("a"))
 	typeText(m, "why 1?")
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "▌ why 1?") || !strings.Contains(v, " ASK a.go:2 ") {
 		t.Fatalf("ask prompt missing:\n%s", v)
@@ -1455,19 +1457,28 @@ func TestLocalNext(t *testing.T) {
 	var ran [][]string
 	out := "step s2\n"
 	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return out, nil }
+	m.View()
 	m.Update(key(">"))
-	if len(ran) != 0 || !strings.Contains(m.notice, "risk question") {
-		t.Fatalf("first > on a hotspot step must only remind: ran %v notice %q", ran, m.notice)
+	v := ansi.Strip(m.View())
+	if len(ran) != 0 || !m.gateOpen || !strings.Contains(v, "┌ before s1 is done") ||
+		!strings.Contains(v, "⚑ rounding?") {
+		t.Fatalf("> on a step with an open risk asks first: ran %v\n%s", ran, v)
 	}
-	m.Update(key(">"))
-	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "next"}) || len(*sent) != 0 {
-		t.Fatalf("second > must move without the agent: ran %v sent %+v", ran, *sent)
+	m.Update(key("enter"))
+	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "check", "s1", "1"}) ||
+		!m.review.Steps[0].Hotspots[0].Checked {
+		t.Fatalf("enter on a risk checks it off: ran %v", ran)
+	}
+	m.Update(key("enter"))
+	if len(ran) != 2 || !slices.Equal(ran[1], []string{"step", "next"}) || len(*sent) != 0 ||
+		m.gateOpen {
+		t.Fatalf("enter on move on moves without the agent: ran %v sent %+v", ran, *sent)
 	}
 	m.Update(key("S"))
 	typeText(m, "trivial")
 	m.Update(key("enter"))
-	if want := []string{"step", "skip", "--reason", "trivial"}; !slices.Equal(ran[1], want) {
-		t.Fatalf("skip ran %v, want %v", ran[1], want)
+	if want := []string{"step", "skip", "--reason", "trivial"}; !slices.Equal(ran[2], want) {
+		t.Fatalf("skip ran %v, want %v", ran[2], want)
 	}
 	out = "all steps reviewed: run gr status\n"
 	m.review.Steps[0].Hotspots = nil
@@ -1631,16 +1642,14 @@ func TestSeenLines(t *testing.T) {
 		t.Fatal("nothing is seen before the step is on screen")
 	}
 	m.Update(key(">"))
-	if ran != 0 || !strings.Contains(m.notice, "changed lines not seen yet") {
-		t.Fatalf("> must warn about unseen lines: ran %d notice %q", ran, m.notice)
+	if ran != 0 || !m.gateOpen ||
+		!strings.Contains(ansi.Strip(m.View()), "changed lines not seen yet") {
+		t.Fatalf("> must warn about unseen lines: ran %d gate %v", ran, m.gateOpen)
 	}
-	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "press > again") {
-		t.Fatalf("the reminder must be in the footer: %q", ansi.Strip(f))
-	}
+	m.Update(key("esc"))
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "✓ seen") || m.unseen() != 0 {
 		t.Fatalf("rendering the whole step marks it seen:\n%s", v)
 	}
-	m.confirmNext = ""
 	m.Update(key(">"))
 	if ran != 1 {
 		t.Fatal("a fully seen step moves on the first >")
@@ -1735,17 +1744,41 @@ func TestYank(t *testing.T) {
 	}
 }
 
-func TestNextAfterDiscussion(t *testing.T) {
+func TestCheckOffRisk(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.review.Steps[0].Message = "s1"
-	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?"}}
-	var ran int
-	m.runGr = func(...string) (string, error) { ran++; return "", nil }
+	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?", Line: 2}}
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: "rounding?",
+		NoteKind: "hotspot", Risk: 1})
+	m.relist()
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
 	m.View()
-	m.events = []inbox.Event{{Kind: inbox.KindMessage, Step: "s1", Text: "rounding is fine"}}
+	m.cursor = 4
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "x check off") {
+		t.Fatalf("a risk row says how to check it off: %q", ansi.Strip(f))
+	}
+	m.Update(key("x"))
+	if !m.review.Steps[0].Hotspots[0].Checked || len(ran) != 1 {
+		t.Fatalf("x checks the risk off: ran %v", ran)
+	}
+	if got := m.notes(); len(got) == 0 || got[0].Label != "RISK ✓" || !got[0].Dim {
+		t.Fatalf("a checked risk shows as such: %+v", got)
+	}
+	m.Update(key("x"))
+	if m.review.Steps[0].Hotspots[0].Checked ||
+		!slices.Equal(ran[1], []string{"step", "check", "--undo", "s1", "1"}) {
+		t.Fatalf("x again reopens it: ran %v", ran)
+	}
+	m.Update(key("i"))
+	if !strings.Contains(m.popupHint(), "x check off the risk") {
+		t.Fatalf("details of a risk offer to check it off: %q", m.popupHint())
+	}
+	m.Update(key("x"))
+	m.Update(key("esc"))
 	m.Update(key(">"))
-	if ran != 1 {
-		t.Fatalf("a discussed hotspot on a seen step must not stop >: %q", m.status)
+	if m.gateOpen || ran[len(ran)-1][1] != "next" {
+		t.Fatalf("a seen step with every risk checked moves on at once: ran %v", ran)
 	}
 }
 
@@ -2171,5 +2204,20 @@ func TestPalette(t *testing.T) {
 	m.Update(key("enter"))
 	if m.step.ID != "s2" {
 		t.Fatalf(":s2 still shows s2, step %s", m.step.ID)
+	}
+}
+
+func TestModeBadge(t *testing.T) {
+	m, _ := newTestModel(t)
+	if f, _ := m.footer(); !strings.HasPrefix(ansi.Strip(f), " NORMAL ") {
+		t.Fatalf("normal mode is shown: %q", ansi.Strip(f))
+	}
+	m.cursor = 1
+	m.Update(key("v"))
+	m.Update(key("j"))
+	f, _ := m.footer()
+	if got := ansi.Strip(f); !strings.HasPrefix(got, " VISUAL  2 lines ") ||
+		!strings.Contains(got, "enter comment · a ask · y copy · esc cancel") {
+		t.Fatalf("visual mode is shown with its keys: %q", got)
 	}
 }

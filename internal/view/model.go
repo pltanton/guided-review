@@ -142,7 +142,8 @@ type model struct {
 	composeRef  int
 	raw         bool
 	deleteArmed int
-	confirmNext string
+	gateOpen    bool
+	gateSel     int
 	notice      string
 	lspStep     string
 	seen        map[string]bool
@@ -267,14 +268,20 @@ func (m *model) notes() []Note {
 	if m.step.Note != "" {
 		out = append(out, Note{Top: true, Kind: "note", Text: m.step.Note})
 	}
-	for _, h := range m.step.Hotspots {
+	for i, h := range m.step.Hotspots {
+		label := ""
+		if h.Checked {
+			label = "RISK ✓"
+		}
 		if h.Line == 0 {
-			out = append(out, Note{Top: true, Kind: "hotspot", Text: h.Q})
+			out = append(out, Note{
+				Top: true, Kind: "hotspot", Text: h.Q, Label: label, Dim: h.Checked, Risk: i + 1,
+			})
 		}
 		if h.Line > 0 {
 			out = append(out, Note{
 				File: hotspotFile(m.step, h), Line: h.Line, Kind: "hotspot", Text: h.Q,
-				Focus: true,
+				Focus: true, Label: label, Dim: h.Checked, Risk: i + 1,
 			})
 		}
 	}
@@ -697,27 +704,89 @@ func (m *model) shiftStep(d int) tea.Cmd {
 }
 
 func (m *model) next() {
-	switch {
-	case m.viewStep != "":
+	if m.viewStep != "" {
 		m.status = "viewing an earlier step: esc to return, then >"
-	case !m.localSteps():
+		return
+	}
+	if !m.gateOpen && (len(m.openRisks()) > 0 || m.unseen() > 0) {
+		m.gateOpen, m.gateSel = true, len(m.step.Hotspots)
+		if open := m.openRisks(); len(open) > 0 {
+			m.gateSel = open[0]
+		}
+		return
+	}
+	m.gateOpen = false
+	if !m.localSteps() {
 		m.emit(inbox.Event{Kind: inbox.KindNext})
-	default:
-		var why []string
-		if len(m.step.Hotspots) > 0 && !m.discussed() {
-			why = append(why, "⚑ a risk question to answer")
+		return
+	}
+	m.moveStep("next")
+}
+
+func (m *model) openRisks() []int {
+	var out []int
+	if m.step == nil {
+		return nil
+	}
+	for i, h := range m.step.Hotspots {
+		if !h.Checked {
+			out = append(out, i)
 		}
-		if n := m.unseen(); n > 0 {
-			why = append(why, fmt.Sprintf("%d changed lines not seen yet", n))
-		}
-		if len(why) > 0 && m.confirmNext != m.step.ID {
-			m.confirmNext = m.step.ID
-			m.notice = strings.Join(why, " · ") + " — press > again to move on"
+	}
+	return out
+}
+
+func (m *model) toggleRisk(n int) {
+	if m.step == nil || n < 1 || n > len(m.step.Hotspots) {
+		m.status = "put the cursor on a risk (RISK) to check it off"
+		return
+	}
+	h := &m.step.Hotspots[n-1]
+	args := []string{"step", "check"}
+	if h.Checked {
+		args = append(args, "--undo")
+	}
+	if m.runGr != nil {
+		out, err := m.runGr(append(args, m.step.ID, fmt.Sprint(n))...)
+		if err != nil {
+			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
 			return
 		}
-		m.confirmNext = ""
-		m.moveStep("next")
 	}
+	h.Checked = !h.Checked
+	m.status = "risk checked off"
+	if !h.Checked {
+		m.status = "risk open again"
+	}
+	if m.src != nil {
+		m.rebuild(false)
+	}
+}
+
+func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
+	risks := len(m.step.Hotspots)
+	switch msg.String() {
+	case "j", "down":
+		m.gateSel = min(m.gateSel+1, risks)
+	case "k", "up":
+		m.gateSel = max(m.gateSel-1, 0)
+	case "x":
+		m.toggleRisk(m.gateSel + 1)
+	case "enter":
+		if m.gateSel >= risks {
+			m.next()
+			return nil
+		}
+		m.toggleRisk(m.gateSel + 1)
+		if open := m.openRisks(); len(open) > 0 {
+			m.gateSel = open[0]
+		} else {
+			m.gateSel = risks
+		}
+	case "esc", "q":
+		m.gateOpen = false
+	}
+	return nil
 }
 
 func (m *model) localSteps() bool {
@@ -803,6 +872,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	case m.chapterOpen != "":
 		m.chapterOpen = ""
 		return nil
+	case m.gateOpen:
+		return m.handleGateKey(msg)
 	case m.help:
 		return m.handleHelpKey(msg)
 	case m.preview != "":
@@ -952,10 +1023,4 @@ func (m *model) unseen() int {
 		}
 	}
 	return n
-}
-
-func (m *model) discussed() bool {
-	return slices.ContainsFunc(m.events, func(e inbox.Event) bool {
-		return e.Step == m.step.ID && (e.Kind == inbox.KindMessage || e.Kind == inbox.KindAsk)
-	})
 }

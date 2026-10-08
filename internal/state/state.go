@@ -196,11 +196,12 @@ type StepHunk struct {
 }
 
 type Hotspot struct {
-	Cat    string `yaml:"cat"`
-	Q      string `yaml:"q"`
-	File   string `yaml:"file,omitempty"`
-	Line   int    `yaml:"line,omitempty"`
-	Detail string `yaml:"detail,omitempty"`
+	Cat     string `yaml:"cat"`
+	Q       string `yaml:"q"`
+	File    string `yaml:"file,omitempty"`
+	Line    int    `yaml:"line,omitempty"`
+	Detail  string `yaml:"detail,omitempty"`
+	Checked bool   `yaml:"checked,omitempty"`
 }
 
 type Detail struct {

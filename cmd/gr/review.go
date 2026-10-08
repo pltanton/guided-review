@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -214,6 +215,9 @@ func readInput(e env, path string) ([]byte, error) {
 func cmdStep(ctx context.Context, e env, args []string) error {
 	if len(args) == 0 {
 		args = []string{"show"}
+	}
+	if args[0] == "check" {
+		return stepCheck(ctx, e, args[1:])
 	}
 	if args[0] == "show" {
 		_, r, err := loadReview(ctx, e.dir)
@@ -495,6 +499,22 @@ func cmdList(ctx context.Context, e env, _ []string) error {
 		}
 	}
 	return nil
+}
+
+func stepCheck(ctx context.Context, e env, args []string) error {
+	fs := e.flags("step check")
+	undo := fs.Bool("undo", false, "open the hotspot again")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	n, err := strconv.Atoi(fs.Arg(1))
+	if fs.NArg() != 2 || err != nil {
+		return errors.New("usage: gr step check [--undo] ID N")
+	}
+	_, _, err = updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+		return plan.CheckHotspot(r, fs.Arg(0), n, !*undo)
+	})
+	return err
 }
 
 func announce(r *state.Review, st *state.Step) {

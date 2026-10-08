@@ -193,7 +193,11 @@ func printStep(e env, r *state.Review, st *state.Step) {
 		e.printf("hunk: %s %s\n", h.File, cmp.Or(h.Lines, "whole file"))
 	}
 	for _, h := range st.Hotspots {
-		e.printf("hotspot %s: %s\n", h.Cat, h.Q)
+		mark := ""
+		if h.Checked {
+			mark = " (checked by the human)"
+		}
+		e.printf("hotspot %s: %s%s\n", h.Cat, h.Q, mark)
 	}
 	for _, a := range st.Annotations {
 		e.printf("%s %s:%d: %s\n", a.Kind, a.File, a.Line, a.Text)

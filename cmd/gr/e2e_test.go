@@ -409,6 +409,15 @@ func TestReviewLoop(t *testing.T) {
 	out = h.mustRun("", "step", "next")
 	assertContains(t, out, "all steps reviewed")
 
+	out = h.mustRun("", "status")
+	assertContains(t, out, "hotspots 0/1")
+	h.mustRun("", "step", "check", "s1", "1")
+	out = h.mustRun("", "step", "show", "s1")
+	assertContains(t, out, "(checked by the human)")
+	if _, err := h.run("", "step", "check", "s1", "2"); err == nil {
+		t.Fatal("step check must refuse a hotspot the step does not have")
+	}
+
 	out = h.mustRun("", "status", "--gate")
 	assertContains(
 		t,

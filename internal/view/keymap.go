@@ -27,8 +27,8 @@ var (
 	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
 	previewActions = []string{"finish", "edit-comment", "delete-comment", "message", "act"}
 	essentials     = []string{
-		"down", "up", "next-hunk", "prev-hunk", "act", "message", "ask", "next", "skip",
-		"details", "plan", "finish", "command", "quit",
+		"down", "up", "next-hunk", "prev-hunk", "act", "select", "message", "ask", "next",
+		"skip", "check-risk", "details", "plan", "finish", "command", "quit",
 	}
 )
 
@@ -151,7 +151,9 @@ func DefaultActions() []Action {
 				m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
 			})},
 		{Name: "ask", Group: rev, Desc: "ask about the line / selection; enter alone: explain it",
-			Keys: k("A"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
+			Keys: k("a"), run: do(func(m *model) { m.startCompose(inbox.KindAsk) })},
+		{Name: "check-risk", Group: rev, Desc: "check off the risk under the cursor (again: reopen)",
+			Keys: k("x"), run: do(func(m *model) { m.toggleRisk(m.current().Risk) })},
 		{Name: "details", Group: rev, Desc: "details behind the agent's note under the cursor",
 			Keys: k("i"), run: do((*model).noteDetails)},
 		{Name: "yank", Group: rev, Desc: "copy the selection or the line to the clipboard",
@@ -179,7 +181,7 @@ func DefaultActions() []Action {
 			run: do((*model).focusPlanPanel)},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
 			run: (*model).toggleMouse},
-		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("a"),
+		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("A"),
 			run: do((*model).focusAgent)},
 		{Name: "chat", Group: vw, Desc: "select in the chat: j/k move, v select, y copy, esc back",
 			Keys: k("t"), run: do((*model).focusChat)},

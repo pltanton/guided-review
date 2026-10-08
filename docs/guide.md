@@ -28,6 +28,11 @@ cursor, `esc` backs out:
   on `⋯` or `▸` it opens the hidden lines;
 - on the last line of a step, `✓ end of s3`, it moves to the next step.
 
+A risk (`RISK`) stays open until you check it off with `x`, on its line or in its
+details. Moving on with a risk still open, or with changed lines you have not seen, asks
+first and lets you check the risks off right there. The summary counts only the risks
+you checked. The footer shows `NORMAL`, or `VISUAL` with the number of selected lines.
+
 A chapter's intro opens when the chapter starts (`I` brings it back), `p` opens the
 plan, `?` shows the main keys and `?` again all of them, and `:` finds any action by
 name. Every other key is a shortcut for something these already reach.
@@ -67,8 +72,8 @@ and `y` copies them; dragging the mouse over chat lines copies them too.
 <details>
 <summary>No rubber stamp</summary>
 
-The viewer tracks which changed lines you scrolled past and reminds you once about the
-rest and about hotspots nobody discussed. Nothing can be published until every step is
+The viewer tracks which changed lines you scrolled past and, before you move on, lists
+the rest and every risk you have not checked off. Nothing can be published until every step is
 reviewed or skipped; steps a blocker made stale are listed in the summary as not reviewed.
 
 </details>

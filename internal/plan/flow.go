@@ -184,8 +184,10 @@ func CoverageOf(r *state.Review) Coverage {
 			c.Pending++
 		}
 		c.Hotspots += len(s.Hotspots)
-		if s.Status == state.StatusDone || s.Status == state.StatusSkipped {
-			c.HotspotsReviewed += len(s.Hotspots)
+		for _, h := range s.Hotspots {
+			if h.Checked {
+				c.HotspotsReviewed++
+			}
 		}
 	}
 	for _, f := range r.Files {
@@ -278,4 +280,16 @@ func EditComment(r *state.Review, id int, body string, severity state.Severity) 
 		return recomputeStale(r), nil
 	}
 	return Impact{}, fmt.Errorf("no comment #%d", id)
+}
+
+func CheckHotspot(r *state.Review, stepID string, n int, checked bool) error {
+	st := r.Step(stepID)
+	if st == nil {
+		return fmt.Errorf("no step %q", stepID)
+	}
+	if n < 1 || n > len(st.Hotspots) {
+		return fmt.Errorf("step %s has %d hotspots, no %d", stepID, len(st.Hotspots), n)
+	}
+	st.Hotspots[n-1].Checked = checked
+	return nil
 }

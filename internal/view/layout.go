@@ -105,6 +105,7 @@ func (m *model) footer() (string, []span) {
 		}
 		return dimStyle.Render(tail), nil
 	}
+	line = m.modeBadge() + " " + line
 	x := ansi.StringWidth(line)
 	var spans []span
 	for _, b := range m.footerButtons() {
@@ -120,15 +121,29 @@ func (m *model) footer() (string, []span) {
 	return line + " " + dimStyle.Render(tail), spans
 }
 
+func (m *model) modeBadge() string {
+	if !m.visual {
+		return buttonStyle.Render(" NORMAL ")
+	}
+	n := max(m.cursor, m.anchor) - min(m.cursor, m.anchor) + 1
+	badge := inkTone.fg().Background(accentTone.color()).Bold(true).Render(" VISUAL ")
+	return badge + keyStyle.Render(fmt.Sprintf(" %d lines ", n))
+}
+
 func (m *model) cursorHint() string {
 	k, cur := m.keys(), m.current()
 	switch {
 	case m.focusPlan || m.focusFiles:
 		return m.panelHint()
+	case m.visual:
+		return fmt.Sprintf("%s comment · %s ask · %s copy · esc cancel",
+			k.key("act"), k.key("ask"), k.key("yank"))
 	case cur.Kind == RowNote && cur.Ref > 0:
 		del := k.key("delete-comment")
 		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
+	case cur.Risk > 0:
+		return fmt.Sprintf("%s check off · %s details", k.key("check-risk"), k.key("details"))
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:
 		return k.key("open") + " fold · " + k.key("details") + " details"
 	case cur.Kind == RowNote:
@@ -571,7 +586,7 @@ func (m *model) View() string {
 	bodyH := max(m.height-len(bottom), 1)
 	mw := m.mainWidth()
 
-	if !m.help {
+	if !m.blocked() {
 		m.markShown()
 	}
 	main := m.header()
@@ -1159,7 +1174,7 @@ func (m *model) agentStatus() string {
 		return addStyle.Render("● your turn")
 	}
 	if m.agentIdle {
-		return delStyle.Render("○ agent stopped — answer in its window (a)")
+		return delStyle.Render("○ agent stopped — answer in its window (" + m.keys().key("agent") + ")")
 	}
 	text := "agent working"
 	if m.review != nil && m.review.Progress != nil {

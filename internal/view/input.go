@@ -366,12 +366,14 @@ func (m *model) noteDetails() {
 	if cur.Line == 0 {
 		width := min(max(m.mainWidth()-4, 20), detailWidth)
 		title := strings.ToLower(noteKinds[cur.NoteKind].label) + " · " + m.step.ID
-		m.popup = &popup{kind: "detail", title: title, lines: markdownLines(text, width)}
+		m.popup = &popup{
+			kind: "detail", title: title, lines: markdownLines(text, width), risk: cur.Risk,
+		}
 		return
 	}
 	loc := lspLoc{Path: cur.File, Line: cur.Line}
 	title := fmt.Sprintf("details · %s:%d", filepath.Base(cur.File), cur.Line)
-	m.popup = &popup{kind: "detail", title: title, loc: loc}
+	m.popup = &popup{kind: "detail", title: title, loc: loc, risk: cur.Risk}
 	if m.refreshDetail() {
 		return
 	}

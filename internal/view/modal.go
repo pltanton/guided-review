@@ -53,6 +53,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 	switch {
 	case m.chapterOpen != "":
 		return m.chapterModal(w), true
+	case m.gateOpen:
+		return m.gateModal(w), true
 	case m.focusPlan:
 		return m.planModal(w, h), true
 	case m.focusFiles && m.chatWidth() == 0:
@@ -73,12 +75,12 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 
 const (
 	cardWidth     = 100
-	wideCardWidth = 150
+	wideCardWidth = 154
 )
 
 func (m *model) fullModal() bool {
 	return m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		m.chapterOpen == "" && !m.focusPlan && !m.help
+		m.chapterOpen == "" && !m.gateOpen && !m.focusPlan && !m.help
 }
 
 func (m *model) drawModal(out []string) {
@@ -268,4 +270,46 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (m *model) gateModal(w int) modalContent {
+	var body []string
+	item := func(i int, text string) {
+		if i == m.gateSel {
+			text = paint(fit(accentTone.fg().Render("▌")+text, w), cursorTone)
+		} else {
+			text = " " + text
+		}
+		body = append(body, text)
+	}
+	if len(m.step.Hotspots) > 0 {
+		body = append(body, dimStyle.Render("risks — enter checks one off once you are sure"), "")
+	}
+	for i, h := range m.step.Hotspots {
+		mark := hotStyle.Render("⚑ ")
+		if h.Checked {
+			mark = addStyle.Render("✓ ")
+		}
+		for k, l := range strings.Split(ansi.Wrap(h.Q, max(w-4, 10), ""), "\n") {
+			if k > 0 {
+				mark = "  "
+			}
+			if k == 0 {
+				item(i, mark+l)
+			} else {
+				body = append(body, "   "+l)
+			}
+		}
+	}
+	if n := m.unseen(); n > 0 {
+		body = append(body, "", hotStyle.Render(fmt.Sprintf("%d changed lines not seen yet", n)))
+	}
+	body = append(body, "")
+	item(len(m.step.Hotspots), boldStyle.Render("move on to the next step"))
+	return modalContent{"before " + m.step.ID + " is done", "enter · esc back to the step", body}
+}
+
+func (m *model) blocked() bool {
+	return m.help || m.chapterOpen != "" || m.gateOpen || m.focusPlan ||
+		m.popup != nil && m.popup.kind != "hover"
 }

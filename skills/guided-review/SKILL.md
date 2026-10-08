@@ -57,7 +57,7 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
    restarting it if it is already there. It finds your tmux pane by itself, also when
    `$TMUX` is not set in your shell. If it prints "not in tmux", give the human the
    command it printed to run the viewer in another terminal and go on.
-   `a` in the viewer brings the user back to you, and closing it (or `gr done`) returns
+   `A` in the viewer brings the user back to you, and closing it (or `gr done`) returns
    them to your pane automatically.
 
 Before anything that takes more than a few seconds — reading the diff, building the
@@ -193,8 +193,8 @@ steps:
 ## Step loop
 
 The viewer moves through the steps itself: `>`, skips and jumps run `gr step …` and
-show the step's `message` from the plan, and it reminds the human of an open hotspot
-before leaving a step. You only hear about what needs you.
+show the step's `message` from the plan, and before leaving a step it asks the human to
+check off each open hotspot (`x`); `gr step show` marks the checked ones. You only hear about what needs you.
 
 1. If something worth explaining turns up only now, add it with
    `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line) and

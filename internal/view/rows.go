@@ -54,6 +54,7 @@ type Row struct {
 
 	RenamedFrom string
 	RenameHide  bool
+	Risk        int
 }
 
 type Note struct {
@@ -67,6 +68,7 @@ type Note struct {
 	Dim   bool
 	Focus bool
 	Top   bool
+	Risk  int
 }
 
 type Source interface {
@@ -103,6 +105,7 @@ func buildRows(
 		if n.Top && len(files) > 0 {
 			rows = append(rows, Row{
 				Kind: RowNote, File: files[0], Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label,
+				Dim: n.Dim, Risk: n.Risk,
 			})
 		}
 	}
@@ -314,6 +317,7 @@ func fileRows(
 						NoteLabel: note.Label,
 						Dim:       note.Dim,
 						Ref:       note.Ref,
+						Risk:      note.Risk,
 					},
 				)
 			}
