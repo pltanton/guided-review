@@ -140,7 +140,7 @@ func (m *model) cursorHint() string {
 }
 
 func (m *model) planWidth() int {
-	if m.help || !m.showPlan || m.width < minPlanWidth || m.review == nil ||
+	if !m.showPlan || m.width < minPlanWidth || m.review == nil ||
 		len(m.review.Steps) == 0 {
 		return 0
 	}
@@ -159,7 +159,7 @@ func (m *model) chatWidth() int {
 	if m.sideW > 0 {
 		w = max(24, min(m.sideW, m.width*2/3))
 	}
-	if m.help || m.width-m.planWidth()-w < minCodeWidth {
+	if m.width-m.planWidth()-w < minCodeWidth {
 		return 0
 	}
 	return w
@@ -603,23 +603,15 @@ func (m *model) View() string {
 	if !m.help {
 		m.markShown()
 	}
-	panel := func(title, hint string, lines []string) []string {
-		rule := dimStyle.Render(strings.Repeat("─", max(mw, 1)))
-		return append([]string{boldStyle.Render(title), hint, rule}, lines...)
-	}
 	main := m.header()
 	switch {
-	case m.help:
-		lines := m.helpLines(mw)
-		main = panel("keys", dimStyle.Render("any key closes · j/k scroll · remap in "+configHint),
-			lines[min(m.helpTop, len(lines)):])
 	case m.loading != "":
 		loading := fmt.Sprintf("%s loading %d files…", m.spin(), len(m.step.Hunks))
 		main = append(main, "", "  "+hotStyle.Render(loading))
 	}
 	shown := m.offset
 	for i := m.offset; len(main) < bodyH-1; i++ {
-		if i >= len(m.lines) || m.help {
+		if i >= len(m.lines) {
 			main = append(main, "")
 			continue
 		}
@@ -640,7 +632,7 @@ func (m *model) View() string {
 		}
 	}
 	below := ""
-	if rest := len(m.lines) - shown; rest > 0 && !m.help {
+	if rest := len(m.lines) - shown; rest > 0 {
 		below = dimStyle.Render(fmt.Sprintf("   ↓ %d more lines below", rest))
 	}
 	main = append(main[:min(len(main), bodyH-1)], below)
@@ -677,6 +669,7 @@ func (m *model) View() string {
 	for _, line := range bottom {
 		out = append(out, fit(line, m.width))
 	}
+	m.drawModal(out)
 	return strings.Join(out, "\n")
 }
 

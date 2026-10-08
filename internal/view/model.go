@@ -117,6 +117,7 @@ type model struct {
 	count        string
 	km           *keymap
 	help         bool
+	helpAll      bool
 	helpTop      int
 	baseCtx      int
 	popup        *popup

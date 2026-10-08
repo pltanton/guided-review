@@ -947,6 +947,16 @@ func TestHelpOverlay(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.Update(key("?"))
 	out := ansi.Strip(m.View())
+	for _, want := range []string{"essentials", "done with this step", "? all keys"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("essentials lack %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "next diff algorithm") {
+		t.Fatalf("essentials list a rare action:\n%s", out)
+	}
+	m.Update(key("?"))
+	out = ansi.Strip(m.View())
 	for _, want := range []string{"navigate", "lsp", "gd", "go to definition", "finish"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("help lacks %q:\n%s", want, out)

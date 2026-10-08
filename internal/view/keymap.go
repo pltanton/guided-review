@@ -26,6 +26,10 @@ const finishGroup = "finish preview"
 var (
 	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
 	previewActions = []string{"finish", "edit-comment", "delete-comment", "message"}
+	essentials     = []string{
+		"down", "up", "next-hunk", "prev-hunk", "message", "ask", "next", "skip",
+		"details", "plan", "finish", "command", "quit",
+	}
 )
 
 func DefaultActions() []Action {
@@ -187,7 +191,7 @@ func DefaultActions() []Action {
 			run:   do(func(m *model) { m.startCmd(':') }),
 		},
 		{Name: "help", Group: vw, Desc: "this help", Keys: k("?", "f1"),
-			run: do(func(m *model) { m.help, m.helpTop = true, 0 })},
+			run: do(func(m *model) { m.help, m.helpAll, m.helpTop = true, false, 0 })},
 		{Name: "interrupt", Group: rev, Desc: "stop the agent's current work and add to your question",
 			Keys: k("ctrl+c"), run: do((*model).interrupt)},
 		{Name: "quit", Group: vw, Desc: "quit the viewer", Keys: k("q"),
@@ -446,6 +450,17 @@ func (m *model) toggleMouse() tea.Cmd {
 
 func (m *model) helpLines(width int) []string {
 	km := m.keys()
+	if !m.helpAll {
+		out := []string{boldStyle.Render("essentials"), ""}
+		for _, name := range essentials {
+			for _, a := range km.actions {
+				if a.Name == name && len(a.Keys) > 0 {
+					out = append(out, helpRow(a))
+				}
+			}
+		}
+		return out
+	}
 	var blocks [][]string
 	total := 0
 	for _, g := range groups {
@@ -454,14 +469,7 @@ func (m *model) helpLines(width int) []string {
 			if a.Group != g {
 				continue
 			}
-			keys := make([]string, len(a.Keys))
-			for i, k := range a.Keys {
-				keys[i] = strings.ReplaceAll(k, " ", "")
-			}
-			block = append(
-				block,
-				cursorStyle.Render(fmt.Sprintf("  %-11s", strings.Join(keys, " ")))+" "+a.Desc,
-			)
+			block = append(block, helpRow(a))
 		}
 		blocks = append(blocks, block)
 		total += len(block) + 1
@@ -504,12 +512,22 @@ func (m *model) helpLines(width int) []string {
 	return out
 }
 
+func helpRow(a Action) string {
+	keys := make([]string, len(a.Keys))
+	for i, k := range a.Keys {
+		keys[i] = strings.ReplaceAll(k, " ", "")
+	}
+	return cursorStyle.Render(fmt.Sprintf("  %-11s", strings.Join(keys, " "))) + " " + a.Desc
+}
+
 func (m *model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	switch msg.String() {
 	case "j", "down":
 		m.helpTop++
 	case "k", "up":
 		m.helpTop = max(m.helpTop-1, 0)
+	case "?", "f1":
+		m.helpAll, m.helpTop = !m.helpAll, 0
 	default:
 		m.help = false
 	}
