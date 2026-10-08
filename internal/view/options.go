@@ -29,9 +29,6 @@ func (m *model) optionPills(w int) (lines []string, spans []pillSpan) {
 	total := -1
 	for i, o := range m.answerOptions() {
 		k := fmt.Sprint(i + 1)
-		if m.step != nil {
-			k = "alt+" + k
-		}
 		pill := keyStyle.Render(" "+k) + buttonStyle.Render(" "+o+" ")
 		pills = append(pills, pill)
 		total += ansi.StringWidth(pill) + 1
@@ -80,7 +77,7 @@ func (m *model) answer(i int) {
 
 func (m *model) optionKey(k string) (int, bool) {
 	digit := strings.TrimPrefix(k, "alt+")
-	if len(digit) != 1 || digit < "1" || digit > "9" || digit == k && m.step != nil {
+	if len(digit) != 1 || digit < "1" || digit > "9" {
 		return 0, false
 	}
 	return int(digit[0] - '1'), len(m.answerOptions()) > 0

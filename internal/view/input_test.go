@@ -66,36 +66,36 @@ func TestComposeStatusline(t *testing.T) {
 	}{
 		{"message", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindMessage, "internal/a.go", "2-4"
-		}, " COMMENT a.go:2-4   enter send · tab ask", "alt+enter new line · esc cancel"},
+		}, " COMMENT a.go:2-4   enter send · tab ask", "ctrl+j new line · esc cancel"},
 		{"reply to a comment", func(m *model) {
 			m.composeKind, m.composeRef, m.anchorFile, m.anchorLines = inbox.KindMessage, 7, "a.go", "2"
 		}, " COMMENT re #7 a.go:2         enter send",
-			"ctrl+r raw · alt+enter new line · esc cancel"},
+			"ctrl+r raw · ctrl+j new line · esc cancel"},
 		{"general", func(m *model) { m.composeKind = inbox.KindMessage },
-			" MSG             enter send · ctrl+r raw", "alt+enter new line · esc cancel"},
+			" MSG             enter send · ctrl+r raw", "ctrl+j new line · esc cancel"},
 		{"paused", func(m *model) { m.composeKind, m.interrupted = inbox.KindMessage, true },
 			" MSG paused      enter send · ctrl+r raw", "esc cancel"},
 		{"ask", func(m *model) {
 			m.composeKind, m.anchorFile, m.anchorLines = inbox.KindAsk, "a.go", "2"
 		}, " ASK a.go:2                   enter send",
-			"enter alone explains · tab comment · alt+enter new line · esc cancel"},
+			"enter alone explains · tab comment · ctrl+j new line · esc cancel"},
 		{"raw", func(m *model) {
 			m.composeKind, m.raw, m.anchorFile, m.anchorLines = inbox.KindMessage, true, "a.go", "2"
 		}, " RAW minor a.go:2             enter save",
-			"tab severity · ctrl+r via agent · alt+enter new line · esc cancel"},
+			"tab severity · ctrl+r via agent · ctrl+j new line · esc cancel"},
 		{"edit", func(m *model) { m.composeKind, m.composeRef = inbox.KindEdit, 3 },
-			" EDIT #3         enter save · ctrl+r raw", "alt+enter new line · esc cancel"},
+			" EDIT #3         enter save · ctrl+r raw", "ctrl+j new line · esc cancel"},
 		{"skip", func(m *model) { m.composeKind = inbox.KindSkip },
-			" SKIP    enter skip · alt+enter new line", "enter skip · alt+enter new line · esc cancel"},
+			" SKIP       enter skip · ctrl+j new line", "enter skip · ctrl+j new line · esc cancel"},
 		{"thread reply", func(m *model) {
 			m.review.Discussions = []state.Discussion{{ID: "d1", File: "x/b.go", Line: 9}}
 			m.composeKind, m.composeThread = kindThreadReply, "d1"
 		}, " REPLY b.go:9 ",
-			"enter reply, thread stays open · alt+enter new line · esc cancel"},
+			"enter reply, thread stays open · ctrl+j new line · esc cancel"},
 		{"thread question", func(m *model) {
 			m.review.Discussions = []state.Discussion{{ID: "d1", Author: "bob"}}
 			m.composeKind, m.composeThread = inbox.KindMessage, "d1"
-		}, " THREAD @bob                  enter send", "enter send · alt+enter new line · esc cancel"},
+		}, " THREAD @bob                  enter send", "enter send · ctrl+j new line · esc cancel"},
 	}
 	for _, c := range cases {
 		m, _ := newTestModel(t)

@@ -1560,12 +1560,18 @@ func TestAnswerOptions(t *testing.T) {
 	s, sentS := newTestModel(t)
 	s.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: []string{"да"}}}
 	s.Update(key("1"))
-	if len(*sentS) != 0 {
-		t.Fatal("during steps a bare digit is a count, not an answer")
+	if len(*sentS) != 1 || (*sentS)[0].Text != "да" {
+		t.Fatalf("while answers are offered, a bare digit picks one: %+v", *sentS)
 	}
 	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("1"), Alt: true})
-	if len(*sentS) != 1 || (*sentS)[0].Text != "да" {
-		t.Fatalf("alt+1 must answer: %+v", *sentS)
+	if len(*sentS) != 2 {
+		t.Fatalf("alt+1 still answers: %+v", *sentS)
+	}
+	s.review.Messages = nil
+	s.Update(key("2"))
+	s.Update(key("j"))
+	if s.cursor != 2 {
+		t.Fatalf("without answers a digit is a count: cursor %d", s.cursor)
 	}
 }
 

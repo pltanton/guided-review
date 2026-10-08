@@ -56,8 +56,9 @@ mentions, written during planning, so it opens instantly.
 <details>
 <summary>Talking to the agent</summary>
 
-Point at a line or a selection, press Enter and write under it: Enter sends, Alt+Enter
-or Ctrl+J starts a new line. Shift+Enter does too; in tmux it needs `set -g extended-keys on` in `~/.tmux.conf`
+Point at a line or a selection, press Enter and write under it: Enter sends, Ctrl+J
+starts a new line. Alt+Enter and Shift+Enter do too where the terminal passes them;
+in tmux Shift+Enter needs `set -g extended-keys on` in `~/.tmux.conf`
 (plus `set -as terminal-features 'xterm*:extkeys'` if the outer terminal does not
 announce them), otherwise tmux delivers it as plain Enter. The line under the input shows
 the mode (COMMENT, ASK, RAW, EDIT…), where the comment goes and the keys that work right

@@ -508,7 +508,7 @@ func (m *model) composeMode() (
 		}
 		hints = append(hints, composeHint{"ctrl+r", "raw"})
 	}
-	hints = append(hints, composeHint{"alt+enter", "new line"})
+	hints = append(hints, composeHint{"ctrl+j", "new line"})
 	return badge, style, anchor, append(hints, composeHint{"esc", "cancel"})
 }
 
