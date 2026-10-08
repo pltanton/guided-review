@@ -91,6 +91,8 @@ func TestNavigation(t *testing.T) {
 
 func TestEventsFromKeys(t *testing.T) {
 	m, sent := newTestModel(t)
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
 	m.View()
 	m.cursor = 2
 	m.Update(key("a"))
@@ -123,11 +125,13 @@ func TestEventsFromKeys(t *testing.T) {
 		{Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "2"},
 		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "2-3", Text: "is this safe"},
 		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "3", Text: "ok"},
-		{Kind: inbox.KindSkip, Step: "s1", Text: "trivial"},
-		{Kind: inbox.KindNext, Step: "s1"},
 	}
 	if !reflect.DeepEqual(*sent, want) {
 		t.Fatalf("sent\n%+v\nwant\n%+v", *sent, want)
+	}
+	wantRan := [][]string{{"step", "skip", "--reason", "trivial"}, {"step", "next"}}
+	if !reflect.DeepEqual(ran, wantRan) {
+		t.Fatalf("skip and next run gr, not the agent: %q", ran)
 	}
 	if m.composing || m.visual {
 		t.Fatal("compose and visual must be off after sending")
@@ -343,14 +347,21 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 
 func TestButtons(t *testing.T) {
 	m, sent := newTestModel(t)
+	next := 0
+	m.runGr = func(args ...string) (string, error) {
+		if slices.Equal(args, []string{"step", "next"}) {
+			next++
+		}
+		return "", nil
+	}
 	m.View()
 	m.Update(key(" "))
-	if len(*sent) != 0 {
+	if len(*sent) != 0 || next != 0 {
 		t.Fatalf("space must do nothing: %+v", *sent)
 	}
 	m.Update(key(">"))
-	if len(*sent) != 1 || (*sent)[0].Kind != inbox.KindNext {
-		t.Fatalf("> must send next: %+v", *sent)
+	if next != 1 {
+		t.Fatalf("> must move on: %d", next)
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
@@ -368,8 +379,8 @@ func TestButtons(t *testing.T) {
 			Action: tea.MouseActionPress,
 		},
 	)
-	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
-		t.Fatalf("click on next: %+v", *sent)
+	if next != 2 {
+		t.Fatalf("click on next: %d", next)
 	}
 	x = ansi.StringWidth(last[:strings.Index(last, "comment · enter")])
 	m.Update(
@@ -2110,6 +2121,8 @@ func TestChapterModal(t *testing.T) {
 
 func TestEndRowAndEnter(t *testing.T) {
 	m, sent := newTestModel(t)
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
 	last := m.lines[len(m.lines)-1]
 	if last.Kind != RowEnd || !strings.Contains(ansi.Strip(m.View()), "✓ end of s1 · enter → next step") {
 		t.Fatalf("the step ends with the end row: %+v", last)
@@ -2129,8 +2142,8 @@ func TestEndRowAndEnter(t *testing.T) {
 	m.Update(key("esc"))
 	m.Update(key("G"))
 	m.Update(key("enter"))
-	if len(*sent) != 2 || (*sent)[1].Kind != inbox.KindNext {
-		t.Fatalf("enter on the end row moves on: %+v", *sent)
+	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "next"}) {
+		t.Fatalf("enter on the end row moves on: %q", ran)
 	}
 }
 

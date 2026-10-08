@@ -721,10 +721,6 @@ func (m *model) next() {
 		return
 	}
 	m.gateOpen = false
-	if !m.localSteps() {
-		m.emit(inbox.Event{Kind: inbox.KindNext})
-		return
-	}
 	m.moveStep("next")
 }
 
@@ -794,12 +790,11 @@ func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 
-func (m *model) localSteps() bool {
-	return m.review != nil && m.runGr != nil && m.step != nil && (m.review.Filling ||
-		slices.ContainsFunc(m.review.Steps, func(s state.Step) bool { return s.Message != "" }))
-}
-
 func (m *model) moveStep(args ...string) {
+	if m.runGr == nil {
+		m.err = errors.New("no gr to move the step with")
+		return
+	}
 	out, err := m.runGr(append([]string{"step"}, args...)...)
 	out = strings.TrimSpace(out)
 	switch {
@@ -870,7 +865,7 @@ func (m *model) finish() tea.Cmd {
 
 func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	m.status, m.notice = "", ""
-	if msg.String() != m.keys().key("delete-comment") {
+	if m.keys().name(msg.String()) != "delete-comment" {
 		m.deleteArmed = 0
 	}
 	filtering := m.popup != nil && m.popup.filtering

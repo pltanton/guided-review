@@ -528,7 +528,7 @@ func (m *model) composeMode() (
 		hints = append(hints, composeHint{"tab", "ai edit"})
 	case m.rawMode():
 		badge, hints[0].desc = "COMMENT "+string(m.severity()), "save"
-		hints = append(hints, composeHint{"tab", "ai comment"}, composeHint{"shift+tab", "severity"})
+		hints = append(hints, composeHint{"tab", "ai comment"}, composeHint{"S-tab", "severity"})
 	case m.composeKind == inbox.KindEdit:
 		badge = fmt.Sprintf("AI EDIT #%d", m.composeRef)
 		if m.inlineCompose() {
@@ -541,13 +541,13 @@ func (m *model) composeMode() (
 		if m.chatting {
 			badge, anchor = "CHAT", cmp.Or(m.chatTopic, anchor)
 			return badge, style, anchor, append(hints,
-				composeHint{"ctrl+j", "new line"}, composeHint{"esc", "leave the chat"})
+				composeHint{"C-j", "new line"}, composeHint{"esc", "leave the chat"})
 		}
 		if m.inlineCompose() {
 			badge, hints = "AI COMMENT", append(hints, composeHint{"tab", "ask"})
 		}
 	}
-	hints = append(hints, composeHint{"ctrl+j", "new line"})
+	hints = append(hints, composeHint{"C-j", "new line"})
 	return badge, style, anchor, append(hints, composeHint{"esc", "cancel"})
 }
 

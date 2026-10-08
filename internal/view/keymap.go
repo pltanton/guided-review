@@ -294,10 +294,16 @@ func newKeymap(overrides map[string][]string) (*keymap, error) {
 func (km *keymap) key(name string) string {
 	for _, a := range km.actions {
 		if a.Name == name && len(a.Keys) > 0 {
-			return strings.ReplaceAll(a.Keys[0], " ", "")
+			return keyLabel(a.Keys[0])
 		}
 	}
 	return ""
+}
+
+var modifierLabels = strings.NewReplacer("ctrl+", "C-", "alt+", "A-", "shift+", "S-")
+
+func keyLabel(k string) string {
+	return modifierLabels.Replace(strings.ReplaceAll(k, " ", ""))
 }
 
 func (km *keymap) name(k string) string {
@@ -532,7 +538,7 @@ func (m *model) windowKeys() [][2]string {
 	case m.popup.kind == "peek":
 		return [][2]string{{"j k w b", "move"}, {"gd gr gi", "definition, references, implementations"},
 			{"gy gc", "type definition, callers"}, {"K", "type and docs"},
-			{"ctrl+o", "back to the previous window"}, {"tab", "forward again"},
+			{"C-o", "back to the previous window"}, {"tab", "forward again"},
 			{"e", "open in $EDITOR"}, {"esc", "close all"}}
 	case m.popup.kind == "detail":
 		rows := [][2]string{{"j k", "scroll"}}
@@ -550,7 +556,7 @@ func (m *model) windowKeys() [][2]string {
 func helpRow(a Action) string {
 	keys := make([]string, len(a.Keys))
 	for i, k := range a.Keys {
-		keys[i] = strings.ReplaceAll(k, " ", "")
+		keys[i] = keyLabel(k)
 	}
 	return cursorStyle.Render(fmt.Sprintf("  %-11s", strings.Join(keys, " "))) + " " + a.Desc
 }

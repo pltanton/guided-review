@@ -591,7 +591,7 @@ func (m *model) popupHint() string {
 	case p.items != nil:
 		return "enter open · / filter · e editor · esc close"
 	case p.kind == "peek":
-		return "g… K lsp · ctrl+o back · tab forward · e editor · esc close"
+		return "g… K lsp · C-o back · tab forward · e editor · esc close"
 	case p.kind == "detail" && p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots):
 		verb := "check off the risk"
 		if m.step.Hotspots[p.risk-1].Checked {

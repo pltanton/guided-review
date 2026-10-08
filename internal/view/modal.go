@@ -129,7 +129,7 @@ func (m *model) drawPalette(out []string) {
 		a := items[i]
 		key := ""
 		if len(a.Keys) > 0 {
-			key = strings.ReplaceAll(a.Keys[0], " ", "")
+			key = keyLabel(a.Keys[0])
 		}
 		row := fmt.Sprintf("%-16s %s", a.Name, dimStyle.Render(a.Desc))
 		row = fit(row, max(w-4-ansi.StringWidth(key)-1, 1)) + " " + cursorStyle.Render(key)
