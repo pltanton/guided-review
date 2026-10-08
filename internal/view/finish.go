@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -255,6 +256,7 @@ func (m *model) publishPlan() *state.PublishPlan {
 
 func (m *model) cycleVerdict() {
 	if p := m.publishPlan(); p != nil {
+		m.autoVerdict = false
 		i := slices.Index(verdictCycle, p.Verdict)
 		next := verdictCycle[(i+1)%len(verdictCycle)]
 		m.prepare(next, p.Approve && next == "approve")
@@ -317,6 +319,7 @@ func (m *model) cycleSeverity(id int) {
 			return
 		}
 		m.status = fmt.Sprintf("#%d is %s now", id, next)
+		m.followVerdict(id, state.Severity(next))
 		m.refreshPreview()
 		return
 	}
@@ -333,4 +336,130 @@ func (m *model) refreshPreview() {
 		return
 	}
 	m.preview = out
+}
+
+func (m *model) askApprove(verdict string) bool {
+	return m.review.MR != nil && verdict == plan.VerdictApprove
+}
+
+func (m *model) openFinish() {
+	m.finishCard, m.finishSel, m.approvePick, m.autoVerdict = true, 0, 0, true
+}
+
+func (m *model) finishItems() []string {
+	verdict, _ := plan.SuggestVerdict(m.review)
+	if m.askApprove(verdict) {
+		return []string{"approve the MR", "do not approve", "show the result"}
+	}
+	return []string{"show the result"}
+}
+
+func (m *model) finishCardModal(w int) modalContent {
+	verdict, why := plan.SuggestVerdict(m.review)
+	body := []string{
+		boldStyle.Render("verdict  ") + verdictStyle(verdict) + dimStyle.Render(" — "+why),
+		dimStyle.Render("comments " + severityCounts(m.review)),
+	}
+	if d := plan.Decisions(m.review); d != "" {
+		body = append(body, "")
+		for _, l := range strings.Split(d, "\n") {
+			body = append(body, strings.Split(ansi.Wrap(l, max(w, 20), ""), "\n")...)
+		}
+	}
+	if m.askApprove(verdict) {
+		body = append(body, "", hotStyle.Render("approve the MR when it is published?"))
+	}
+	body = append(body, "")
+	for i, it := range m.finishItems() {
+		mark := "  "
+		switch {
+		case i == 0 && m.approvePick == 1, i == 1 && m.approvePick == 2:
+			mark = addStyle.Render("✓ ")
+		}
+		line := mark + it
+		if i == m.finishSel {
+			line = paint(fit(accentTone.fg().Render("▌")+line, w), cursorTone)
+		} else {
+			line = " " + line
+		}
+		body = append(body, line)
+	}
+	if m.err != nil {
+		body = append(body, "", delStyle.Render(m.err.Error()))
+	}
+	return modalContent{"finish", "enter · esc back to the review", body}
+}
+
+func severityCounts(r *state.Review) string {
+	round := max(r.Round, 1)
+	n := map[state.Severity]int{}
+	for _, c := range r.Comments {
+		if !c.Resolved && max(c.Round, 1) == round {
+			n[c.Severity]++
+		}
+	}
+	parts := make([]string, len(state.Severities))
+	for i, s := range state.Severities {
+		parts[i] = fmt.Sprintf("%d %s", n[s], s)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
+	items := m.finishItems()
+	switch msg.String() {
+	case "j", "down":
+		m.finishSel = min(m.finishSel+1, len(items)-1)
+	case "k", "up":
+		m.finishSel = max(m.finishSel-1, 0)
+	case "esc", "q":
+		m.finishCard = false
+	case "enter":
+		if len(items) == 3 && m.finishSel < 2 {
+			m.approvePick, m.finishSel = m.finishSel+1, 2
+			return nil
+		}
+		if len(items) == 3 && m.approvePick == 0 {
+			m.status, m.finishSel = "choose first: approve the MR or not", 0
+			return nil
+		}
+		return m.prepareFinish()
+	}
+	return nil
+}
+
+func (m *model) prepareFinish() tea.Cmd {
+	verdict, _ := plan.SuggestVerdict(m.review)
+	approve := m.askApprove(verdict) && m.approvePick == 1
+	decisions := plan.Decisions(m.review)
+	args := []string{"prepare", "--verdict", verdict, "--decisions", decisions}
+	if approve {
+		args = append(args, "--approve")
+	}
+	if len(plan.Gate(m.review)) > 0 {
+		args = append(args, "--partial")
+	}
+	if out, err := m.runGr(args...); err != nil {
+		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
+		return nil
+	}
+	m.err = nil
+	m.review.Publish = &state.PublishPlan{Verdict: verdict, Approve: approve, Decisions: decisions}
+	m.finishCard = false
+	return m.finish()
+}
+
+func (m *model) followVerdict(id int, sev state.Severity) {
+	for i := range m.review.Comments {
+		if m.review.Comments[i].ID == id {
+			m.review.Comments[i].Severity = sev
+		}
+	}
+	p := m.review.Publish
+	if !m.autoVerdict || p == nil {
+		return
+	}
+	if v, _ := plan.SuggestVerdict(m.review); v != p.Verdict {
+		m.prepare(v, p.Approve && v == plan.VerdictApprove)
+	}
 }

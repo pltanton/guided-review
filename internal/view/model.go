@@ -143,6 +143,10 @@ type model struct {
 	raw         bool
 	deleteArmed int
 	gateOpen    bool
+	finishCard  bool
+	finishSel   int
+	approvePick int
+	autoVerdict bool
 	gateSel     int
 	notice      string
 	lspStep     string
@@ -801,8 +805,7 @@ func (m *model) moveStep(args ...string) {
 	case err != nil:
 		m.err = fmt.Errorf("%v: %s", err, out)
 	case strings.HasPrefix(out, "all steps reviewed"):
-		m.emit(inbox.Event{Kind: inbox.KindReviewed})
-		m.status = "all steps reviewed: the agent wraps up"
+		m.openFinish()
 	}
 }
 
@@ -838,7 +841,7 @@ func (m *model) finish() tea.Cmd {
 		return nil
 	}
 	if m.review.Publish == nil {
-		m.status = "nothing prepared: the agent prepares it when the review is done"
+		m.openFinish()
 		return nil
 	}
 	if m.preview == "" {
@@ -881,6 +884,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return nil
 	case m.gateOpen:
 		return m.handleGateKey(msg)
+	case m.finishCard:
+		return m.handleFinishCardKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
 	case m.threads && !m.composing:

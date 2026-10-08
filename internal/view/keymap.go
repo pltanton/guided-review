@@ -85,7 +85,7 @@ func DefaultActions() []Action {
 			Name:  "prev-step",
 			Group: nav,
 			Desc:  "look at the previous step (progress stays)",
-			Keys:  k("H"),
+			Keys:  k("H", "<"),
 			run:   func(m *model) tea.Cmd { return m.shiftStep(-1) },
 		},
 		{Name: "next-step-view", Group: nav, Desc: "look at the next step, then extra views",

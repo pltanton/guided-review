@@ -803,9 +803,10 @@ func TestFinishButton(t *testing.T) {
 		return "/tmp/guided-review/mr-1\n", nil
 	}
 	m.Update(key("P"))
-	if !strings.Contains(m.status, "nothing prepared") || len(ran) != 0 {
-		t.Fatalf("P before prepare: status %q ran %v", m.status, ran)
+	if !m.finishCard || len(ran) != 0 {
+		t.Fatalf("P before prepare opens the finish card: ran %v", ran)
 	}
+	m.Update(key("esc"))
 	m.review.Publish = &state.PublishPlan{Verdict: "approve"}
 	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "finish · P") {
 		t.Fatalf("finish button missing: %q", ansi.Strip(f))
@@ -1515,8 +1516,71 @@ func TestLocalNext(t *testing.T) {
 	m.review.Steps[0].Hotspots = nil
 	m.View()
 	m.Update(key(">"))
-	if n := len(*sent); n != 1 || (*sent)[0].Kind != inbox.KindReviewed {
-		t.Fatalf("the agent must hear when all steps are reviewed: %+v", *sent)
+	if len(*sent) != 0 || !m.finishCard {
+		t.Fatalf("after the last step the viewer opens the finish itself: %+v", *sent)
+	}
+}
+
+func TestFinishCard(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.MR = &state.MR{URL: "https://gitlab/x/-/merge_requests/1", Me: "me"}
+	m.review.Steps[0].Status, m.review.Steps[1].Status = state.StatusDone, state.StatusSkipped
+	m.review.Steps[1].SkipReason = "trivial"
+	m.review.Comments = []state.Comment{{ID: 1, File: "a.go", Lines: "2", Severity: state.SeverityNit}}
+	var ran [][]string
+	m.runGr = func(args ...string) (string, error) {
+		ran = append(ran, args)
+		if len(args) > 1 && args[1] == "--dry-run" {
+			return "--- a.go:2\n**nit** x\n\n--- summary\n## Guided review: approve\n", nil
+		}
+		return "", nil
+	}
+	m.openFinish()
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"┌ finish", "verdict  approve", "0 blocker · 0 major · 0 minor · 1 nit",
+		"Skipped s2 «second»: trivial", "approve the MR when it is published?"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("finish card lacks %q:\n%s", want, v)
+		}
+	}
+	m.Update(key("j"))
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if len(ran) != 0 || !strings.Contains(m.status, "approve the MR or not") {
+		t.Fatalf("the result waits for the approve answer: ran %v", ran)
+	}
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if m.approvePick != 2 {
+		t.Fatalf("enter on «do not approve» picks it: %d", m.approvePick)
+	}
+	m.Update(key("enter"))
+	want := []string{"prepare", "--verdict", "approve", "--decisions", "- Skipped s2 «second»: trivial"}
+	if len(ran) < 2 || !slices.Equal(ran[0], want) || m.preview == "" || len(*sent) != 0 {
+		t.Fatalf("show the result prepares without the agent and opens the preview: ran %q", ran)
+	}
+
+	prepared := func() string {
+		for i := len(ran) - 1; i >= 0; i-- {
+			if ran[i][0] == "prepare" {
+				return ran[i][2]
+			}
+		}
+		return ""
+	}
+	m.cycleSeverity(1)
+	if got := prepared(); got != "blocked" {
+		t.Fatalf("a nit turned blocker blocks: %q", got)
+	}
+	m.cycleSeverity(1)
+	if got := prepared(); got != "changes" {
+		t.Fatalf("a blocker turned major asks for changes: %q", got)
+	}
+	m.cycleVerdict()
+	before := len(ran)
+	m.cycleSeverity(1)
+	if prepared() == "approve" || ran[before][0] != "comment" || len(ran) > before+2 {
+		t.Fatalf("after v the verdict is the human's and does not follow severity: %q", ran[before:])
 	}
 }
 
@@ -2381,5 +2445,14 @@ func TestAnswersWhileChatting(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2"), Alt: true})
 	if len(*sent) != 1 || (*sent)[0].Text != "no" || !m.composing || len(m.input) != 0 {
 		t.Fatalf("A-2 answers and the chat stays open: %+v input %q", *sent, string(m.input))
+	}
+}
+
+func TestLessThanShowsPreviousStep(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.review.Current, m.step = "s2", &m.review.Steps[1]
+	m.Update(key("<"))
+	if m.step.ID != "s1" || m.review.Current != "s2" || len(*sent) != 0 {
+		t.Fatalf("< looks at the previous step: step %s current %s", m.step.ID, m.review.Current)
 	}
 }

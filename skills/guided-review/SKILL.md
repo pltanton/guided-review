@@ -225,13 +225,10 @@ check off each open hotspot (`x`); `gr step show` marks the checked ones. You on
      as `path:line`. Save it with
      `gr note detail --file F --line N [--step sN] - <<'EOF' … EOF`; the viewer shows it
      in the popup that is already open. No `gr say` needed.
-   - `[reviewed] sN` — the human went past the last step: go to Wrap-up.
-   - `[next] sN` — only for a plan without messages: `gr step next`, read the new step,
-     `gr say` its message.
    - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,
      word for word (the viewer's default for a comment; an ai comment reaches you as a
      message instead). Do not add, edit or rephrase it and do not reply; if the
-     text lists stale steps, handle it as a blocker (step 4). `[comment] sN: comment #N
+     text lists stale steps, handle it as a blocker (step 3). `[comment] sN: comment #N
      updated` / `comment #N deleted` is the human editing or deleting their own comment:
      nothing to do.
 
@@ -305,7 +302,7 @@ stranger would. Do not look for or ask about how it was written.
   `gr open --return <that pane>`, so finishing lands the human back in their coding session.
 - `gr init --self` was already run for you; `gr init --self` again just resumes.
 - Intake: the task comes from the prompt, not from an MR. There are no MR discussions.
-- Wrap-up: steps 1–3 as usual (`gr prepare` without `--approve`). `P` writes
+- Wrap-up: the viewer finishes as usual and, with no MR, asks nothing about approve. `P` writes
   `fixes.json` for the author's agent and closes the viewer. That is the end of your job:
   as a subagent, reply with the export dir as your final answer; in a window, just end
   your turn (the author's agent closes it). No publishing, no notifying.
@@ -317,36 +314,33 @@ line, say whether the code answers it.
 
 ## Wrap-up
 
-1. `gr status --gate`. If it fails, `gr say` the pending steps and ask: review them,
-   skip each with a reason, or send what is reviewed so far — then add `--partial` to
-   `gr prepare` in step 3: the result lists the rest as not reviewed yet, and the next
-   round brings those steps back.
-2. `gr say` the verdict in one line — approve / changes requested / blocked — then
-   blockers and majors, one line each, the nit count, and the coverage line.
-3. Prepare the result. Write the decisions taken during the review and why (what was
-   accepted as is, what was left for later, why steps were skipped) as a few bullet
-   lines, then:
-   `gr prepare --verdict approve|changes|blocked --decisions-file - <<'EOF' … EOF`
-   (add `--approve` only if they asked to approve; it goes only with `--verdict approve`). The viewer now shows `finish · P`:
-   `P` previews the result, `P` again writes it to the review's export dir
-   (`gr export --dir` prints it), sends you `[finished] sN: <dir>` and closes the viewer,
-   returning the human to your pane.
-   `gr say` «done: P in the viewer» and `gr wait`. While the human reads the result they
-   can message you from it — `re #N …` about one comment (`gr comment edit N`), or about
-   the summary or decisions (run `gr prepare` again with the new text); the viewer
-   refreshes the preview by itself. If they say «let's finish» in chat
-   instead, run `gr export` yourself: it prints the same dir.
-   From `[finished]` on the viewer is closed: talk in the terminal chat as usual — no
-   `gr say` / `gr wait` — and ending your turn with a question is fine.
-4. A local branch without an MR (`gr init` without a URL, not self mode): there is
+The viewer finishes on its own: after the last step (or `P`) it shows the verdict it
+derives from the comments (blocker → blocked, major or an open thread of theirs →
+changes, else approve), the decisions it derives from the state (skips with reasons,
+risks checked, steps not reviewed), asks whether to approve the MR, runs `gr prepare`,
+previews the result and writes it with `P`. You only hear `[finished] sN: <dir>`, after
+which the viewer is closed: talk in the terminal chat as usual — no `gr say` /
+`gr wait` — and ending your turn with a question is fine.
+
+While the preview is open the human can still message you — `re #N …` about one comment
+(`gr comment edit N`), or about the summary (run `gr prepare` again with the verdict and
+approve shown in the preview and the new decisions text); the viewer refreshes the
+preview by itself. If they ask in the terminal to finish without the viewer, do it by
+hand: `gr status --gate` (add `--partial` to `gr prepare` for pending steps the human
+wants to leave), `gr prepare --verdict approve|changes|blocked --decisions-file -` with
+`--approve` only when they asked for it, then `gr export`, which prints the dir.
+
+After `[finished]`:
+
+1. A local branch without an MR (`gr init` without a URL, not self mode): there is
    nothing to publish. The dir holds `fixes.json` (`verdict`, `decisions`, `fixes` with
    `id`, `severity`, `file`, `lines`, `body`, `suggestion`) and `review.md`. Tell them the
    counts and ask «apply now / leave». Apply now: every fix was agreed during
    the review, `suggestion` is the exact replacement, lines refer to the reviewed commit
    (find the spot by content if the file changed); report one line per fix and run the
    tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
-   the review is open), so any agent in this repo can pick it up later. Then step 7.
-5. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
+   the review is open), so any agent in this repo can pick it up later. Then step 4.
+2. Publish (`[finished] … <dir>`). The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or
    not — and ask «publish?». Only on a clear yes, run the script for the provider from
@@ -366,9 +360,9 @@ line, say whether the code answers it.
    by hand. GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set
    `"event": "COMMENT"` in `review-request.json` and run the script again without
    `gr export`. After success give the link.
-6. Tell the author. If a `guided-review-notify` skill is available, follow it with the
+3. Tell the author. If a `guided-review-notify` skill is available, follow it with the
    MR link, the verdict and the counts of what was actually published — that is where a
    team keeps its own way of pinging people. Without one, print a one-line message the
    human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
-7. Ask «close the review?». On yes, `gr done` (removes the worktree, keeps the state for a
+4. Ask «close the review?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).
