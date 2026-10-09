@@ -798,9 +798,10 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 	return append(out, sideEntry{})
 }
 
+// planEntries renders the plan; at[i] is the line of items[i].
 func (m *model) planEntries(
-	items []planItem, row rowFunc, plain, selected func(string) string,
-) []string {
+	items []planItem, w int, row rowFunc, plain, selected func(string) string,
+) (lines []string, at []int) {
 	idW := 0
 	for _, st := range m.review.Steps {
 		idW = max(idW, len(st.ID))
@@ -813,6 +814,7 @@ func (m *model) planEntries(
 	for i, it := range items {
 		cursor := m.focusPlan && i == m.planCursor
 		st := it.st
+		at = append(at, len(out))
 		switch {
 		case it.head:
 			glyph := "▸"
@@ -829,6 +831,12 @@ func (m *model) planEntries(
 				line = selected(row(left, stat))
 			}
 			out = append(out, line)
+			if it.open && it.intro != "" {
+				for _, l := range markdownLines(it.intro, max(w-6, 20)) {
+					out = append(out, plain("   "+noteTextTone.fg().Italic(true).Render(l)))
+				}
+				out = append(out, "")
+			}
 		case it.extra:
 			glyph, style := "◇", dimStyle
 			if m.step != nil && st.ID == m.step.ID {
@@ -875,7 +883,7 @@ func (m *model) planEntries(
 			out = append(out, line)
 		}
 	}
-	return out
+	return out, at
 }
 
 func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([]sideEntry, int) {

@@ -176,7 +176,7 @@ func DefaultActions() []Action {
 			run: do((*model).openChangelog)},
 		{Name: "theme", Group: vw, Desc: "pick a colour theme (saved to your config)", Keys: k(),
 			run: do((*model).openThemes)},
-		{Name: "chapter", Group: vw, Desc: "the chapter's intro", Keys: k("I"),
+		{Name: "chapter", Group: vw, Desc: "the plan, opened on this chapter and its intro", Keys: k("I"),
 			run: do((*model).openChapter)},
 		{Name: "plan", Group: vw, Desc: "the plan: chapters and steps", Keys: k("p"),
 			run: do((*model).focusPlanPanel)},

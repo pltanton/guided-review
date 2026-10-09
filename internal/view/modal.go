@@ -1,7 +1,6 @@
 package view
 
 import (
-	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -62,8 +61,6 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return modalContent{"keys", hint, lines[m.helpTop:]}, true
 	}
 	switch {
-	case m.chapterOpen != "":
-		return m.chapterModal(w), true
 	case m.gateOpen:
 		return m.gateModal(w), true
 	case m.finishCard:
@@ -93,7 +90,7 @@ const (
 
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		m.chapterOpen == "" && !m.gateOpen && !m.finishCard && m.pub == nil &&
+		!m.gateOpen && !m.finishCard && m.pub == nil &&
 		m.threadCard == "" && !m.newsOpen &&
 		len(m.staleSteps) == 0 &&
 		!m.focusPlan
@@ -184,65 +181,13 @@ func (m *model) cursorY() int {
 	return y
 }
 
-func (m *model) chapterIntro(st *state.Step) string {
-	if st.Chapter == "" || m.review == nil {
-		return ""
-	}
-	for _, s := range m.review.Steps {
-		if s.Chapter == st.Chapter && s.Intro != "" {
-			return s.Intro
-		}
-	}
-	return ""
-}
-
-func (m *model) introOnce() {
-	st := m.step
-	if st == nil || st.Chapter == "" || m.introShown[st.Chapter] || m.chapterIntro(st) == "" {
-		return
-	}
-	if m.introShown == nil {
-		m.introShown = map[string]bool{}
-	}
-	m.introShown[st.Chapter], m.chapterOpen = true, st.Chapter
-}
-
-func (m *model) openChapter() {
-	if m.step == nil || m.chapterIntro(m.step) == "" {
-		m.status = "this step has no chapter intro"
-		return
-	}
-	m.chapterOpen = m.step.Chapter
-}
-
-func (m *model) chapterModal(w int) modalContent {
-	var intro string
-	var steps []string
-	for _, st := range m.review.Steps {
-		if st.Chapter != m.chapterOpen {
-			continue
-		}
-		intro = cmp.Or(intro, st.Intro)
-		glyph, style := st.Status.Glyph(), dimStyle
-		switch {
-		case st.ID == m.review.Current:
-			glyph, style = "▶", boldStyle
-		case st.Status == state.StatusPending:
-			glyph, style = "○", textTone.fg()
-		}
-		steps = append(steps, style.Render(glyph+" "+st.ID+" "+st.Title))
-	}
-	body := append(markdownLines(intro, min(w, detailWidth)), "")
-	return modalContent{m.chapterOpen, "enter close · I reopens", append(body, steps...)}
-}
-
 func (m *model) planModal(w, h int) modalContent {
 	items := m.planItems()
 	m.planCursor = max(0, min(m.planCursor, len(items)-1))
 	row, plain, selected := sideRows(w + 2)
-	entries := m.planEntries(items, row, plain, selected)
+	entries, at := m.planEntries(items, w, row, plain, selected)
 	key := fmt.Sprint(h, " ", m.planCursor)
-	top := scrollWindow(&m.planTop, &m.planFollow, key, true, m.planCursor, h, len(entries))
+	top := scrollWindow(&m.planTop, &m.planFollow, key, true, at[m.planCursor], h, len(entries))
 	body := entries[top:]
 	reviewed := 0
 	for _, st := range m.review.Steps {
@@ -276,9 +221,14 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 	switch {
 	case m.focusPlan && wheel[msg.Button] != 0:
 		m.planCursor = max(0, min(m.planCursor+wheel[msg.Button], len(m.planItems())-1))
-	case m.focusPlan && press && r >= 0 && m.planTop+r < len(m.planItems()):
-		m.planCursor = m.planTop + r
-		return m.handlePlanKey(tea.KeyMsg{Type: tea.KeyEnter})
+	case m.focusPlan && press && r >= 0:
+		items := m.planItems()
+		row, plain, selected := sideRows(m.width)
+		_, at := m.planEntries(items, m.width-4, row, plain, selected)
+		if i := slices.Index(at, m.planTop+r); i >= 0 {
+			m.planCursor = i
+			return m.handlePlanKey(tea.KeyMsg{Type: tea.KeyEnter})
+		}
 	case m.focusFiles && wheel[msg.Button] != 0:
 		m.fileCursor = max(0, min(m.fileCursor+wheel[msg.Button], len(m.stepFiles())-1))
 	case m.focusFiles && press && r >= 0:
@@ -326,7 +276,7 @@ func (m *model) gateModal(w int) modalContent {
 }
 
 func (m *model) blocked() bool {
-	return m.help || m.chapterOpen != "" || m.gateOpen || m.finishCard || m.pub != nil ||
+	return m.help || m.gateOpen || m.finishCard || m.pub != nil ||
 		m.threadCard != "" || m.themeWas != "" || m.newsOpen ||
 		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"

@@ -115,7 +115,6 @@ type model struct {
 	km           *keymap
 	help         bool
 	helpAll      bool
-	chapterOpen  string
 	modalY       int
 	introShown   map[string]bool
 	helpTop      int
@@ -937,9 +936,6 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case m.help:
 		return m.handleHelpKey(msg)
-	case m.chapterOpen != "":
-		m.chapterOpen = ""
-		return nil
 	case m.gateOpen:
 		return m.handleGateKey(msg)
 	case m.finishCard:

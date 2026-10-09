@@ -1,7 +1,9 @@
 package view
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -13,6 +15,7 @@ const sideContext = 3
 type planItem struct {
 	st      state.Step
 	chapter string
+	intro   string
 	head    bool
 	open    bool
 	current bool
@@ -43,6 +46,7 @@ func (m *model) planItems() []planItem {
 		head := planItem{chapter: ch, head: true, total: j - i}
 		here := false
 		for _, st := range steps[i:j] {
+			head.intro = cmp.Or(head.intro, st.Intro)
 			if st.Status != state.StatusPending {
 				head.done++
 			}
@@ -102,6 +106,38 @@ func (m *model) focusPlanPanel() {
 	}
 	m.focusPlan, m.focusFiles = true, false
 	m.planCursor = m.planAnchor(m.planItems())
+}
+
+// openChapter opens the plan on the current step's chapter, unfolded so its intro shows.
+func (m *model) openChapter() {
+	if m.step == nil || m.review == nil {
+		return
+	}
+	m.focusPlanPanel()
+	ch := m.step.Chapter
+	if ch == "" {
+		return
+	}
+	m.setChapterOpen(ch, true)
+	i := slices.IndexFunc(m.planItems(), func(it planItem) bool { return it.head && it.chapter == ch })
+	m.planCursor = max(i, 0)
+}
+
+func (m *model) introOnce() {
+	st := m.step
+	if st == nil || st.Chapter == "" || m.introShown[st.Chapter] {
+		return
+	}
+	if !slices.ContainsFunc(m.review.Steps, func(s state.Step) bool {
+		return s.Chapter == st.Chapter && s.Intro != ""
+	}) {
+		return
+	}
+	if m.introShown == nil {
+		m.introShown = map[string]bool{}
+	}
+	m.introShown[st.Chapter] = true
+	m.openChapter()
 }
 
 func (m *model) handlePlanKey(msg tea.KeyMsg) tea.Cmd {

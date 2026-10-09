@@ -35,9 +35,10 @@ details. Moving on with a risk still open, or with changed lines you have not se
 first and lets you check the risks off right there. The summary counts only the risks
 you checked. The footer shows `NORMAL`, or `VISUAL` with the number of selected lines.
 
-A chapter's intro opens when the chapter starts (`I` brings it back), `p` opens the
-plan, `?` shows the main keys and `?` again all of them, and `:` finds any action by
-name. Every other key is a shortcut for something these already reach.
+`p` opens the plan: chapters with their steps, and under an unfolded chapter its intro.
+It opens by itself when a chapter starts, on that chapter; `I` brings it back there.
+`?` shows the main keys and `?` again all of them, and `:` finds any action by name.
+Every other key is a shortcut for something these already reach.
 
 </details>
 

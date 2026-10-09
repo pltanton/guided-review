@@ -21,11 +21,6 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 	case m.gateOpen || m.finishCard || m.pub != nil || m.threadCard != "" ||
 		m.themeWas != "" || len(m.staleSteps) > 0:
 		return nil
-	case m.chapterOpen != "":
-		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
-			m.chapterOpen = ""
-		}
-		return nil
 	case m.focusPlan || m.focusFiles && m.chatWidth() == 0:
 		return m.modalMouse(msg)
 	case m.help && msg.Button == tea.MouseButtonWheelUp:

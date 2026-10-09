@@ -2130,43 +2130,47 @@ func TestTopNoteDetails(t *testing.T) {
 	}
 }
 
-func TestChapterModal(t *testing.T) {
+func TestChapterIntroInThePlan(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.review.Steps = append(m.review.Steps,
 		state.Step{ID: "s3", Title: "third", Chapter: "Bare", Status: state.StatusPending})
 	m.review.Steps[0].Chapter, m.review.Steps[1].Chapter = "Transfers", "Transfers"
 	m.review.Steps[0].Intro = "Before: a retry debited twice."
 	m.showStep("s1")
-	if m.chapterOpen != "Transfers" {
-		t.Fatal("the first step of a chapter opens its intro")
+	if !m.focusPlan || m.planCursor != 0 {
+		t.Fatalf("the first step of a chapter opens the plan on the chapter: %v %d",
+			m.focusPlan, m.planCursor)
 	}
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"┌ Transfers", "Before: a retry debited twice.", "▶ s1 first",
-		"○ s2 second"} {
+	for _, want := range []string{"┌ plan", "TRANSFERS", "Before: a retry debited twice.",
+		"▶ s1 first", "○ s2 second", "BARE"} {
 		if !strings.Contains(v, want) {
-			t.Fatalf("chapter modal lacks %q:\n%s", want, v)
+			t.Fatalf("plan lacks %q:\n%s", want, v)
 		}
 	}
 	if strings.Contains(v, "s3 third") {
-		t.Fatalf("the modal lists only its chapter's steps:\n%s", v)
+		t.Fatalf("other chapters stay folded:\n%s", v)
 	}
-	m.Update(key("enter"))
-	if m.chapterOpen != "" || m.composing {
-		t.Fatal("enter only closes the intro")
+	m.Update(key("esc"))
+	if m.focusPlan || m.composing {
+		t.Fatal("esc only closes the plan")
 	}
 	m.showStep("s2")
-	if m.chapterOpen != "" {
+	if m.focusPlan {
 		t.Fatal("the intro shows once per chapter")
 	}
 	m.Update(key("I"))
-	if m.chapterOpen != "Transfers" {
-		t.Fatal("I reopens the intro")
+	if !m.focusPlan || m.planCursor != 0 {
+		t.Fatal("I reopens the plan on the chapter")
 	}
-	m.Update(key("esc"))
-	m.showStep("s3")
-	m.Update(key("I"))
-	if m.chapterOpen != "" {
-		t.Fatal("a chapter without intro has no modal")
+	m.Update(key("l"))
+	m.Update(key("j"))
+	m.Update(key("j"))
+	m.Update(key("j"))
+	m.Update(key("l"))
+	v = ansi.Strip(m.View())
+	if !strings.Contains(v, "s3 third") || !strings.Contains(v, "Before: a retry") {
+		t.Fatalf("l unfolds another chapter while the intro stays:\n%s", v)
 	}
 }
 
