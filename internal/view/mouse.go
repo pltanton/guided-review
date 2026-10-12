@@ -133,7 +133,7 @@ func (m *model) scroll(d int) {
 }
 
 func (m *model) rowAt(y int) (i, sub int, ok bool) {
-	hdr := len(m.header())
+	hdr := m.headerHeight()
 	if y < hdr || y >= hdr+m.bodyHeight() {
 		return 0, 0, false
 	}

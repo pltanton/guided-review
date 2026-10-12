@@ -160,7 +160,7 @@ type model struct {
 	autoVerdict   bool
 	gateSel       int
 	lspStep       string
-	seen          map[string]bool
+	seen          map[seenKey]bool
 	flow          []flowEntry
 	rawSeverity   state.Severity
 	anchorFile    string
@@ -592,8 +592,8 @@ func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 
 func (m *model) stepFiles() []string {
 	var out []string
-	for _, it := range m.lines {
-		if it.Kind == RowFile && (len(out) == 0 || out[len(out)-1] != it.File) {
+	for i := range m.lines {
+		if it := &m.lines[i]; it.Kind == RowFile && (len(out) == 0 || out[len(out)-1] != it.File) {
 			out = append(out, it.File)
 		}
 	}
@@ -1045,60 +1045,69 @@ func focusAgent(pane string) error {
 	return exec.Command("tmux", "select-pane", "-t", pane).Run()
 }
 
-func seenKeys(l line) []string {
-	var keys []string
+type seenKey struct {
+	file    string
+	line    int
+	removed bool
+}
+
+func seenKeys(l *line) []seenKey {
+	var keys []seenKey
 	if l.Pair {
 		if l.Left.Kind == RowRemoved {
-			keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.Left.Line))
+			keys = append(keys, seenKey{l.File, l.Left.Line, true})
 		}
 		if l.Right.Kind == RowAdded {
-			keys = append(keys, fmt.Sprintf("+%s:%d", l.File, l.Right.Line))
+			keys = append(keys, seenKey{l.File, l.Right.Line, false})
 		}
 		return keys
 	}
 	switch l.Kind {
 	case RowAdded:
-		keys = append(keys, fmt.Sprintf("+%s:%d", l.File, l.Line))
+		keys = append(keys, seenKey{l.File, l.Line, false})
 	case RowRemoved:
-		keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.OldLine))
+		keys = append(keys, seenKey{l.File, l.OldLine, true})
 	case RowFold:
 		for k := range l.FoldCount {
-			keys = append(keys, fmt.Sprintf("-%s:%d", l.File, l.OldLine+k))
+			keys = append(keys, seenKey{l.File, l.OldLine + k, true})
 		}
 	}
 	return keys
 }
 
-func (m *model) markSeen(l line) {
+func (m *model) markSeen(l *line) {
 	if m.seen == nil {
-		m.seen = map[string]bool{}
+		m.seen = map[seenKey]bool{}
 	}
 	for _, k := range seenKeys(l) {
 		m.seen[k] = true
 	}
 }
 
-func (m *model) changedKeys() []string {
-	var keys []string
-	for _, r := range m.rows {
+// changeCounts counts the changed lines of the step and how many were not on screen yet.
+func (m *model) changeCounts() (total, unseen int) {
+	for i := range m.rows {
+		r := &m.rows[i]
+		var k seenKey
 		switch {
 		case r.Kind == RowAdded:
-			keys = append(keys, fmt.Sprintf("+%s:%d", r.File, r.Line))
+			k = seenKey{r.File, r.Line, false}
 		case r.Kind == RowRemoved && !r.Reformat && !r.RenameHide:
-			keys = append(keys, fmt.Sprintf("-%s:%d", r.File, r.OldLine))
+			k = seenKey{r.File, r.OldLine, true}
+		default:
+			continue
+		}
+		total++
+		if !m.seen[k] {
+			unseen++
 		}
 	}
-	return keys
+	return total, unseen
 }
 
 func (m *model) unseen() int {
-	n := 0
-	for _, k := range m.changedKeys() {
-		if !m.seen[k] {
-			n++
-		}
-	}
-	return n
+	_, unseen := m.changeCounts()
+	return unseen
 }
 
 func resolvedLabel(label string, resolved bool) string {

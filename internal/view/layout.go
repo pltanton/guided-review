@@ -263,7 +263,17 @@ func (m *model) inputInSideChat() bool {
 }
 
 func (m *model) bodyHeight() int {
-	return max(m.height-len(m.bottomLines())-len(m.header())-1, 1)
+	return max(m.height-len(m.bottomLines())-m.headerHeight()-1, 1)
+}
+
+func (m *model) headerHeight() int {
+	switch {
+	case m.step == nil:
+		return 0
+	case isExtra(m.step.ID) || m.viewStep != "":
+		return 3
+	}
+	return 2
 }
 
 func (m *model) header() []string {
@@ -303,7 +313,7 @@ func (m *model) stepTitle(st *state.Step) string {
 	if m.review.Filling && st.Message == "" && !isExtra(st.ID) {
 		left += hotStyle.Render("  " + m.spin() + " agent is writing notes")
 	}
-	if total, unseen := len(m.changedKeys()), m.unseen(); total > 0 && unseen == 0 {
+	if total, unseen := m.changeCounts(); total > 0 && unseen == 0 {
 		left += addStyle.Render("  ✓ seen")
 	} else if total > 0 {
 		left += dimStyle.Render(fmt.Sprintf("  seen %d/%d", total-unseen, total))
@@ -459,8 +469,11 @@ func (m *model) bottomLines() []string {
 		limit = max(m.height-4, 1)
 	}
 	var lines []string
-	chat := m.chatRows(m.width, m.step == nil)
-	if len(chat) > 0 && m.chatWidth() == 0 {
+	var chat []chatRow
+	if m.chatWidth() == 0 {
+		chat = m.chatRows(m.width, m.step == nil)
+	}
+	if len(chat) > 0 {
 		label, style := "── chat · "+m.chatScrollHint()+" ", dimStyle
 		if m.chatFocus {
 			label, style = "── chat · "+m.chatFocusHint()+" ", chatStyle
@@ -706,7 +719,7 @@ func (m *model) View() string {
 }
 
 func (m *model) paintRow(i int, line string) string {
-	switch l := m.lines[i]; {
+	switch l := &m.lines[i]; {
 	case i == m.cursor:
 		return paint(line, cursorTone)
 	case m.selected(i):
@@ -1063,7 +1076,7 @@ func renderNote(r Row) string {
 	return "       " + t.fg().Render("▌") + " " + lead + text.fg().Italic(true).Render(r.Text)
 }
 
-func (m *model) renderSplit(l line, w int) (rows []string) {
+func (m *model) renderSplit(l *line, w int) (rows []string) {
 	lw, rw := m.splitWidths(w)
 	cell := func(c Cell, hot bool, w int) []string {
 		if c.Line == 0 && c.Text == "" {

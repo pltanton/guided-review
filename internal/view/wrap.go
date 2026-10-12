@@ -101,12 +101,23 @@ func wrapSpans(plain string, avail int) (spans [][2]int, indent int) {
 	}
 }
 
-func (m *model) cellHeight(c Cell, w int) int {
+// cellPlain is the text codeParts lays out, without styling.
+func cellPlain(c *Cell) string {
+	plain := c.Plain
+	if plain == "" {
+		plain = ansi.Strip(c.Text)
+	}
+	if c.RenamedFrom != "" {
+		plain += "  ← was " + c.RenamedFrom
+	}
+	return plain
+}
+
+func (m *model) cellHeight(c *Cell, w int) int {
 	if m.nowrap || c.Line == 0 && c.Text == "" {
 		return 1
 	}
-	_, _, text := codeParts(c, false)
-	spans, _ := wrapSpans(ansi.Strip(text), codeAvail(w))
+	spans, _ := wrapSpans(cellPlain(c), codeAvail(w))
 	return len(spans)
 }
 
@@ -129,13 +140,14 @@ func (m *model) rowsHeight(i int) int {
 	if m.nowrap || i < 0 || i >= len(m.lines) {
 		return 1
 	}
-	l, w := m.lines[i], m.mainWidth()
+	l, w := &m.lines[i], m.mainWidth()
 	switch {
 	case l.Pair && m.useSplit():
 		lw, rw := m.splitWidths(w)
-		return max(m.cellHeight(l.Left, lw), m.cellHeight(l.Right, rw))
+		return max(m.cellHeight(&l.Left, lw), m.cellHeight(&l.Right, rw))
 	case isCode(l.Kind):
-		return m.cellHeight(cellOf(l.Row, l.Line), w)
+		c := cellOf(l.Row, l.Line)
+		return m.cellHeight(&c, w)
 	}
 	return 1
 }
@@ -165,7 +177,7 @@ func (m *model) lastShown() int {
 }
 
 func (m *model) renderRows(i, w int) []string {
-	l := m.lines[i]
+	l := &m.lines[i]
 	if l.Pair && m.useSplit() {
 		return m.renderSplit(l, w)
 	}
@@ -196,21 +208,22 @@ func (m *model) underlineWord(rows []string, from, to, w int) {
 func (m *model) maxHScroll() int {
 	over := 0
 	w := m.mainWidth()
-	measure := func(c Cell, cw int) {
+	measure := func(c *Cell, cw int) {
 		if c.Line == 0 && c.Text == "" {
 			return
 		}
-		_, _, text := codeParts(c, false)
-		over = max(over, ansi.StringWidth(text)-codeAvail(cw))
+		over = max(over, ansi.StringWidth(cellPlain(c))-codeAvail(cw))
 	}
 	lw, rw := m.splitWidths(w)
-	for _, l := range m.lines {
+	for i := range m.lines {
+		l := &m.lines[i]
 		switch {
 		case l.Pair && m.useSplit():
-			measure(l.Left, lw)
-			measure(l.Right, rw)
+			measure(&l.Left, lw)
+			measure(&l.Right, rw)
 		case isCode(l.Kind):
-			measure(cellOf(l.Row, l.Line), w)
+			c := cellOf(l.Row, l.Line)
+			measure(&c, w)
 		}
 	}
 	return over
@@ -248,9 +261,10 @@ func (m *model) followCol() {
 }
 
 func (m *model) markShown() {
-	for i := m.offset; i <= m.lastShown() && i < len(m.lines); i++ {
+	last := m.lastShown()
+	for i := m.offset; i <= last && i < len(m.lines); i++ {
 		if !m.lineCut(i) {
-			m.markSeen(m.lines[i])
+			m.markSeen(&m.lines[i])
 		}
 	}
 }
@@ -259,17 +273,17 @@ func (m *model) lineCut(i int) bool {
 	if !m.nowrap {
 		return false
 	}
-	l, w := m.lines[i], m.mainWidth()
-	cut := func(c Cell, cw int) bool {
-		_, _, text := codeParts(c, false)
-		return ansi.StringWidth(text)-m.hscroll > codeAvail(cw)
+	l, w := &m.lines[i], m.mainWidth()
+	cut := func(c *Cell, cw int) bool {
+		return ansi.StringWidth(cellPlain(c))-m.hscroll > codeAvail(cw)
 	}
 	switch {
 	case l.Pair && m.useSplit():
 		lw, rw := m.splitWidths(w)
-		return cut(l.Left, lw) || cut(l.Right, rw)
+		return cut(&l.Left, lw) || cut(&l.Right, rw)
 	case isCode(l.Kind):
-		return cut(cellOf(l.Row, l.Line), w)
+		c := cellOf(l.Row, l.Line)
+		return cut(&c, w)
 	}
 	return false
 }

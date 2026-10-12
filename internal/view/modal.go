@@ -174,7 +174,7 @@ func (m *model) drawHover(out []string) {
 }
 
 func (m *model) cursorY() int {
-	y := len(m.header())
+	y := m.headerHeight()
 	for i := m.offset; i < m.cursor && i < len(m.lines); i++ {
 		y += m.lineHeight(i)
 	}

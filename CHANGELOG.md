@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Holding `j`/`k` on a big step no longer lags: a frame took tens of milliseconds on
+  bookkeeping that is now done once, without strings or styling.
 - The chapter intro lives in the plan: `p` shows every chapter with its steps, and an
   unfolded chapter shows its intro under the heading. A chapter's first step opens the
   plan there; `I` brings it back; `h`/`l` fold and unfold while you browse.
