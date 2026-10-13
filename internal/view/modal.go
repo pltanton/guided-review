@@ -110,7 +110,7 @@ func (m *model) drawModal(out []string) {
 	}
 	w, h := max(m.width, 8), room
 	if !m.fullModal() {
-		w = min(max(m.width-4, 8), cardWidth)
+		w = m.planWidth() + 4
 		if m.help && m.helpAll {
 			w = min(max(m.width-4, 8), wideCardWidth)
 		}
@@ -134,6 +134,11 @@ func (m *model) drawModal(out []string) {
 }
 
 const paletteRows = 8
+
+// planWidth is the inner width of a card-sized modal, the plan among them.
+func (m *model) planWidth() int {
+	return min(max(m.width-4, 8), cardWidth) - 4
+}
 
 func (m *model) drawPalette(out []string) {
 	items := m.paletteItems()

@@ -6,7 +6,10 @@
   bookkeeping that is now done once, without strings or styling.
 - The chapter intro lives in the plan: `p` shows every chapter with its steps, and an
   unfolded chapter shows its intro under the heading. A chapter's first step opens the
-  plan there; `I` brings it back; `h`/`l` fold and unfold while you browse.
+  plan with the cursor on that step and the intro in view; `enter` goes on, `I` brings
+  it back; chapters you passed stay folded; `h`/`l` fold and unfold while you browse.
+- Intake no longer asks «got it right?» and waits: the agent says what the MR is about
+  in two lines and goes straight to the plan.
 - A "keep open" after the author's new reply left the comment of an earlier "resolve"
   resolved for good; a published "keep open" no longer counts as closed for approve.
 - `gr prepare` after a partial publish forgot what already went out, so the next export

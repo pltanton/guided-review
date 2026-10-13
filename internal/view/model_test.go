@@ -2137,8 +2137,8 @@ func TestChapterIntroInThePlan(t *testing.T) {
 	m.review.Steps[0].Chapter, m.review.Steps[1].Chapter = "Transfers", "Transfers"
 	m.review.Steps[0].Intro = "Before: a retry debited twice."
 	m.showStep("s1")
-	if !m.focusPlan || m.planCursor != 0 {
-		t.Fatalf("the first step of a chapter opens the plan on the chapter: %v %d",
+	if !m.focusPlan || m.planCursor != 1 {
+		t.Fatalf("the first step of a chapter opens the plan on that step: %v %d",
 			m.focusPlan, m.planCursor)
 	}
 	v := ansi.Strip(m.View())
@@ -2151,20 +2151,18 @@ func TestChapterIntroInThePlan(t *testing.T) {
 	if strings.Contains(v, "s3 third") {
 		t.Fatalf("other chapters stay folded:\n%s", v)
 	}
-	m.Update(key("esc"))
-	if m.focusPlan || m.composing {
-		t.Fatal("esc only closes the plan")
+	m.Update(key("enter"))
+	if m.focusPlan || m.composing || m.viewStep != "" {
+		t.Fatal("enter on the current step closes the plan")
 	}
 	m.showStep("s2")
 	if m.focusPlan {
 		t.Fatal("the intro shows once per chapter")
 	}
 	m.Update(key("I"))
-	if !m.focusPlan || m.planCursor != 0 {
-		t.Fatal("I reopens the plan on the chapter")
+	if !m.focusPlan || m.planCursor != 2 {
+		t.Fatalf("I reopens the plan on the current step: %v %d", m.focusPlan, m.planCursor)
 	}
-	m.Update(key("l"))
-	m.Update(key("j"))
 	m.Update(key("j"))
 	m.Update(key("j"))
 	m.Update(key("l"))

@@ -108,19 +108,23 @@ func (m *model) focusPlanPanel() {
 	m.planCursor = m.planAnchor(m.planItems())
 }
 
-// openChapter opens the plan on the current step's chapter, unfolded so its intro shows.
+// openChapter opens the plan on the current step with its chapter unfolded and scrolled
+// so the chapter's intro is in view; enter on the step closes it again.
 func (m *model) openChapter() {
 	if m.step == nil || m.review == nil {
 		return
 	}
+	delete(m.planOpen, m.step.Chapter)
 	m.focusPlanPanel()
+	items := m.planItems()
 	ch := m.step.Chapter
-	if ch == "" {
+	head := slices.IndexFunc(items, func(it planItem) bool { return it.head && it.chapter == ch })
+	if head < 0 {
 		return
 	}
-	m.setChapterOpen(ch, true)
-	i := slices.IndexFunc(m.planItems(), func(it planItem) bool { return it.head && it.chapter == ch })
-	m.planCursor = max(i, 0)
+	row, plain, selected := sideRows(m.planWidth() + 2)
+	_, at := m.planEntries(items, m.planWidth(), row, plain, selected)
+	m.planTop = at[head]
 }
 
 func (m *model) introOnce() {
