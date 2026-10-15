@@ -18,7 +18,8 @@ func TestStoreRoundTrip(t *testing.T) {
 		Files: []state.File{{Path: "a.go", Status: "modified", Tier: state.TierCore, Added: 1}},
 		Steps: []state.Step{{ID: "s1", Title: "t", Kind: "logic", Status: state.StatusPending,
 			Hunks: []state.StepHunk{{File: "a.go", Lines: "1-3"}}}},
-		Current: "s1",
+		Current:  "s1",
+		Comments: []state.Comment{{ID: 1, Suggestion: "\tif x {\n\t\treturn\n\t}"}},
 	}
 	if err := s.Save(r); err != nil {
 		t.Fatal(err)

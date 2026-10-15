@@ -568,7 +568,7 @@ func exportFixes(e env, r *state.Review, dir string, dryRun bool) error {
 		md.WriteString("\n")
 		x.Fixes = append(x.Fixes, fix{
 			ID: c.ID, Severity: string(c.Severity), File: c.File, Lines: c.Lines, Body: c.Body,
-			Suggestion: c.Suggestion,
+			Suggestion: string(c.Suggestion),
 		})
 	}
 	fmt.Fprintf(&md, "--- summary\n%s\n", summaryMarkdown(r, p))

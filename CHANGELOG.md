@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A suggestion whose first line starts with a tab (most Go code) broke the review state:
+  every later `gr` command failed with «found a tab character where an indentation space
+  is expected».
 - Verdict `approve` without approving the MR no longer reads as an approval: the summary
   says «no blockers, not approved» and the author's notification says the same.
 - Holding `j`/`k` on a big step no longer lags: a frame took tens of milliseconds on

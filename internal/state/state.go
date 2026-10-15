@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Tier string
@@ -218,6 +220,17 @@ type Annotation struct {
 	Detail string `yaml:"detail,omitempty"`
 }
 
+// Code is source text; yaml.v3 v3.0.1 writes a leading tab as a literal block it cannot read back.
+type Code string
+
+func (c Code) MarshalYAML() (any, error) {
+	n := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: string(c)}
+	if strings.HasPrefix(n.Value, "\t") {
+		n.Style = yaml.DoubleQuotedStyle
+	}
+	return n, nil
+}
+
 type Comment struct {
 	ID            int      `yaml:"id"`
 	Step          string   `yaml:"step"`
@@ -226,7 +239,7 @@ type Comment struct {
 	SHA           string   `yaml:"sha"`
 	Severity      Severity `yaml:"severity"`
 	Body          string   `yaml:"body"`
-	Suggestion    string   `yaml:"suggestion,omitempty"`
+	Suggestion    Code     `yaml:"suggestion,omitempty"`
 	Round         int      `yaml:"round,omitempty"`
 	Resolved      bool     `yaml:"resolved,omitempty"`
 	Published     bool     `yaml:"published,omitempty"`

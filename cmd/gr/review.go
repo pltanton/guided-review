@@ -305,7 +305,7 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 				status,
 			)
 			if c.Suggestion != "" {
-				e.printf("   suggestion:\n%s\n", indent(c.Suggestion, "     "))
+				e.printf("   suggestion:\n%s\n", indent(string(c.Suggestion), "     "))
 			}
 		}
 		return nil
@@ -364,7 +364,7 @@ func cmdComment(ctx context.Context, e env, args []string) error {
 				Lines:      *lines,
 				Severity:   state.Severity(*severity),
 				Body:       strings.Join(fs.Args(), " "),
-				Suggestion: *suggestion,
+				Suggestion: state.Code(*suggestion),
 			})
 			if err != nil {
 				return err
