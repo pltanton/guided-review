@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verdict `approve` without approving the MR no longer reads as an approval: the summary
+  says «no blockers, not approved» and the author's notification says the same.
 - Holding `j`/`k` on a big step no longer lags: a frame took tens of milliseconds on
   bookkeeping that is now done once, without strings or styling.
 - The chapter intro lives in the plan: `p` shows every chapter with its steps, and an

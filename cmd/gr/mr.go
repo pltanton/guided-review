@@ -286,7 +286,7 @@ func exportGitLab(
 	}
 	x.Threads = threadActions(r, &md)
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
-		summary := summaryMarkdown(r, x.Verdict, r.Publish.Decisions)
+		summary := summaryMarkdown(r, r.Publish)
 		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
 		if err := add(gitlab.DraftNote{Note: summary}, sent{Kind: "summary"}); err != nil {
 			return nil, err
@@ -455,7 +455,7 @@ func exportGitHub(
 	}
 	x.Threads = threadActions(r, &md)
 	if x.Summary = r.SummaryRound != max(r.Round, 1); x.Summary {
-		summary := summaryMarkdown(r, p.Verdict, p.Decisions)
+		summary := summaryMarkdown(r, p)
 		parts = append(parts, summary)
 		fmt.Fprintf(&md, "--- summary\n%s\n", summary)
 		x.Review = append(x.Review, sent{Kind: "summary"})
@@ -571,7 +571,7 @@ func exportFixes(e env, r *state.Review, dir string, dryRun bool) error {
 			Suggestion: c.Suggestion,
 		})
 	}
-	fmt.Fprintf(&md, "--- summary\n%s\n", summaryMarkdown(r, p.Verdict, p.Decisions))
+	fmt.Fprintf(&md, "--- summary\n%s\n", summaryMarkdown(r, p))
 	if dryRun {
 		e.printf("%s", md.String())
 		return nil
@@ -659,15 +659,19 @@ func commentDraft(
 	return gitlab.DraftNote{Note: body, Position: pos}, where
 }
 
-func summaryMarkdown(r *state.Review, verdict, decisions string) string {
+func summaryMarkdown(r *state.Review, p *state.PublishPlan) string {
 	var b strings.Builder
 	w := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
-	w("**Guided review: %s**", verdicts[verdict])
+	title := verdicts[p.Verdict]
+	if p.Verdict == plan.VerdictApprove && r.MR != nil && !p.Approve {
+		title = "no blockers, not approved"
+	}
+	w("**Guided review: %s**", title)
 	if r.Round > 1 {
 		w(" (round %d)", r.Round)
 	}
 	w("\n\n")
-	if d := strings.TrimSpace(decisions); d != "" {
+	if d := strings.TrimSpace(p.Decisions); d != "" {
 		w("%s\n\n", d)
 	}
 	open := map[state.Severity]int{}

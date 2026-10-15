@@ -360,8 +360,10 @@ After `[finished]`:
    `"event": "COMMENT"` in `review-request.json` and run `gr publish` again without
    `gr export`. After success give the link.
 3. Tell the author. If a `guided-review-notify` skill is available, follow it with the
-   MR link, the verdict and the counts of what was actually published — that is where a
-   team keeps its own way of pinging people. Without one, print a one-line message the
-   human can forward (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`).
+   MR link, the verdict, whether the MR was approved (`approve` in `review.json`) and the
+   counts of what was actually published — that is where a team keeps its own way of
+   pinging people. Without one, print a one-line message the human can forward
+   (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`). Verdict `approve`
+   without approving reads `no blockers, not approved`, never `approve`.
 4. Ask «close the review?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).
