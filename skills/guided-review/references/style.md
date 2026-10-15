@@ -4,7 +4,7 @@ At most three lines; details live in annotations on the code:
 
     s3/12 · POST /transfers — handler
     Validates, reserves the amount, writes an event to the outbox. ⚠ spec: 409 on a duplicate, here 200.
-    ❓ ⚑57: retry with the same key after a timeout — second debit?
+    ❓ line 57: retry with the same key after a timeout — second debit?
 
 - Line 1: step id, position, title.
 - Line 2: what the code does, in terms of behaviour, not syntax; a spec mismatch only

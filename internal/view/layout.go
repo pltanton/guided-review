@@ -21,7 +21,7 @@ var (
 	addStyle, delStyle, hotStyle, dimStyle, boldStyle, fileStyle     lipgloss.Style
 	fileInfoStyle, cursorStyle, agentStyle, youStyle, buttonStyle    lipgloss.Style
 	keyStyle, foldStyle, gapStyle, fieldStyle, labelStyle, chatStyle lipgloss.Style
-	chapterStyle                                                     lipgloss.Style
+	chapterStyle, codeStyle                                          lipgloss.Style
 )
 
 func init() { restyle(defaultTones.noteBg) }
@@ -34,7 +34,7 @@ func restyle(noteBg map[string]tone) {
 	agentStyle, youStyle = agentTone.fg().Bold(true), youTone.fg().Bold(true)
 	buttonStyle = textTone.fg().Background(surfaceTone.color())
 	keyStyle = accentTone.fg().Background(surfaceTone.color()).Bold(true)
-	foldStyle, gapStyle = badTone.fg().Faint(true), blueTone.fg()
+	foldStyle, gapStyle, codeStyle = badTone.fg().Faint(true), blueTone.fg(), blueTone.fg()
 	fieldStyle = mutedTone.fg().Background(surfaceTone.color())
 	labelStyle, chapterStyle, chatStyle = mutedTone.fg().Bold(true), accentTone.fg(),
 		accentTone.fg().Bold(true)
@@ -380,14 +380,7 @@ func (m *model) conversation(all bool) []chatLine {
 		if !keep(e.Step, e.Time) {
 			continue
 		}
-		text := e.Text
-		if e.File != "" {
-			text = strings.TrimSpace(fmt.Sprintf("%s:%s %s", e.File, e.Lines, text))
-		}
-		if e.Kind != inbox.KindMessage {
-			text = "[" + e.Kind + "] " + text
-		}
-		out = append(out, chatLine{at: e.Time, step: e.Step, you: true, text: text})
+		out = append(out, chatLine{at: e.Time, step: e.Step, you: true, text: eventText(e)})
 	}
 	slices.SortStableFunc(out, func(a, b chatLine) int { return a.at.Compare(b.at) })
 	for _, e := range m.events {
@@ -441,7 +434,11 @@ func (m *model) chatRows(width int, all bool) []chatRow {
 			msg = -1
 		}
 		for h, hard := range strings.Split(c.text, "\n") {
-			for l := range strings.SplitSeq(ansi.Wrap(hard, textW, ""), "\n") {
+			shown := hard
+			if !c.live {
+				shown = chatMarkdown(hard)
+			}
+			for l := range strings.SplitSeq(ansi.Wrap(shown, textW, ""), "\n") {
 				lead := "       " + bar + " "
 				if first && named {
 					lead = style.Render(name) + " " + bar + " "

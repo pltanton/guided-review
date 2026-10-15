@@ -150,7 +150,7 @@ steps:
     message: |-
       s2/5 · POST /transfers — handler
       Validates, reserves the amount, writes an event to the outbox. ⚠ spec: 409 on a duplicate, here 200.
-      ❓ ⚑57: retry with the same key after a timeout — second debit?
+      ❓ line 57: retry with the same key after a timeout — second debit?
     hunks: [{ file: api/transfer.go, lines: 40-92 }]
     hotspots:
       - cat: consistency

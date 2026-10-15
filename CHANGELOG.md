@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The chat reads cleaner: `code` and **bold** are styled instead of shown as markup,
+  `⚑57` reads `line 57`, paths shrink to the file name, and your messages lead with a
+  short dim `file:line · risk «…»` instead of the full path and the whole risk text.
 - A suggestion whose first line starts with a tab (most Go code) broke the review state:
   every later `gr` command failed with «found a tab character where an indentation space
   is expected».

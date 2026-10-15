@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -101,5 +102,31 @@ func TestChatMouseDragCopies(t *testing.T) {
 		if *copied != "" || m.composing || m.chatFocus {
 			t.Fatalf("width %d: a click without a drag copies nothing", width)
 		}
+	}
+}
+
+func TestChatReadsWithoutMarkup(t *testing.T) {
+	m, _ := chatModel(t)
+	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
+	m.review.Messages = []state.Message{{Time: t0, Step: "s1",
+		Text: "❓ ⚑136 (`files.go`): **pending** stays in internal/app/usecase/files.go:136"}}
+	m.events = []inbox.Event{
+		{Time: t0.Add(time.Second), Step: "s1", Kind: inbox.KindMessage,
+			File: "internal/db/migrations/00012_scan.sql", Lines: "12",
+			Text: "about the risk «Adding CHECK constraints validates every row»: explain"},
+		{Time: t0.Add(2 * time.Second), Step: "s1", Kind: inbox.KindComment,
+			Text: "comment #2 minor internal/kafka/consumer.go:86-89"},
+	}
+	var got []string
+	for _, r := range m.chatRows(200, false) {
+		got = append(got, strings.TrimSpace(ansi.Strip(r.text)))
+	}
+	want := []string{
+		"claude │ ❓ line 136 (files.go): pending stays in files.go:136",
+		"you │ 00012_scan.sql:12 · risk «Adding CHECK constraints validates ever…»  explain",
+		"│ comment #2 minor consumer.go:86-89",
+	}
+	if !slices.Equal(got[:len(want)], want) {
+		t.Fatalf("chat rows:\n%s", strings.Join(got, "\n"))
 	}
 }

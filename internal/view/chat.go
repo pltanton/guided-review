@@ -2,11 +2,54 @@ package view
 
 import (
 	"fmt"
+	"path"
+	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/pltanton/guided-review/internal/inbox"
 )
+
+var (
+	chatPath = regexp.MustCompile(`[\w.-]+(?:/[\w.-]+)+:\d`)
+	chatFlag = regexp.MustCompile(`⚑\s*(\d)`)
+	chatSpan = regexp.MustCompile("`([^`]+)`|\\*\\*([^*]+)\\*\\*")
+)
+
+func eventText(e inbox.Event) string {
+	text := e.Text
+	var meta []string
+	if e.Kind != inbox.KindMessage && !strings.HasPrefix(text, e.Kind) {
+		meta = append(meta, e.Kind)
+	}
+	if e.File != "" {
+		meta = append(meta, strings.TrimSuffix(path.Base(e.File)+":"+e.Lines, ":"))
+	}
+	if about, ok := strings.CutPrefix(text, "about the risk «"); ok {
+		if q, rest, ok := strings.Cut(about, "»: "); ok {
+			meta, text = append(meta, "risk «"+ansi.Truncate(q, 40, "…")+"»"), rest
+		}
+	}
+	if len(meta) == 0 {
+		return text
+	}
+	return strings.TrimSpace(dimStyle.Render(strings.Join(meta, " · ")) + "  " + text)
+}
+
+func chatMarkdown(s string) string {
+	s = chatPath.ReplaceAllStringFunc(s, func(p string) string {
+		return p[strings.LastIndex(p[:strings.LastIndex(p, ":")], "/")+1:]
+	})
+	s = chatFlag.ReplaceAllString(s, "line $1")
+	return chatSpan.ReplaceAllStringFunc(s, func(m string) string {
+		if strings.HasPrefix(m, "`") {
+			return codeStyle.Render(m[1 : len(m)-1])
+		}
+		return boldStyle.Render(m[2 : len(m)-2])
+	})
+}
 
 func (m *model) chatFocusHint() string {
 	km := m.keys()
