@@ -119,6 +119,8 @@ type model struct {
 	popup        *popup
 	popupStack   []*popup
 	popupForward []*popup
+	jumpFrom     *line
+	lspTarget    *lspLoc
 	lspDo        func(kind, file string, line, col int) tea.Cmd
 	peekFile     func(path string) []string
 	lspBusy      string
@@ -572,6 +574,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case fmt.Stringer:
 		// bubbletea v1 hands modified keys over as its unexported unknownCSISequenceMsg.
 		if mod, ok := modifiedEnter(msg.String()); ok {
+			if mod == 1 && !m.composing {
+				return m, m.shiftEnter()
+			}
 			alt := mod&2 != 0 || m.composing && mod != 0
 			return m, m.handleKeys(tea.KeyMsg{Type: tea.KeyEnter, Alt: alt})
 		}

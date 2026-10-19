@@ -73,6 +73,8 @@ func DefaultActions() []Action {
 		},
 		{Name: "prev-note", Group: nav, Desc: "previous match or annotation", Keys: k("N"),
 			run: do(func(m *model) { m.nextNote(-1) })},
+		{Name: "jump-back", Group: nav, Desc: "back to where an LSP jump started", Keys: k("ctrl+o"),
+			run: do((*model).jumpBack)},
 		{Name: "search", Group: nav, Desc: "search this step (n/N walk, esc clears)", Keys: k("/"),
 			run: do(func(m *model) { m.startCmd('/') })},
 		{Name: "next-file", Group: nav, Desc: "next file", Keys: k("}"), run: jump(1, file)},

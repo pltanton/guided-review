@@ -2271,6 +2271,51 @@ func TestEndRowWhileViewing(t *testing.T) {
 	}
 }
 
+type shiftEnterMsg struct{}
+
+func (shiftEnterMsg) String() string { return "?CSI[50 55 59 50 59 49 51 126]?" }
+
+func TestLSPJumpsWithinStep(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.cursor = 1
+	m.Update(lspMsg{kind: "definition", locs: []lspLoc{{Path: "a.go", Line: 9}}})
+	if m.popup != nil || m.current().Line != 9 || !strings.Contains(m.status, "C-o back · S-enter peek") {
+		t.Fatalf("a definition in this step moves the cursor there: popup %v line %d %q",
+			m.popup, m.current().Line, m.status)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
+	if m.current().Line != 1 {
+		t.Fatalf("ctrl+o goes back to where the jump started: %d", m.current().Line)
+	}
+	m.Update(shiftEnterMsg{})
+	v := ansi.Strip(m.View())
+	if m.popup == nil || m.popup.kind != "peek" || !strings.Contains(v, "┌ LSP · a.go:9") ||
+		!strings.Contains(v, " LSP ") {
+		t.Fatalf("shift+enter peeks the last target, and the screen says it is LSP:\n%s", v)
+	}
+	m.Update(key("esc"))
+	m.Update(lspMsg{kind: "definition", locs: []lspLoc{{Path: "b.go", Line: 4}}})
+	if m.popup == nil || m.popup.kind != "peek" {
+		t.Fatal("a definition outside the step still opens a peek")
+	}
+	m.Update(key("esc"))
+	refs := []lspLoc{{Path: "b.go", Line: 4}, {Path: "a.go", Line: 3}}
+	m.Update(lspMsg{kind: "references", locs: refs})
+	m.Update(key("j"))
+	m.Update(shiftEnterMsg{})
+	if m.popup == nil || m.popup.kind != "peek" || m.popup.loc.Line != 3 {
+		t.Fatalf("shift+enter on a list item peeks even when it is in the step: %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	m.Update(lspMsg{kind: "references", locs: refs})
+	m.Update(key("j"))
+	m.Update(key("enter"))
+	if m.popup != nil || m.current().Line != 3 {
+		t.Fatalf("enter on a list item in the step jumps there: %v %d", m.popup, m.current().Line)
+	}
+}
+
 func TestLSPModal(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.peekFile = func(string) []string { return numbered(20) }
@@ -2280,7 +2325,7 @@ func TestLSPModal(t *testing.T) {
 		{Path: "api/transfer.go", Line: 12, Text: "Reserve(x)"},
 	}})
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "┌ references · 3") || !strings.Contains(v, "enter open · / filter") {
+	if !strings.Contains(v, "┌ LSP · references · 3") || !strings.Contains(v, "enter go") {
 		t.Fatalf("references open in a modal:\n%s", v)
 	}
 	m.Update(key("/"))

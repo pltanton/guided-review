@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- LSP: a definition (or a list item) that this step shows moves the cursor there instead
+  of opening a peek; `C-o` goes back, `S-enter` peeks anyway. LSP windows say so: an
+  `LSP` badge in the statusline and `LSP ·` in the title.
 - The viewer no longer stalls on every state change: picking the syntax highlighter
   globbed every lexer for each removed line. A reload of a 950-row step took 820 ms, now
   16 ms; the whole-MR view 11.8 s, now 1.4 s on first open.

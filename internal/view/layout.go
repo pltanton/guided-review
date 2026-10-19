@@ -132,6 +132,9 @@ func (m *model) footer() (string, []span) {
 }
 
 func (m *model) modeBadge() string {
+	if m.popup != nil && m.popup.kind != "detail" {
+		return inkTone.fg().Background(blueTone.color()).Bold(true).Render(" LSP ")
+	}
 	if !m.visual {
 		return buttonStyle.Render(" NORMAL ")
 	}

@@ -347,6 +347,7 @@ func (m *model) lspRequest(kind string) tea.Cmd {
 
 func (m *model) handleLSP(msg lspMsg) {
 	m.lspBusy = ""
+	fromCode := m.popup == nil
 	if msg.err != nil {
 		m.err = msg.err
 		return
@@ -371,6 +372,7 @@ func (m *model) handleLSP(msg lspMsg) {
 			title: "hover",
 			lines: strings.Split(ansi.Wrap(expandTabs(msg.hover), w, ""), "\n"),
 		}
+	case len(msg.locs) == 1 && !listKinds[msg.kind] && fromCode && m.jumpTo(msg.locs[0], name):
 	case len(msg.locs) == 1 && !listKinds[msg.kind]:
 		m.openPeek(msg.locs[0])
 	default:
@@ -379,7 +381,7 @@ func (m *model) handleLSP(msg lspMsg) {
 		}
 		m.popup = &popup{
 			kind:  msg.kind,
-			title: fmt.Sprintf("%s · %d", name, len(msg.locs)),
+			title: fmt.Sprintf("LSP · %s · %d", name, len(msg.locs)),
 			items: msg.locs,
 		}
 	}
@@ -392,11 +394,50 @@ func (m *model) peek(path string) []string {
 	return m.defaultPeek(path)
 }
 
+func (m *model) jumpTo(loc lspLoc, what string) bool {
+	from := m.current()
+	if !m.seek(func(x line) bool {
+		return x.File == loc.Path && x.Line == loc.Line && x.Kind != RowNote && x.Kind != RowRemoved
+	}) {
+		return false
+	}
+	m.jumpFrom, m.lspTarget = &from, &loc
+	m.popup, m.popupStack, m.popupForward = nil, nil, nil
+	m.clamp()
+	km := m.keys()
+	m.status = fmt.Sprintf("%s here, %s:%d · %s back · S-enter peek", what, loc.Path, loc.Line,
+		km.key("jump-back"))
+	return true
+}
+
+func (m *model) jumpBack() {
+	if m.jumpFrom == nil {
+		m.status = "nothing to go back to"
+		return
+	}
+	m.focus(*m.jumpFrom)
+	m.jumpFrom = nil
+	m.clamp()
+}
+
+func (m *model) shiftEnter() tea.Cmd {
+	switch p := m.popup; {
+	case p != nil && p.items != nil && len(p.items) > 0:
+		m.popupStack, m.popupForward = append(m.popupStack, p), nil
+		m.openPeek(p.items[p.sel])
+	case p == nil && m.lspTarget != nil:
+		m.openPeek(*m.lspTarget)
+	default:
+		return m.handleKeys(tea.KeyMsg{Type: tea.KeyEnter})
+	}
+	return nil
+}
+
 func (m *model) openPeek(loc lspLoc) {
 	target := max(loc.Line-1, 0)
 	m.popup = &popup{
 		kind:   "peek",
-		title:  fmt.Sprintf("%s:%d", loc.Path, loc.Line),
+		title:  fmt.Sprintf("LSP · %s:%d", loc.Path, loc.Line),
 		lines:  m.peek(loc.Path),
 		target: target,
 		cursor: target,
@@ -546,7 +587,7 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 	case "ctrl+u":
 		p.top = max(p.top-10, 0)
 	case "enter":
-		if isList && len(p.items) > 0 {
+		if isList && len(p.items) > 0 && !m.jumpTo(p.items[p.sel], lspNames[p.kind]) {
 			m.popupStack, m.popupForward = append(m.popupStack, p), nil
 			m.openPeek(p.items[p.sel])
 		}
@@ -588,7 +629,7 @@ func (m *model) popupHint() string {
 	case p.filtering:
 		return "type to filter · enter done · esc clear"
 	case p.items != nil:
-		return "enter open · / filter · e editor · esc close"
+		return "enter go (jumps when it is in this step) · S-enter peek · / filter · e editor · esc close"
 	case p.kind == "peek" && p.filter != "":
 		return "n/N next match · / search · g… K lsp · C-o back · e editor · esc close"
 	case p.kind == "peek":
