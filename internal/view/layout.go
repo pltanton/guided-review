@@ -541,8 +541,8 @@ func (m *model) composeMode() (
 			hints = append(hints, composeHint{"tab", "comment"})
 		}
 	case m.rawMode() && m.composeKind == inbox.KindEdit:
-		badge, hints[0].desc = fmt.Sprintf("EDIT #%d", m.composeRef), "save"
-		hints = append(hints, composeHint{"tab", "ai edit"})
+		badge, hints[0].desc = fmt.Sprintf("EDIT #%d %s", m.composeRef, m.severity()), "save"
+		hints = append(hints, composeHint{"tab", "ai edit"}, composeHint{"S-tab", "severity"})
 	case m.rawMode():
 		badge, hints[0].desc = "COMMENT "+string(m.severity()), "save"
 		hints = append(hints, composeHint{"tab", "ai comment"}, composeHint{"S-tab", "severity"})

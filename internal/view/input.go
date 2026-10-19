@@ -304,7 +304,7 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 			m.sugOn, m.sugFocus, m.altInput = false, false, nil
 		}
 	case tea.KeyShiftTab:
-		if m.rawMode() && m.composeKind == inbox.KindMessage {
+		if m.rawMode() {
 			i := slices.Index(state.Severities, m.severity())
 			m.rawSeverity = state.Severities[(i+1)%len(state.Severities)]
 		}
@@ -461,7 +461,8 @@ func (m *model) severity() state.Severity {
 }
 
 func (m *model) saveRaw(text, suggestion string) {
-	args := []string{"comment", "edit", fmt.Sprint(m.composeRef), "--", text}
+	args := []string{"comment", "edit", fmt.Sprint(m.composeRef), "--severity", string(m.severity()),
+		"--", text}
 	if m.composeKind == inbox.KindMessage {
 		if m.anchorFile == "" {
 			m.err = errors.New("a raw comment needs a line: put the cursor on code")
@@ -492,6 +493,9 @@ func (m *model) saveRaw(text, suggestion string) {
 	if err != nil {
 		m.err = fmt.Errorf("%v: %s", err, out)
 		return
+	}
+	if m.composeKind == inbox.KindEdit {
+		m.followVerdict(m.composeRef, m.severity())
 	}
 	m.emit(inbox.Event{
 		Kind: inbox.KindComment, File: m.anchorFile, Lines: m.anchorLines, Text: out,

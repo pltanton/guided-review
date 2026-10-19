@@ -487,6 +487,10 @@ func (m *model) handleFilterKey(msg tea.KeyMsg) {
 	default:
 		return
 	}
+	if p.kind == "peek" {
+		m.peekFind(p, 0)
+		return
+	}
 	if p.all == nil {
 		p.all = p.items
 	}
@@ -507,7 +511,7 @@ func (m *model) handlePopupKey(msg tea.KeyMsg) tea.Cmd {
 		m.handleFilterKey(msg)
 		return nil
 	}
-	if isList && msg.String() == "/" {
+	if (isList || p.kind == "peek") && msg.String() == "/" {
 		p.filtering = true
 		return nil
 	}
@@ -585,8 +589,10 @@ func (m *model) popupHint() string {
 		return "type to filter · enter done · esc clear"
 	case p.items != nil:
 		return "enter open · / filter · e editor · esc close"
+	case p.kind == "peek" && p.filter != "":
+		return "n/N next match · / search · g… K lsp · C-o back · e editor · esc close"
 	case p.kind == "peek":
-		return "g… K lsp · C-o back · tab forward · e editor · esc close"
+		return "/ search · g… K lsp · C-o back · tab forward · e editor · esc close"
 	case p.kind == "detail" && p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots):
 		verb := "check off the risk"
 		if m.step.Hotspots[p.risk-1].Checked {
@@ -642,6 +648,10 @@ func (m *model) popupBody(width, rows int) []string {
 			out = append(out, l)
 		}
 	case p.kind == "peek":
+		if p.filtering {
+			out = append(out, cursorStyle.Render("/")+p.filter+"█")
+			rows--
+		}
 		p.top = max(0, min(p.top, p.cursor), p.cursor-rows+1)
 		if p.added == nil {
 			p.added = m.addedLines(p.loc.Path)
@@ -760,10 +770,37 @@ func (m *model) peekKey(p *popup, k string) (tea.Cmd, bool) {
 		p.gKey = true
 	case "K":
 		return m.peekLSP(p, plain, "hover"), true
+	case "n", "N":
+		if p.filter == "" {
+			return nil, false
+		}
+		m.peekFind(p, map[string]int{"n": 1, "N": -1}[k])
 	default:
 		return nil, false
 	}
 	return nil, true
+}
+
+func (m *model) peekFind(p *popup, dir int) {
+	q := p.filter
+	fold := !strings.ContainsFunc(q, unicode.IsUpper)
+	if fold {
+		q = strings.ToLower(q)
+	}
+	n, step := len(p.lines), cmp.Or(dir, 1)
+	for k := range n {
+		i := ((p.cursor+dir+step*k)%n + n) % n
+		text := ansi.Strip(p.lines[i])
+		if fold {
+			text = strings.ToLower(text)
+		}
+		if col := strings.Index(text, q); q != "" && col >= 0 {
+			p.cursor, p.col = i, len([]rune(text[:col]))
+			m.status = ""
+			return
+		}
+	}
+	m.status = "no match: " + p.filter
 }
 
 func (m *model) peekLSP(p *popup, plain, kind string) tea.Cmd {

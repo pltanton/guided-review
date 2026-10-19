@@ -329,7 +329,7 @@ func (m *model) editComment(id int) {
 			if c.ID == id {
 				m.composing, m.composeKind, m.composeRef = true, inbox.KindEdit, id
 				m.anchorFile, m.anchorLines = "", ""
-				m.input = []rune(c.Body)
+				m.input, m.rawSeverity = []rune(c.Body), c.Severity
 				m.inputPos, m.raw = len(m.input), true
 				m.placeInline()
 				return

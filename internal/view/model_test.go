@@ -1212,8 +1212,14 @@ func TestRawComment(t *testing.T) {
 	}
 
 	m.composing, m.composeKind, m.composeRef, m.input = true, inbox.KindEdit, 4, []rune("reworded")
+	m.rawSeverity = state.SeverityMinor
+	m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "EDIT #4 nit") || !strings.Contains(v, "severity") {
+		t.Fatalf("S-tab changes the severity of an edited comment and says so:\n%s", v)
+	}
 	m.Update(key("enter"))
-	if want := []string{"comment", "edit", "4", "--", "reworded"}; !slices.Equal(ran, want) {
+	want = []string{"comment", "edit", "4", "--severity", "nit", "--", "reworded"}
+	if !slices.Equal(ran, want) {
 		t.Fatalf("raw edit args = %q, want %q", ran, want)
 	}
 }
@@ -2109,6 +2115,28 @@ func TestPeekGHint(t *testing.T) {
 	m.Update(key("x"))
 	if strings.Contains(ansi.Strip(m.View()), "d  definition") {
 		t.Fatal("the hint goes away after the second key")
+	}
+}
+
+func TestPeekSearch(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.openPeek(lspLoc{Path: "b.go", Line: 5})
+	m.Update(key("/"))
+	typeText(m, "l1")
+	if m.popup.cursor != 9 || !strings.Contains(ansi.Strip(m.View()), "/l1") {
+		t.Fatalf("typing jumps to the first match from the cursor: %d", m.popup.cursor)
+	}
+	m.Update(key("enter"))
+	m.Update(key("n"))
+	if m.popup.cursor != 10 {
+		t.Fatalf("n goes to the next match: %d", m.popup.cursor)
+	}
+	for range 3 {
+		m.Update(key("N"))
+	}
+	if m.popup.cursor != 18 {
+		t.Fatalf("N wraps back: %d", m.popup.cursor)
 	}
 }
 

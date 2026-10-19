@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The LSP code peek searches: `/` jumps as you type, `n`/`N` walk the matches.
+- Editing a comment (`enter` on it) changes its severity too: `S-tab` cycles it, the
+  prompt shows it.
 - The chat reads cleaner: `code` and **bold** are styled instead of shown as markup,
   `⚑57` reads `line 57`, paths shrink to the file name, and your messages lead with a
   short dim `file:line · risk «…»` instead of the full path and the whole risk text.
