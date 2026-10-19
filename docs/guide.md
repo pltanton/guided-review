@@ -117,10 +117,11 @@ agent applies right away or leaves for later (`gr list` shows where it is).
 
 Run the same command after the author pushes: you see only what changed. Your open
 threads come first with the author's replies. The agent checks each reply against the
-new code and suggests resolve or keep open with a reply; you decide in the viewer, with
-`R` for all of them or `enter` on a thread where it sits in the code (read it, resolve,
-reply and keep open, take the agent's suggestion), and only there: the agent has no
-command to decide for you. Approve is refused
+new code and suggests resolve or keep open with a reply. The viewer opens on a «your
+threads» step: each thread sits in the current code with the whole conversation, the
+agent's take and your decision under it. `n`/`N` walk the threads, `enter` decides
+(resolve, keep open and reply to the author, as the agent proposes), `c` asks the agent
+about it, `R` brings the step back later. Only you decide: the agent has no command for it. Approve is refused
 while any of your threads stays open.
 
 On a large change you can finish early: `gr prepare --partial` sends what you reviewed

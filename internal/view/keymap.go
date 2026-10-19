@@ -222,11 +222,15 @@ func (m *model) nextNote(dir int) {
 }
 
 func (m *model) messageOrOpen() {
-	if cur := m.current(); cur.Kind == RowGap || cur.Kind == RowFold {
+	switch cur := m.current(); {
+	case cur.Kind == RowGap || cur.Kind == RowFold:
 		m.toggleFold()
-		return
+	case cur.Thread != "":
+		m.startChat(true)
+		m.composeThread = cur.Thread
+	default:
+		m.startChat(false)
 	}
-	m.startChat(false)
 }
 
 func (m *model) focusAgent() {

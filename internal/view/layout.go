@@ -150,8 +150,11 @@ func (m *model) cursorHint() string {
 			k.key("act"), k.key("ask"), k.key("yank"))
 	case cur.Kind == RowNote && cur.Ref > 0:
 		del := k.key("delete-comment")
-		return fmt.Sprintf("%s edit · %s%s delete · %s reply · %s fold",
+		return fmt.Sprintf("%s edit, S-tab there: severity · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
+	case cur.Thread != "" && m.step != nil && m.step.ID == extraThreads:
+		return fmt.Sprintf("%s decide · %s/%s next/previous thread · %s chat about it",
+			k.key("act"), k.key("next-note"), k.key("prev-note"), k.key("message"))
 	case cur.Thread != "":
 		return k.key("act") + " open the thread · " + k.key("replies") + " all your threads"
 	case cur.Risk > 0:
@@ -532,7 +535,7 @@ func (m *model) composeMode() (
 	case m.composeKind == kindSkip:
 		badge, hints[0].desc = "SKIP", "skip"
 	case m.composeKind == kindThreadReply:
-		badge, anchor, hints[0].desc = "REPLY", m.threadLabel(), "reply, thread stays open"
+		badge, anchor, hints[0].desc = "REPLY TO AUTHOR", m.threadLabel(), "keep open, send on publishing"
 	case m.composeThread != "":
 		badge, anchor = "THREAD", m.threadLabel()
 	case m.composeKind == inbox.KindAsk:
@@ -631,9 +634,6 @@ func (m *model) View() string {
 			}
 		}
 		return strings.Join(out, "\n")
-	}
-	if m.threads {
-		return m.threadsView()
 	}
 	if m.step == nil {
 		return m.intakeView()

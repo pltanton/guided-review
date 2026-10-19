@@ -126,10 +126,12 @@ func (m *model) placeInline() {
 
 func (m *model) inlineCompose() bool {
 	if !m.composing || m.chatting || m.cmdMode != 0 || m.step == nil || m.preview != "" ||
-		m.threads || m.composeThread != "" {
+		m.composeThread != "" && m.composeKind != kindThreadReply {
 		return false
 	}
 	switch m.composeKind {
+	case kindThreadReply:
+		return true
 	case inbox.KindMessage, inbox.KindAsk:
 		return m.anchorFile != ""
 	case inbox.KindEdit:

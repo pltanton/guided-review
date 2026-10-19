@@ -2,7 +2,6 @@ package view
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/pltanton/guided-review/internal/diff"
@@ -47,11 +46,10 @@ func (s *gitSource) fileDiff(path string) (diff.File, error) {
 			s.diffs[f.Path] = f
 		}
 	}
-	f, ok := s.diffs[path]
-	if !ok {
-		return diff.File{}, fmt.Errorf("%s: not in diff", path)
+	if f, ok := s.diffs[path]; ok {
+		return f, nil
 	}
-	return f, nil
+	return diff.File{Path: path}, nil
 }
 
 func (s *gitSource) Lines(path string) ([]string, error) {

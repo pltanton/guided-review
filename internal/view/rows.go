@@ -103,11 +103,15 @@ func buildRows(
 		ranges[sh.File] = append(ranges[sh.File], [2]int{start, end})
 	}
 	var rows []Row
+	first := ""
+	if len(files) > 0 {
+		first = files[0]
+	}
 	for _, n := range notes {
-		if n.Top && len(files) > 0 {
+		if n.Top {
 			rows = append(rows, Row{
-				Kind: RowNote, File: files[0], Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label,
-				Dim: n.Dim, Risk: n.Risk,
+				Kind: RowNote, File: first, Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label, Dim: n.Dim, Risk: n.Risk,
+				Thread: n.Thread,
 			})
 		}
 	}

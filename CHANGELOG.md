@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Your MR threads are a step now, not a screen: on a re-review the viewer opens «your
+  threads» first, each thread in the current code with the whole conversation, the
+  agent's take and your decision under it. `n`/`N` walk them, `enter` decides, the reply
+  to the author is edited in place, `c` asks the agent about the thread, `R` comes back.
 - The LSP code peek searches: `/` jumps as you type, `n`/`N` walk the matches.
 - Editing a comment (`enter` on it) changes its severity too: `S-tab` cycles it, the
   prompt shows it.

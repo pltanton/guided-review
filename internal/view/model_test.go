@@ -1,6 +1,7 @@
 package view
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -13,8 +14,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/config"
+	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
 func key(s string) tea.KeyMsg {
@@ -1318,7 +1321,7 @@ func TestCursorHint(t *testing.T) {
 		t.Fatalf("note footer: %q", f)
 	}
 	m.lines[m.cursor].Ref = 4
-	if f := footer(); !strings.Contains(f, "E edit · DD delete · c reply · o fold") {
+	if f := footer(); !strings.Contains(f, "E edit, S-tab there: severity · DD delete · c reply · o fold") {
 		t.Fatalf("comment footer: %q", f)
 	}
 }
@@ -2001,9 +2004,18 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	}
 }
 
-func TestThreadsScreen(t *testing.T) {
+func TestThreadsStep(t *testing.T) {
+	tr := testrepo.New(t)
+	tr.Write("a.go", strings.Join(numbered(10), "\n")+"\n")
+	tr.Write("b.go", "package b\n")
+	base := tr.Commit("base")
+	tr.Write("b.go", "package b\n\nvar X = 1\n")
+	head := tr.Commit("head")
+
 	m, sent := newTestModel(t)
-	m.peekFile = func(string) []string { return numbered(10) }
+	m.ctx, m.repo, m.algo = context.Background(), gitx.Repo{Dir: tr.Dir}, gitx.DefaultDiffAlgorithm
+	m.review.BaseSHA, m.review.HeadSHA = base, head
+	m.review.Steps[0].Hunks = []state.StepHunk{{File: "b.go"}}
 	m.review.MR = &state.MR{IID: 7, Title: "guard", Me: "me"}
 	m.review.Discussions = []state.Discussion{
 		{ID: "d1", Author: "me", Body: "**major** return an error", File: "a.go", Line: 5,
@@ -2015,8 +2027,6 @@ func TestThreadsScreen(t *testing.T) {
 	}
 	m.review.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
 		Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
-	m.review.Comments = []state.Comment{{ID: 3, File: "a.go", Severity: state.SeverityNit,
-		Body: "spacing", Published: true, ThreadID: "d2"}}
 	m.store = state.Store{Dir: t.TempDir(), Key: "k"}
 	if err := m.store.Save(m.review); err != nil {
 		t.Fatal(err)
@@ -2024,62 +2034,68 @@ func TestThreadsScreen(t *testing.T) {
 	if err := m.store.SetCurrent(m.review.ID); err != nil {
 		t.Fatal(err)
 	}
-	m.runGr = func(args ...string) (string, error) {
-		t.Fatalf("a thread decision must not go through gr: %q", args)
-		return "", nil
-	}
-	saved := func() *state.Review {
+	saved := func() state.Thread {
 		t.Helper()
 		r, err := m.store.LoadCurrent()
 		if err != nil {
 			t.Fatal(err)
 		}
-		return r
+		return r.ThreadState(r.Discussions[0])
 	}
-	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "replies 1 · R") {
-		t.Fatalf("footer must offer the answered thread: %q", ansi.Strip(f))
+	m.height = 60
+	m.reload()
+	if m.step == nil || m.step.ID != extraThreads {
+		t.Fatalf("an answered thread opens the threads step first: %+v", m.step)
 	}
-	m.Update(key("R"))
-	body := ansi.Strip(m.View())
-	for _, want := range []string{"a.go:5", "5 ▶ L5", "@alice", "zero is expected",
-		"agent: keep open?", "keep open: callers cannot tell", "reply: please return an error",
-		"no reply"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("threads screen misses %q:\n%s", want, body)
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"your threads · 2", "L5", "@alice", "zero is expected",
+		"AGENT · keep open?", "reply it suggests: please return an error", "DECIDE",
+		"general · nit spacing", "NO REPLY", "end of your threads · 2"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("threads step misses %q:\n%s", want, v)
 		}
 	}
-	m.Update(key("a"))
-	if th := saved().ThreadState(m.review.Discussions[0]); !th.Decided() ||
-		th.Verdict != state.VerdictOpen || th.Reply != "please return an error" ||
-		th.DecidedBy != state.DecidedByViewer {
-		t.Fatalf("a takes the agent's proposal into the state: %+v", th)
+	onDecision := func() bool {
+		return m.seek(func(l line) bool { return l.Thread == "d1" && l.NoteKind == "hotspot" })
 	}
-	m.Update(key("j"))
-	m.Update(key("r"))
-	if r := saved(); !r.ThreadState(r.Discussions[1]).Decided() || !r.Comments[0].Resolved {
-		t.Fatalf("r resolves d2 and its comment: %+v %+v", r.Threads, r.Comments)
+	if !onDecision() {
+		t.Fatal("no decision row for d1")
 	}
-	m.Update(key("u"))
-	if r := saved(); r.ThreadState(r.Discussions[1]).Decided() || r.Comments[0].Resolved {
-		t.Fatalf("u takes back the decision and its resolve: %+v %+v", r.Threads, r.Comments)
-	}
-	m.Update(key("k"))
-	m.Update(key("o"))
-	if string(m.input) != "please return an error" {
-		t.Fatalf("o must start from the agent's reply, got %q", string(m.input))
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "enter decide · n/N next/previous thread") {
+		t.Fatalf("a thread row says what to do: %q", ansi.Strip(f))
 	}
 	m.Update(key("enter"))
-	m.Update(key("c"))
-	for _, r := range "why?" {
-		m.Update(key(string(r)))
+	m.Update(key("3"))
+	if th := saved(); !th.Decided() || th.Verdict != state.VerdictOpen ||
+		th.Reply != "please return an error" || th.DecidedBy != state.DecidedByViewer {
+		t.Fatalf("3 takes the agent's proposal: %+v", th)
 	}
+	onDecision()
+	m.Update(key("enter"))
+	m.Update(key("2"))
+	if !m.composing || !m.inlineCompose() || string(m.input) != "please return an error" ||
+		!strings.Contains(ansi.Strip(m.View()), "REPLY TO AUTHOR") {
+		t.Fatalf("2 edits the reply in place, starting from the agent's: %q", string(m.input))
+	}
+	typeText(m, ", please")
+	m.Update(key("enter"))
+	if th := saved(); th.Reply != "please return an error, please" || len(*sent) != 0 {
+		t.Fatalf("the reply is stored, not sent to the agent: %+v %+v", th, *sent)
+	}
+	m.Update(key("c"))
+	typeText(m, "why?")
 	m.Update(key("enter"))
 	if n := len(*sent); n != 1 || (*sent)[0].Text != "re thread d1: why?" {
-		t.Fatalf("c must ask the agent about the thread: %+v", *sent)
+		t.Fatalf("c on a thread asks the agent about it: %+v", *sent)
 	}
 	m.Update(key("esc"))
-	if m.threads {
-		t.Fatal("esc must close the threads screen")
+	m.Update(key("esc"))
+	if m.step.ID != "s1" {
+		t.Fatalf("esc goes back to the current step: %s", m.step.ID)
+	}
+	m.Update(key("R"))
+	if m.step.ID != extraThreads {
+		t.Fatalf("R opens the threads step: %s", m.step.ID)
 	}
 }
 
@@ -2578,7 +2594,7 @@ func TestThreadCardInCode(t *testing.T) {
 	m.Update(key("enter"))
 	v := ansi.Strip(m.View())
 	for _, want := range []string{"┌ thread · a.go:2 · @me", "alice │ fixed in b.go",
-		"agent: resolve — the error is returned now", " 3  take the agent's: resolve"} {
+		"agent: resolve — the error is returned now", " 3  as the agent proposes: resolve"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("thread card lacks %q:\n%s", want, v)
 		}

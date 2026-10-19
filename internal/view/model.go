@@ -92,10 +92,7 @@ type model struct {
 	previewTop    int
 	previewSel    int
 	previewFollow bool
-	threads       bool
-	threadSel     int
-	threadTop     int
-	threadFollow  bool
+	threadsShown  bool
 	composeThread string
 	runGr         func(args ...string) (string, error)
 
@@ -248,6 +245,9 @@ func (m *model) reload() {
 		prev = m.step.ID
 	}
 	m.review, m.err = r, nil
+	if !m.threadsShown && m.pendingThreads() > 0 {
+		m.threadsShown, m.viewStep = true, extraThreads
+	}
 	target := r.Current
 	if m.viewStep != "" && m.viewStep != r.Current && m.stepByID(m.viewStep) != nil {
 		target = m.viewStep
@@ -346,6 +346,9 @@ func (m *model) notes() []Note {
 			})
 		}
 	}
+	if m.step.ID == extraThreads {
+		return append(out, m.threadNotes()...)
+	}
 	for _, d := range m.review.Discussions {
 		if d.File == "" || d.OldLine || d.Resolved {
 			continue
@@ -401,7 +404,11 @@ func (m *model) relist() {
 
 func (m *model) endText() string {
 	if m.viewStep != "" {
-		return fmt.Sprintf("end of %s · enter → back to %s", m.step.ID, m.review.Current)
+		name := m.step.ID
+		if isExtra(name) {
+			name = m.step.Title
+		}
+		return fmt.Sprintf("end of %s · enter → back to %s", name, m.review.Current)
 	}
 	return fmt.Sprintf("end of %s · enter → next step", m.step.ID)
 }
@@ -655,6 +662,7 @@ const (
 	extraBoilerplate = "~boilerplate"
 	extraGenerated   = "~generated"
 	extraAll         = "~all"
+	extraThreads     = "~threads"
 )
 
 func isExtra(id string) bool {
@@ -677,6 +685,16 @@ func (m *model) extraSteps() []state.Step {
 		}
 	}
 	var out []state.Step
+	if ds := m.myThreads(); len(ds) > 0 {
+		var hunks []state.StepHunk
+		for _, d := range ds {
+			if d.File != "" && !d.OldLine {
+				hunks = append(hunks, state.StepHunk{File: d.File, Lines: fmt.Sprint(d.Line)})
+			}
+		}
+		out = append(out, state.Step{ID: extraThreads, Title: fmt.Sprintf("your threads · %d", len(ds)),
+			Kind: "extra", Hunks: hunks, Status: state.StatusPending})
+	}
 	add := func(id, title string, hunks []state.StepHunk) {
 		if len(hunks) > 0 {
 			out = append(out, state.Step{
@@ -706,14 +724,17 @@ func (m *model) stepByID(id string) *state.Step {
 }
 
 func (m *model) stepIDs() []string {
-	var ids []string
+	var ids, extras []string
 	for _, st := range m.review.Steps {
 		ids = append(ids, st.ID)
 	}
 	for _, st := range m.extraSteps() {
-		ids = append(ids, st.ID)
+		extras = append(extras, st.ID)
 	}
-	return ids
+	if len(extras) > 0 && extras[0] == extraThreads {
+		return append(append([]string{extraThreads}, ids...), extras[1:]...)
+	}
+	return append(ids, extras...)
 }
 
 func (m *model) showStep(id string) tea.Cmd {
@@ -928,7 +949,7 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.deleteArmed = 0
 	}
 	filtering := m.popup != nil && m.popup.filtering
-	overlay := m.step != nil && !m.threads && m.preview == ""
+	overlay := m.step != nil && m.preview == ""
 	if k := msg.String(); overlay && !m.help && !filtering && (k == "?" || k == "f1") {
 		m.help, m.helpAll, m.helpTop = true, false, 0
 		return nil
@@ -952,8 +973,6 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleStaleKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
-	case m.threads && !m.composing:
-		return m.handleThreadsKey(msg)
 	case m.popup != nil:
 		return m.handlePopupKey(msg)
 	case m.focusFiles:

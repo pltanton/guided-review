@@ -89,7 +89,7 @@ func (m *model) chatSelected(i int) bool {
 
 func (m *model) chatBox() (rows []chatRow, x, y, h int, ok bool) {
 	switch {
-	case m.review == nil || m.threads || m.preview != "":
+	case m.review == nil || m.preview != "":
 		return nil, 0, 0, 0, false
 	case m.step == nil:
 		x, w, inner := m.cardFrame(intakeWidth)

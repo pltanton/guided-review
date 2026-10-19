@@ -90,8 +90,8 @@ func TestComposeStatusline(t *testing.T) {
 		{"thread reply", func(m *model) {
 			m.review.Discussions = []state.Discussion{{ID: "d1", File: "x/b.go", Line: 9}}
 			m.composeKind, m.composeThread = kindThreadReply, "d1"
-		}, " REPLY b.go:9 ",
-			"enter reply, thread stays open · C-j new line · esc cancel"},
+		}, " REPLY TO AUTHOR b.go:9 ",
+			"enter keep open, send on publishing · C-j new line · esc cancel"},
 		{"thread question", func(m *model) {
 			m.review.Discussions = []state.Discussion{{ID: "d1", Author: "bob"}}
 			m.composeKind, m.composeThread = inbox.KindMessage, "d1"

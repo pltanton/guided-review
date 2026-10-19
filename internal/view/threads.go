@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -40,90 +39,64 @@ func (m *model) openThreads() {
 		m.status = "no open threads of yours on the MR"
 		return
 	}
-	m.threads, m.threadSel, m.threadTop, m.threadFollow = true, 0, 0, true
+	m.showStep(extraThreads)
 }
 
-func (m *model) selectedThread() (state.Discussion, state.Thread, bool) {
-	ds := m.myThreads()
-	if len(ds) == 0 {
-		return state.Discussion{}, state.Thread{}, false
-	}
-	d := ds[min(m.threadSel, len(ds)-1)]
-	return d, m.review.ThreadState(d), true
-}
-
-func (m *model) threadBody(w int) (lines []string, starts []int) {
+func (m *model) threadNotes() []Note {
 	r := m.review
-	for i, d := range m.myThreads() {
+	var out []Note
+	for _, d := range m.myThreads() {
 		t := r.ThreadState(d)
-		sev := state.ThreadSeverity(d)
-		tn := severityTones[string(sev)]
-		where := "general"
-		if d.File != "" {
-			where = fmt.Sprintf("%s:%d", d.File, d.Line)
-		}
-		title := tn.fg().Bold(true).Render(fmt.Sprintf("● %-7s", sev)) + " " + fileStyle.Render(where)
-		if c := r.CommentFor(d); c != nil {
-			title += dimStyle.Render(fmt.Sprintf("  #%d", c.ID))
-		}
-		status := threadStatus(r, d, t)
-		gap := max(w-ansi.StringWidth(title)-ansi.StringWidth(status)-1, 1)
-		title += strings.Repeat(" ", gap) + status
-		if i == m.threadSel {
-			title = paint(fit(accentTone.fg().Render("▌")+title, w), cursorTone)
-		}
-		lines = append(lines, "")
-		starts = append(starts, len(lines))
-		lines = append(lines, title)
-		bar := tn.fg().Render("  │ ")
-		if d.File != "" && !d.OldLine {
-			target := d.Line - 1
-			for _, l := range markedCodeLines(m.peek(d.File), max(target-1, 0), target, 3, nil, 0) {
-				lines = append(lines, bar+ansi.Truncate(l, w-4, ""))
+		add := func(kind, label, text string, dim bool) {
+			n := Note{File: d.File, Line: d.Line, Kind: kind, Label: label, Text: text, Dim: dim,
+				Thread: d.ID, Focus: true}
+			if d.File == "" || d.OldLine {
+				n.File, n.Line, n.Top = "", 0, true
 			}
-			lines = append(lines, bar)
+			out = append(out, n)
 		}
-		say := func(who string, st tone, text string) {
-			label := st.fg().Bold(true).Render(fmt.Sprintf("%-9s", who))
-			for j, l := range markdownLines(strings.TrimSpace(text), w-4-9) {
-				if j > 0 {
-					label = strings.Repeat(" ", 9)
-				}
-				lines = append(lines, bar+label+l)
+		notes := d.Notes
+		if len(notes) == 0 {
+			notes = []state.Note{{Author: d.Author, Body: d.Body}}
+		}
+		for i, n := range notes {
+			text := chatSpan.ReplaceAllString(strings.TrimSpace(n.Body), "$1$2")
+			if i == 0 && d.OldLine {
+				text = fmt.Sprintf("%s:%d (line removed) · %s", d.File, d.Line, text)
+			} else if i == 0 && d.File == "" {
+				text = "general · " + text
 			}
-		}
-		for _, n := range d.Notes {
 			if n.Author == r.MR.Me {
-				say("you", youTone, n.Body)
+				add("comment", "YOU", text, false)
 			} else {
-				say("@"+n.Author, textTone, n.Body)
+				add("mr", "@"+n.Author, text, false)
 			}
 		}
 		if t.Assessment != "" {
-			say("agent", agentTone, verdictWord(t.Proposed)+": "+t.Assessment)
+			text := t.Assessment
 			if t.ProposedReply != "" && !t.Decided() {
-				say("", agentTone, "reply: "+t.ProposedReply)
+				text += "\nreply it suggests: " + t.ProposedReply
 			}
+			add("note", "AGENT · "+verdictWord(t.Proposed)+"?", text, t.Decided())
 		}
-		if t.Reply != "" {
-			say("reply ›", okTone, t.Reply)
-		}
+		label, text := threadDecision(r, d, t)
+		add("hotspot", label, text, t.Decided())
 	}
-	return lines, starts
+	return out
 }
 
-func threadStatus(r *state.Review, d state.Discussion, t state.Thread) string {
+func threadDecision(r *state.Review, d state.Discussion, t state.Thread) (label, text string) {
 	switch {
 	case t.Decided() && t.Verdict == state.VerdictResolve:
-		return addStyle.Bold(true).Render("✔ resolve")
-	case t.Decided() && t.Verdict == state.VerdictOpen:
-		return delStyle.Bold(true).Render("✖ keep open")
-	case t.Proposed != "":
-		return agentTone.fg().Render("agent: " + verdictWord(t.Proposed) + "?")
+		return "✔ RESOLVE", "resolved on publishing · enter to change"
+	case t.Decided() && t.Reply != "":
+		return "✖ KEEP OPEN", "your reply, sent on publishing: " + t.Reply
+	case t.Decided():
+		return "✖ KEEP OPEN", "stays open, no reply · enter to change"
 	case r.Answered(d):
-		return hotStyle.Render("answered")
+		return "DECIDE", "enter: resolve, or keep open and reply to the author"
 	}
-	return dimStyle.Render("no reply")
+	return "NO REPLY", "the author has not answered yet · enter to resolve anyway"
 }
 
 func verdictWord(v string) string {
@@ -131,86 +104,6 @@ func verdictWord(v string) string {
 		return "keep open"
 	}
 	return v
-}
-
-func (m *model) threadsView() string {
-	_, w, _ := m.cardFrame(finishWidth)
-	r := m.review
-	title := "replies"
-	if r.MR != nil {
-		title += " · " + r.MR.Label() + " " + r.MR.Title
-	}
-	ds := m.myThreads()
-	answered, decided := 0, 0
-	for _, d := range ds {
-		if r.Answered(d) {
-			answered++
-		}
-		if r.ThreadState(d).Decided() {
-			decided++
-		}
-	}
-	facts := fmt.Sprintf("%d open threads of yours · %d answered · %d decided",
-		len(ds), answered, decided)
-	top := []string{dimStyle.Render(facts), ""}
-	body, starts := m.threadBody(w)
-	from, to := 0, 0
-	if m.threadSel < len(starts) {
-		from, to = starts[m.threadSel], len(body)
-		if m.threadSel+1 < len(starts) {
-			to = starts[m.threadSel+1] - 1
-		}
-	}
-	hint := "j/k thread · r resolve · o keep open + reply · a take the agent's · u undo" +
-		" · c ask the agent · esc back"
-	return m.scrollCard(cardLayout{
-		title: title, top: top, body: body, hint: hint,
-		scroll: &m.threadTop, follow: &m.threadFollow, from: from, to: to,
-	})
-}
-
-func (m *model) handleThreadsKey(msg tea.KeyMsg) tea.Cmd {
-	n := len(m.myThreads())
-	d, t, ok := m.selectedThread()
-	switch msg.String() {
-	case "esc", "q", m.keys().key("replies"):
-		m.threads = false
-	case "j", "down":
-		m.threadSel, m.threadFollow = min(m.threadSel+1, max(n-1, 0)), true
-	case "k", "up":
-		m.threadSel, m.threadFollow = max(m.threadSel-1, 0), true
-	case "ctrl+d", "pgdown":
-		m.threadTop += max(m.height/2, 1)
-	case "ctrl+u", "pgup":
-		m.threadTop = max(m.threadTop-max(m.height/2, 1), 0)
-	case "r":
-		if ok {
-			m.threadAction(d, "resolve")
-		}
-	case "o":
-		if ok {
-			m.threadAction(d, "reply and keep open")
-		}
-	case "a":
-		switch {
-		case !ok:
-		case t.Proposed == "":
-			m.status = "the agent has not assessed this thread yet"
-		default:
-			m.threadAction(d, "take the agent's")
-		}
-	case "u":
-		if ok {
-			m.threadAction(d, "undo the decision")
-		}
-	case "c", "enter":
-		if ok {
-			m.startCompose(inbox.KindMessage)
-			m.anchorFile, m.anchorLines, m.composeRef = "", "", 0
-			m.composeThread = d.ID
-		}
-	}
-	return nil
 }
 
 func (m *model) decideThread(id, verdict, reply string) {
@@ -250,9 +143,9 @@ func (m *model) threadCardItems(d state.Discussion) []string {
 		return []string{"discuss it with the agent"}
 	}
 	t := m.review.ThreadState(d)
-	items := []string{"resolve", "reply and keep open"}
+	items := []string{"resolve", "keep open and reply to the author"}
 	if t.Proposed != "" {
-		items = append(items, "take the agent's: "+verdictWord(t.Proposed))
+		items = append(items, "as the agent proposes: "+verdictWord(t.Proposed))
 	}
 	if t.Decided() {
 		items = append(items, "undo the decision")
@@ -293,7 +186,8 @@ func (m *model) threadCardModal(w int) modalContent {
 		}
 	}
 	if m.mine(d) {
-		body = append(body, "", "now: "+threadStatus(m.review, d, t))
+		label, _ := threadDecision(m.review, d, t)
+		body = append(body, "", "now: "+label)
 	}
 	body = append(body, "")
 	for i, it := range m.threadCardItems(d) {
@@ -327,11 +221,12 @@ func (m *model) threadAction(d state.Discussion, item string) {
 	switch {
 	case item == "resolve":
 		m.decideThread(d.ID, state.VerdictResolve, "")
-	case item == "reply and keep open":
+	case item == "keep open and reply to the author":
 		reply := cmp.Or(t.Reply, t.ProposedReply)
 		m.composing, m.composeKind, m.composeThread = true, kindThreadReply, d.ID
 		m.input, m.inputPos = []rune(reply), len([]rune(reply))
-	case strings.HasPrefix(item, "take the agent's"):
+		m.placeInline()
+	case strings.HasPrefix(item, "as the agent proposes"):
 		m.decideThread(d.ID, t.Proposed, t.ProposedReply)
 	case item == "undo the decision":
 		m.decideThread(d.ID, state.VerdictNone, "")
