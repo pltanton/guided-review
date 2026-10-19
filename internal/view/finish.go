@@ -276,7 +276,10 @@ func (m *model) cycleVerdict() {
 		m.autoVerdict = false
 		i := slices.Index(plan.Verdicts, p.Verdict)
 		next := plan.Verdicts[(i+1)%len(plan.Verdicts)]
-		m.prepare(next, p.Approve && next == "approve")
+		if next == plan.VerdictApprove && len(m.review.OpenThreads()) > 0 {
+			next = plan.Verdicts[(i+2)%len(plan.Verdicts)]
+		}
+		m.prepare(next, p.Approve && next == plan.VerdictApprove)
 	}
 }
 
@@ -286,13 +289,19 @@ func (m *model) toggleApprove() {
 	case p == nil:
 	case m.review.MR == nil:
 		m.status = "approve needs a merge request"
+	case p.Approve:
+		m.prepare(p.Verdict, false)
+	case len(m.review.OpenThreads()) > 0:
+		m.status = "approve waits for your open threads: " +
+			strings.Join(m.review.OpenThreads(), " ") + " (" + m.keys().key("replies") + ")"
 	default:
-		m.prepare(p.Verdict, !p.Approve)
+		m.prepare(plan.VerdictApprove, true)
 	}
 }
 
 func (m *model) prepare(verdict string, approve bool) {
-	if !m.runPrepare(verdict, approve, m.review.Publish.Decisions, false) {
+	partial := len(plan.Gate(m.review)) > 0
+	if !m.runPrepare(verdict, approve, m.review.Publish.Decisions, partial) {
 		return
 	}
 	m.status = "verdict: " + ansi.Strip(verdictStyle(verdict))

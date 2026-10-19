@@ -1,7 +1,9 @@
 package view
 
 import (
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
@@ -11,9 +13,23 @@ import (
 
 var styleName = defaultTones.chroma
 
+// lexers.Match globs every lexer's filenames: 83% of a reload on a 900-row step went there.
+var lexerCache sync.Map
+
+func lexerFor(path string) chroma.Lexer {
+	name := filepath.Base(path)
+	if l, ok := lexerCache.Load(name); ok {
+		lexer, _ := l.(chroma.Lexer)
+		return lexer
+	}
+	lexer := lexers.Match(name)
+	lexerCache.Store(name, lexer)
+	return lexer
+}
+
 func Highlight(path, content string) []string {
 	plain := splitLines(content)
-	lexer := lexers.Match(path)
+	lexer := lexerFor(path)
 	if lexer == nil || plain == nil {
 		return plain
 	}

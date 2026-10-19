@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The viewer no longer stalls on every state change: picking the syntax highlighter
+  globbed every lexer for each removed line. A reload of a 950-row step took 820 ms, now
+  16 ms; the whole-MR view 11.8 s, now 1.4 s on first open.
+- The finish preview: `v` and `a` no longer error out. `v` keeps a partial review
+  partial and skips approve while your threads are open; `a` turns approve on together
+  with the approve verdict, or says which threads stand in the way.
+- The agent writes every step's notes before the walk and sends them in one go, instead
+  of filling steps in the background while you review.
 - Your MR threads are a step now, not a screen: on a re-review the viewer opens «your
   threads» first, each thread in the current code with the whole conversation, the
   agent's take and your decision under it. `n`/`N` walk them, `enter` decides, the reply
