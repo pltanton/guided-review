@@ -8,8 +8,9 @@
 - The finish preview: `v` and `a` no longer error out. `v` keeps a partial review
   partial and skips approve while your threads are open; `a` turns approve on together
   with the approve verdict, or says which threads stand in the way.
-- The agent writes every step's notes before the walk and sends them in one go, instead
-  of filling steps in the background while you review.
+- The plan arrives whole again: the agent reads every step and sends route and notes in
+  one `gr plan set`, so you never walk steps the notes have not reached. `gr plan set
+  --route` and `gr plan fill` are gone.
 - Your MR threads are a step now, not a screen: on a re-review the viewer opens «your
   threads» first, each thread in the current code with the whole conversation, the
   agent's take and your decision under it. `n`/`N` walk them, `enter` decides, the reply

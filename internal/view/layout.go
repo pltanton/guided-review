@@ -313,9 +313,6 @@ func (m *model) stepTitle(st *state.Step) string {
 	if m.review.Round > 1 {
 		left += dimStyle.Render(fmt.Sprintf(" · round %d", m.review.Round))
 	}
-	if m.review.Filling && st.Message == "" && !isExtra(st.ID) {
-		left += hotStyle.Render("  " + m.spin() + " agent is writing notes")
-	}
 	if total, unseen := m.changeCounts(); total > 0 && unseen == 0 {
 		left += addStyle.Render("  ✓ seen")
 	} else if total > 0 {

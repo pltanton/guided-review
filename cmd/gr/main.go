@@ -23,8 +23,7 @@ review
                        against BASE itself when they share no history; --base: BRANCH only
   status [--gate]
   hunks
-  plan set [--route] [-f FILE]...   --route: a plan without explanations yet
-  plan fill [-f FILE]...            the explanations for steps of a --route plan
+  plan set [-f FILE]...
   step [show [ID] | next | skip --reason TEXT | goto ID | check [--undo] ID N]
   comment add --file F --lines N[-M] --severity S [--step ID] [--suggestion TEXT] BODY...
   comment list | resolve ID | delete ID | edit ID [--severity S] TEXT...
