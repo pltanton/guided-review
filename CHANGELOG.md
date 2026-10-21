@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `P` on a round that is already published did nothing; it now says so.
 - FLOW is gone; the code follows the cursor instead. The line under the step title shows
   the class and function you are in and who calls that function (`+N` for the ones that
   do not fit); HERE under the files shows the hover of the word under the cursor.

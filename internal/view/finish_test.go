@@ -87,6 +87,17 @@ func TestPreviewPartialAndOpenThreads(t *testing.T) {
 	}
 }
 
+func TestFinishWithNothingNew(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Round = 2
+	m.review.Publish = &state.PublishPlan{Verdict: "changes"}
+	m.runGr = func(args ...string) (string, error) { return "", nil }
+	m.Update(key("P"))
+	if m.preview != "" || !strings.Contains(m.status, "round 2 is published already") {
+		t.Fatalf("P with nothing new says so instead of doing nothing: %q", m.status)
+	}
+}
+
 func TestPreviewApproveNeedsMR(t *testing.T) {
 	m, ran := finishModel(t, false)
 	if v := ansi.Strip(m.View()); strings.Contains(v, "a approve") {

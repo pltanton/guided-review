@@ -916,11 +916,15 @@ func (m *model) finish() tea.Cmd {
 	}
 	if m.preview == "" {
 		out, err := m.runGr("export", "--dry-run")
-		if err != nil {
+		switch {
+		case err != nil:
 			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
-			return nil
+		case strings.TrimSpace(out) == "":
+			m.status = fmt.Sprintf("round %d is published already: a new comment or verdict goes out with %s",
+				max(m.review.Round, 1), m.keys().key("finish"))
+		default:
+			m.preview, m.previewTop = out, 0
 		}
-		m.preview, m.previewTop = out, 0
 		return nil
 	}
 	out, err := m.runGr("export")
