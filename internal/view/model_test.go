@@ -16,6 +16,7 @@ import (
 	"github.com/pltanton/guided-review/internal/config"
 	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/lsp"
 	"github.com/pltanton/guided-review/internal/state"
 	"github.com/pltanton/guided-review/internal/testrepo"
 )
@@ -1776,22 +1777,48 @@ func TestHeaderOneLine(t *testing.T) {
 	}
 }
 
-func TestFlowSection(t *testing.T) {
+func TestHerePanel(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.width = 160
-	m.height = 40
-	m.Update(flowMsg{step: "s2", entries: []flowEntry{{name: "ignored"}}})
-	if m.flow != nil {
-		t.Fatal("flow of another step is dropped")
+	m.width, m.height = 160, 40
+	var asked []string
+	m.hereDo = func(r hereReq) tea.Cmd {
+		asked = append(asked, fmt.Sprintf("%s %s:%d:%d", r.kind, r.file, r.line, r.char))
+		return nil
 	}
-	m.Update(flowMsg{step: "s1", entries: []flowEntry{
-		{name: "reserve", in: []string{"Handle", "Retry"}, out: []string{"Insert"}},
+	m.cursor = 4
+	m.Update(key("w"))
+	if len(asked) != 1 || asked[0] != "symbols a.go:0:0" {
+		t.Fatalf("the file's symbols are asked once the cursor lands on it: %v", asked)
+	}
+	m.Update(hereMsg{req: hereReq{kind: "symbols", file: "a.go"}, syms: []lsp.Symbol{
+		{Name: "Wallet", Kind: "class", Line: 0, End: 20},
+		{Name: "Reserve", Kind: "method", Line: 1, Char: 6, End: 5, Depth: 1},
 	}})
+	if asked[len(asked)-1] != "callers a.go:1:6" {
+		t.Fatalf("the callers of the function around the cursor are asked: %v", asked)
+	}
+	m.Update(hereMsg{req: hereReq{kind: "callers", file: "a.go", line: 1, char: 6},
+		callers: []string{"Handle", "Retry"}})
+	m.Update(hereTickMsg{m.here.seq})
+	if !strings.HasPrefix(asked[len(asked)-1], "hover a.go:3:") {
+		t.Fatalf("the word under the cursor is hovered once the cursor rests: %v", asked)
+	}
+	m.Update(hereMsg{req: hereReq{kind: "hover", file: "a.go", line: 3},
+		hover: "```go\nfunc (w *Wallet) Reserve(amt int) error\n```\nReserve holds amt."})
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"FLOW", "reserve", "← Handle", "← Retry", "→ Insert"} {
+	for _, want := range []string{"HERE", "a.go:3", "Wallet · class", "› Reserve · method",
+		"← Handle · Retry", "func (w *Wallet)", "Reserve(amt int) error", "Reserve holds amt."} {
 		if !strings.Contains(v, want) {
-			t.Fatalf("plan pane lacks %q:\n%s", want, v)
+			t.Fatalf("HERE lacks %q:\n%s", want, v)
 		}
+	}
+	m.Update(key("G"))
+	m.Update(key("k"))
+	m.Update(hereTickMsg{m.here.seq})
+	v = ansi.Strip(m.View())
+	if strings.Contains(v, "Reserve · method") || strings.Contains(v, "← Handle") ||
+		strings.Contains(v, "Reserve holds amt.") {
+		t.Fatalf("outside Reserve the panel shows only Wallet, with no stale hover:\n%s", v)
 	}
 }
 
@@ -1879,21 +1906,6 @@ func TestCheckOffRisk(t *testing.T) {
 	}
 }
 
-func TestLSPRefreshCycle(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.lspDo = func(string, string, int, int) tea.Cmd { return nil }
-	m.lspStep = "s1"
-	if _, cmd := m.Update(lspRefreshMsg{step: "s2", attempt: 2}); cmd != nil {
-		t.Fatal("a refresh for a step no longer open is dropped")
-	}
-	if _, cmd := m.Update(lspRefreshMsg{step: "s1", attempt: 2}); cmd == nil {
-		t.Fatal("the open step keeps asking the language server while it warms up")
-	}
-	if m.refreshLSPLater(lspRefreshes+1) != nil {
-		t.Fatal("refreshing stops after the last attempt")
-	}
-}
-
 func TestChangedLinesTinted(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.cursor = 0
@@ -1960,22 +1972,6 @@ func TestInputCursorKeepsText(t *testing.T) {
 	}
 	if got := ansi.Strip(withCursor(m.input, 8)); got != "проблемы█" {
 		t.Fatalf("at the end the cursor is a block: %q", got)
-	}
-}
-
-func TestFlowCompact(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.width = 160
-	m.height = 40
-	calls := []string{"RepositoryMetrics.operation(String, Function)", "RepositoryMetrics.operation(String)"}
-	for i := range 6 {
-		calls = append(calls, fmt.Sprintf("Repo.find%d", i))
-	}
-	m.flow = []flowEntry{{name: "save", out: calls}}
-	v := ansi.Strip(m.View())
-	if strings.Contains(v, "(String") || !strings.Contains(v, "→ operation · Repositor") ||
-		strings.Count(v, "→ operation") != 1 || !strings.Contains(v, "+3 more") {
-		t.Fatalf("calls show method first, no parameters, deduped and capped:\n%s", v)
 	}
 }
 

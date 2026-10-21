@@ -122,6 +122,8 @@ type model struct {
 	jumpFrom     *line
 	lspTarget    *lspLoc
 	lspDo        func(kind, file string, line, col int) tea.Cmd
+	hereDo       func(hereReq) tea.Cmd
+	here         hereState
 	peekFile     func(path string) []string
 	lspBusy      string
 	lsp          *lspManager
@@ -158,9 +160,7 @@ type model struct {
 	approvePick   int
 	autoVerdict   bool
 	gateSel       int
-	lspStep       string
 	seen          map[seenKey]bool
-	flow          []flowEntry
 	rawSeverity   state.Severity
 	anchorFile    string
 	anchorLines   string
@@ -206,6 +206,7 @@ func newModel(ctx context.Context, o Options) *model {
 		m.newsFile = filepath.Join(dir, "guided-review", "seen-version")
 	}
 	m.lspDo = m.defaultLSP
+	m.hereDo = m.defaultHere
 	m.runGr = func(args ...string) (string, error) {
 		bin, err := os.Executable()
 		if err != nil {
@@ -519,23 +520,18 @@ func (m *model) refreshAgent() {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
-	if m.step != nil && m.lspDo != nil && m.lspStep != m.step.ID && !isExtra(m.step.ID) {
-		m.lspStep, m.flow = m.step.ID, nil
-		cmd = tea.Batch(cmd, m.fetchFlow(), m.refreshLSPLater(1))
-	}
-	return m, cmd
+	return m, tea.Batch(cmd, m.followHere())
 }
 
 func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case lspRefreshMsg:
-		if m.step == nil || msg.step != m.step.ID || m.lspDo == nil {
-			return m, nil
-		}
-		return m, tea.Batch(m.fetchFlow(), m.refreshLSPLater(msg.attempt+1))
-	case flowMsg:
-		if m.step != nil && msg.step == m.step.ID {
-			m.flow = msg.entries
+	case hereMsg:
+		return m, m.handleHere(msg)
+	case hereTickMsg:
+		return m, m.hereTick(msg.seq)
+	case hereRetryMsg:
+		if msg.req.file == m.here.file && m.hereDo != nil {
+			return m, m.hereDo(msg.req)
 		}
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height

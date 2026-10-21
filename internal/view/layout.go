@@ -786,7 +786,7 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 	if len(files) == 0 {
 		return nil
 	}
-	flow := m.flowEntries(row, plain)
+	flow := m.hereEntries(w, row, plain)
 	limit := max(h/2, 4)
 	if !m.chatOpen() {
 		limit = max(h-collapsedChatRows-4, 4)
@@ -930,46 +930,6 @@ func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([
 	return out, at
 }
 
-func (m *model) flowEntries(row rowFunc, plain func(string) string) []sideEntry {
-	if len(m.flow) == 0 {
-		return nil
-	}
-	n := dimStyle.Render(fmt.Sprint(len(m.flow)))
-	out := []sideEntry{{}, {text: plain(row(labelStyle.Render("FLOW"), n))}}
-	calls := func(arrow string, names []string) {
-		var seen []string
-		for _, n := range names {
-			n, _, _ = strings.Cut(n, "(")
-			if slices.Contains(seen, n) {
-				continue
-			}
-			seen = append(seen, n)
-			if len(seen) > maxFlowCalls {
-				continue
-			}
-			cls, method := "", n
-			if i := strings.LastIndex(n, "."); i > 0 {
-				cls, method = n[:i], n[i+1:]
-			}
-			text := dimStyle.Render("  "+arrow+" ") + textTone.fg().Render(method)
-			if cls != "" {
-				text += faintTone.fg().Render(" · " + cls)
-			}
-			out = append(out, sideEntry{text: plain(row(text, ""))})
-		}
-		if extra := len(seen) - maxFlowCalls; extra > 0 {
-			more := dimStyle.Render(fmt.Sprintf("    +%d more", extra))
-			out = append(out, sideEntry{text: plain(row(more, ""))})
-		}
-	}
-	for _, f := range m.flow {
-		out = append(out, sideEntry{text: plain(row(boldStyle.Render(f.name), ""))})
-		calls("←", f.in)
-		calls("→", f.out)
-	}
-	return out
-}
-
 func renderUnified(r Row) string {
 	switch r.Kind {
 	case RowFile:
@@ -1017,8 +977,7 @@ func emphasize(text string, emph [][2]int, kind RowKind) string {
 }
 
 const (
-	noteIndent   = 1 + 7 + 2
-	maxFlowCalls = 4
+	noteIndent = 1 + 7 + 2
 )
 
 type noteKind struct {

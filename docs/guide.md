@@ -90,8 +90,11 @@ marked as moved, whitespace-only changes and renames are marked instead of highl
 and only the changed words inside a line are coloured. Long lines wrap under the code
 column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
 instead, and `h`/`l` scroll sideways. With a language server you get
-definitions, references, implementations, callers (`g` lists them), and a call flow for
-the step under its files. Results open over the code; `/` filters a list, `esc` closes.
+definitions, references, implementations, callers (`g` lists them). A target the step
+shows moves the cursor there (`C-o` back, `S-enter` peeks anyway); others open over the
+code, where `/` searches and `esc` closes. Under the files, HERE follows the cursor: the
+class and function you are in, who calls that function, and the type of the word under
+the cursor.
 
 </details>
 

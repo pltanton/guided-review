@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- FLOW is replaced by HERE, which follows the cursor: the class and function you are in,
+  who calls that function, and the hover of the word under the cursor.
 - LSP: a definition (or a list item) that this step shows moves the cursor there instead
   of opening a peek; `C-o` goes back, `S-enter` peeks anyway. LSP windows say so: an
   `LSP` badge in the statusline and `LSP ·` in the title.

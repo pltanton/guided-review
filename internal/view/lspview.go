@@ -859,21 +859,6 @@ const (
 	lspRefreshes = 8
 )
 
-type lspRefreshMsg struct {
-	step    string
-	attempt int
-}
-
-func (m *model) refreshLSPLater(attempt int) tea.Cmd {
-	if attempt > lspRefreshes {
-		return nil
-	}
-	step := m.step.ID
-	return tea.Tick(lspRefresh, func(time.Time) tea.Msg {
-		return lspRefreshMsg{step: step, attempt: attempt}
-	})
-}
-
 var agentKinds = map[string]bool{"note": true, "spec": true, "hotspot": true}
 
 func symbolLocs(root, file string, syms []lsp.Symbol) []lspLoc {
@@ -904,82 +889,4 @@ func (m *model) markChanged(locs []lspLoc) {
 		}
 		locs[i].Text = mark + l.Text
 	}
-}
-
-const maxFlow = 6
-
-var callableKinds = map[string]bool{"func": true, "method": true, "constructor": true}
-
-type flowEntry struct {
-	name    string
-	in, out []string
-}
-
-type flowMsg struct {
-	step    string
-	entries []flowEntry
-}
-
-func (m *model) fetchFlow() tea.Cmd {
-	mgr, root, parent, step := m.manager(), m.codeDir(), m.ctx, m.step.ID
-	changed := map[string][][2]int{}
-	for _, h := range m.step.Hunks {
-		if _, done := changed[h.File]; done || m.src == nil {
-			continue
-		}
-		fd, err := m.src.FileDiff(h.File)
-		if err != nil {
-			continue
-		}
-		for _, dh := range fd.Hunks {
-			changed[h.File] = append(changed[h.File], [2]int{dh.NewStart, dh.NewEnd()})
-		}
-	}
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, lspWait)
-		defer cancel()
-		var entries []flowEntry
-		for file, ranges := range changed {
-			abs := filepath.Join(root, file)
-			c, lang, err := mgr.client(ctx, abs)
-			if err != nil {
-				continue
-			}
-			content, err := os.ReadFile(abs)
-			if err != nil {
-				continue
-			}
-			mgr.open(c, abs, lang, string(content))
-			syms, err := c.DocumentSymbols(ctx, abs)
-			if err != nil {
-				continue
-			}
-			for _, s := range syms {
-				touched := slices.ContainsFunc(ranges, func(r [2]int) bool {
-					return r[0] <= s.End+1 && s.Line+1 <= r[1]
-				})
-				if !callableKinds[s.Kind] || !touched || len(entries) >= maxFlow {
-					continue
-				}
-				in, out, err := c.Calls(ctx, abs, s.Line, s.Char)
-				if err != nil {
-					continue
-				}
-				e := flowEntry{name: s.Name, in: callNames(root, in), out: callNames(root, out)}
-				entries = append(entries, e)
-			}
-		}
-		return flowMsg{step: step, entries: entries}
-	}
-}
-
-func callNames(root string, calls []lsp.Call) []string {
-	var names []string
-	for _, c := range calls {
-		inside := strings.HasPrefix(c.Path, root+string(filepath.Separator))
-		if inside && !slices.Contains(names, c.Name) {
-			names = append(names, c.Name)
-		}
-	}
-	return names
 }
