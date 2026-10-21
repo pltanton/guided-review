@@ -159,7 +159,7 @@ func (m *model) handleHere(msg hereMsg) tea.Cmd {
 		}
 		return m.askCallers()
 	case "hover":
-		if fmt.Sprintf("%s:%d", msg.req.file, msg.req.line) == m.hereLine() {
+		if fmt.Sprintf("%s:%d", msg.req.file, msg.req.line) == m.hereAt() {
 			m.here.hover, m.here.hoverKey = msg.hover, m.here.key
 		}
 	case "callers":
@@ -172,7 +172,7 @@ func (m *model) handleHere(msg hereMsg) tea.Cmd {
 
 type hereRetryMsg struct{ req hereReq }
 
-func (m *model) hereLine() string {
+func (m *model) hereAt() string {
 	cur := m.current()
 	return fmt.Sprintf("%s:%d", cur.File, cur.Line)
 }
@@ -202,41 +202,58 @@ func (m *model) hereFunc() (lsp.Symbol, bool) {
 	return lsp.Symbol{}, false
 }
 
-func (m *model) hereEntries(w int, row rowFunc, plain func(string) string) []sideEntry {
+func (m *model) hereBar(w int) string {
 	chain := m.hereChain()
-	hover := ""
-	if m.here.hoverKey == m.here.key {
-		hover = m.here.hover
+	if len(chain) == 0 {
+		return ""
 	}
-	if len(chain) == 0 && hover == "" {
+	var parts []string
+	for i, s := range chain {
+		name := s.Name
+		if j := strings.LastIndex(name, ")."); j > 0 {
+			name = name[j+2:]
+		}
+		if i == len(chain)-1 {
+			name = boldStyle.Render(name)
+		}
+		parts = append(parts, name)
+	}
+	bar := strings.Join(parts, dimStyle.Render(" › "))
+	if _, ok := m.hereFunc(); ok && len(m.here.callers) > 0 {
+		callers := dimStyle.Render("  ← ")
+		for i, c := range m.here.callers {
+			more := ""
+			if rest := len(m.here.callers) - i - 1; rest > 0 {
+				more = fmt.Sprintf(" +%d", rest)
+			}
+			next := c
+			if i > 0 {
+				next = " · " + c
+			}
+			if ansi.StringWidth(bar+callers+next+more) > w {
+				callers += dimStyle.Render(fmt.Sprintf(" +%d", len(m.here.callers)-i))
+				break
+			}
+			callers += textTone.fg().Render(next)
+		}
+		bar += callers
+	}
+	return ansi.Truncate(bar, w, "…")
+}
+
+func (m *model) hereEntries(w int, row rowFunc, plain func(string) string) []sideEntry {
+	if m.here.hoverKey != m.here.key {
 		return nil
 	}
-	cur := m.current()
-	where := dimStyle.Render(fmt.Sprintf("%s:%d", filepath.Base(cur.File), cur.Line))
-	out := []sideEntry{{}, {text: plain(row(labelStyle.Render("HERE"), where))}}
-	add := func(text string) { out = append(out, sideEntry{text: plain(row(text, ""))}) }
-	for i, s := range chain {
-		lead := strings.Repeat(" ", i)
-		if i > 0 {
-			lead = strings.Repeat(" ", i-1) + dimStyle.Render("› ")
-		}
-		name, kind := s.Name, s.Kind
-		if i := strings.LastIndex(name, ")."); i > 0 {
-			name, kind = name[i+2:], kind+" "+name[:i+1]
-		}
-		add(lead + boldStyle.Render(name) + faintTone.fg().Render(" · "+kind))
+	lines := hoverLines(m.here.hover)
+	if len(lines) == 0 {
+		return nil
 	}
-	if n := len(m.here.callers); n > 0 {
-		names := m.here.callers[:min(n, maxHereCallers)]
-		text := dimStyle.Render("← ") + textTone.fg().Render(strings.Join(names, " · "))
-		if n > maxHereCallers {
-			text += dimStyle.Render(fmt.Sprintf(" +%d", n-maxHereCallers))
-		}
-		add(text)
-	}
-	for _, l := range hoverLines(hover) {
+	word := m.here.key[strings.LastIndex(m.here.key, ":")+1:]
+	out := []sideEntry{{}, {text: plain(row(labelStyle.Render("HERE"), dimStyle.Render(word)))}}
+	for _, l := range lines {
 		for _, part := range strings.Split(ansi.Wrap(l, max(w-3, 10), ""), "\n") {
-			add(codeStyle.Render(part))
+			out = append(out, sideEntry{text: plain(row(codeStyle.Render(part), ""))})
 		}
 	}
 	return out

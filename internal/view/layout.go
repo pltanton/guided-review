@@ -347,11 +347,18 @@ func (m *model) stepTitle(st *state.Step) string {
 
 func (m *model) separator() string {
 	w := max(m.mainWidth(), 1)
-	if m.offset == 0 {
-		return dimStyle.Render(strings.Repeat("─", w))
+	right := ""
+	if m.offset > 0 {
+		right = fmt.Sprintf(" ↑ %d lines above ──", m.offset)
 	}
-	label := fmt.Sprintf("── ↑ %d lines above ", m.offset)
-	return dimStyle.Render(label + strings.Repeat("─", max(w-ansi.StringWidth(label), 0)))
+	left := "──"
+	if bar := m.hereBar(w - ansi.StringWidth(left+right) - 4); bar != "" {
+		left = dimStyle.Render("── ") + bar + " "
+	} else {
+		left = dimStyle.Render(left)
+	}
+	fill := max(w-ansi.StringWidth(left)-ansi.StringWidth(right), 0)
+	return left + dimStyle.Render(strings.Repeat("─", fill)+right)
 }
 
 type chatLine struct {

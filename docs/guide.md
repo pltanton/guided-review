@@ -92,9 +92,9 @@ column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts t
 instead, and `h`/`l` scroll sideways. With a language server you get
 definitions, references, implementations, callers (`g` lists them). A target the step
 shows moves the cursor there (`C-o` back, `S-enter` peeks anyway); others open over the
-code, where `/` searches and `esc` closes. Under the files, HERE follows the cursor: the
-class and function you are in, who calls that function, and the type of the word under
-the cursor.
+code, where `/` searches and `esc` closes. The line under the step title follows the
+cursor: the class and function you are in and who calls that function; HERE under the
+files shows the type and docs of the word under the cursor.
 
 </details>
 

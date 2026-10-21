@@ -1806,8 +1806,8 @@ func TestHerePanel(t *testing.T) {
 	m.Update(hereMsg{req: hereReq{kind: "hover", file: "a.go", line: 3},
 		hover: "```go\nfunc (w *Wallet) Reserve(amt int) error\n```\nReserve holds amt."})
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"HERE", "a.go:3", "Wallet · class", "› Reserve · method",
-		"← Handle · Retry", "func (w *Wallet)", "Reserve(amt int) error", "Reserve holds amt."} {
+	for _, want := range []string{"── Wallet › Reserve  ← Handle · Retry ──", "HERE",
+		"func (w *Wallet)", "Reserve(amt int) error", "Reserve holds amt."} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("HERE lacks %q:\n%s", want, v)
 		}
@@ -1816,9 +1816,18 @@ func TestHerePanel(t *testing.T) {
 	m.Update(key("k"))
 	m.Update(hereTickMsg{m.here.seq})
 	v = ansi.Strip(m.View())
-	if strings.Contains(v, "Reserve · method") || strings.Contains(v, "← Handle") ||
+	if !strings.Contains(v, "── Wallet ──") || strings.Contains(v, "← Handle") ||
 		strings.Contains(v, "Reserve holds amt.") {
-		t.Fatalf("outside Reserve the panel shows only Wallet, with no stale hover:\n%s", v)
+		t.Fatalf("outside Reserve the bar shows only Wallet, with no stale hover:\n%s", v)
+	}
+	m.cursor = 4
+	m.here.callers = []string{"TestIntakeSuccessParking", "TestIntakeRejectsNegative",
+		"TestIntakeRetriesTimeout", "NewFSM", "Handle"}
+	m.width = 90
+	bar := ansi.Strip(m.separator())
+	if !strings.Contains(bar, "← TestIntakeSuccessParking") || !strings.Contains(bar, " +") ||
+		strings.Contains(bar, "…") {
+		t.Fatalf("callers that do not fit end in +N, not a cut name: %q", bar)
 	}
 }
 
