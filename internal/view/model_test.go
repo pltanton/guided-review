@@ -2030,13 +2030,30 @@ func TestThreadsStep(t *testing.T) {
 		{ID: "d2", Author: "me", Body: "**nit** spacing", Resolvable: true,
 			Notes: []state.Note{{Author: "me", Body: "**nit** spacing"}}},
 	}
-	m.review.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
-		Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
 	m.store = state.Store{Dir: t.TempDir(), Key: "k"}
 	if err := m.store.Save(m.review); err != nil {
 		t.Fatal(err)
 	}
 	if err := m.store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.height = 60
+	m.reload()
+	if m.step.ID != "s1" {
+		t.Fatalf("threads wait for the agent's assessment: %s", m.step.ID)
+	}
+	m.Update(key("R"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "agent is checking the reply") {
+		t.Fatalf("an unassessed thread says the agent is on it:\n%s", v)
+	}
+	m.Update(key("esc"))
+	m.threadsShown = false
+	err := m.store.UpdateCurrent(func(r *state.Review) error {
+		r.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
+			Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
+		return nil
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	saved := func() state.Thread {
@@ -2047,15 +2064,15 @@ func TestThreadsStep(t *testing.T) {
 		}
 		return r.ThreadState(r.Discussions[0])
 	}
-	m.height = 60
 	m.reload()
 	if m.step == nil || m.step.ID != extraThreads {
-		t.Fatalf("an answered thread opens the threads step first: %+v", m.step)
+		t.Fatalf("an assessed thread opens the threads step first: %+v", m.step)
 	}
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"your threads · 2", "L5", "@alice", "zero is expected",
+	for _, want := range []string{"your threads · 1 to decide", "answered 1 of your 2 open threads",
+		"L5", "@alice", "zero is expected",
 		"AGENT · keep open?", "reply it suggests: please return an error", "DECIDE",
-		"general · nit spacing", "NO REPLY", "end of your threads · 2"} {
+		"general · nit spacing", "NO ANSWER YET", "end of your threads · enter → on to the review, s1"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("threads step misses %q:\n%s", want, v)
 		}
@@ -2074,6 +2091,9 @@ func TestThreadsStep(t *testing.T) {
 	if th := saved(); !th.Decided() || th.Verdict != state.VerdictOpen ||
 		th.Reply != "please return an error" || th.DecidedBy != state.DecidedByViewer {
 		t.Fatalf("3 takes the agent's proposal: %+v", th)
+	}
+	if !strings.Contains(m.status, "all answered threads decided") {
+		t.Fatalf("the last decision says what is next: %q", m.status)
 	}
 	onDecision()
 	m.Update(key("enter"))
@@ -2101,6 +2121,10 @@ func TestThreadsStep(t *testing.T) {
 	m.Update(key("R"))
 	if m.step.ID != extraThreads {
 		t.Fatalf("R opens the threads step: %s", m.step.ID)
+	}
+	m.Update(key(">"))
+	if m.step.ID != "s1" {
+		t.Fatalf("> leaves the threads for the review: %s", m.step.ID)
 	}
 }
 

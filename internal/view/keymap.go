@@ -389,6 +389,8 @@ func (m *model) back() tea.Cmd {
 		m.visual = false
 	case m.search != "":
 		m.search = ""
+	case m.viewStep == extraThreads:
+		m.leaveThreads()
 	case m.viewStep != "":
 		return m.showStep(m.review.Current)
 	}

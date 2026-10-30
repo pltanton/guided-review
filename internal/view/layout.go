@@ -156,8 +156,8 @@ func (m *model) cursorHint() string {
 		return fmt.Sprintf("%s edit, S-tab there: severity · %s%s delete · %s reply · %s fold",
 			k.key("edit-comment"), del, del, k.key("message"), k.key("open"))
 	case cur.Thread != "" && m.step != nil && m.step.ID == extraThreads:
-		return fmt.Sprintf("%s decide · %s/%s next/previous thread · %s chat about it",
-			k.key("act"), k.key("next-note"), k.key("prev-note"), k.key("message"))
+		return fmt.Sprintf("%s decide · %s/%s next/previous thread · %s chat about it · %s review",
+			k.key("act"), k.key("next-note"), k.key("prev-note"), k.key("message"), k.key("next"))
 	case cur.Thread != "":
 		return k.key("act") + " open the thread · " + k.key("replies") + " all your threads"
 	case cur.Risk > 0:

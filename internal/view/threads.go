@@ -3,6 +3,7 @@ package view
 import (
 	"cmp"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,44 @@ func (m *model) pendingThreads() int {
 	return n
 }
 
+func (m *model) assessing(d state.Discussion) bool {
+	t := m.review.ThreadState(d)
+	return m.review.Answered(d) && !t.Decided() && t.Proposed == "" &&
+		!m.agentWaiting && !m.agentIdle
+}
+
+func (m *model) threadsDue() bool {
+	return !m.threadsShown && m.viewStep == "" && m.pendingThreads() > 0 &&
+		(len(m.review.Steps) == 0 || m.review.Current == m.review.Steps[0].ID) &&
+		!slices.ContainsFunc(m.myThreads(), m.assessing)
+}
+
+func (m *model) leaveThreads() {
+	if m.review.Step(m.review.Current) == nil {
+		m.status = "the agent is still planning the round · your threads stay here meanwhile"
+		return
+	}
+	m.showStep(m.review.Current)
+}
+
+func (m *model) threadsIntro() Note {
+	k, answered := m.keys(), 0
+	for _, d := range m.myThreads() {
+		if m.review.Answered(d) {
+			answered++
+		}
+	}
+	text := fmt.Sprintf("The author answered %d of your %d open threads. For each: read the reply "+
+		"and the agent's take, then %s — resolve, or keep it open with a reply. Nothing reaches "+
+		"the MR before you publish. %s goes on to the review.",
+		answered, len(m.myThreads()), k.key("act"), k.key("next"))
+	label := "YOUR THREADS"
+	if m.review.Round > 1 {
+		label = fmt.Sprintf("ROUND %d", m.review.Round)
+	}
+	return Note{Top: true, Kind: "note", Label: label, Text: text}
+}
+
 func (m *model) openThreads() {
 	if len(m.myThreads()) == 0 {
 		m.status = "no open threads of yours on the MR"
@@ -44,7 +83,7 @@ func (m *model) openThreads() {
 
 func (m *model) threadNotes() []Note {
 	r := m.review
-	var out []Note
+	out := []Note{m.threadsIntro()}
 	for _, d := range m.myThreads() {
 		t := r.ThreadState(d)
 		add := func(kind, label, text string, dim bool) {
@@ -72,6 +111,9 @@ func (m *model) threadNotes() []Note {
 				add("mr", "@"+n.Author, text, false)
 			}
 		}
+		if m.assessing(d) {
+			add("pending", "", "agent is checking the reply against the code…", false)
+		}
 		if t.Assessment != "" {
 			text := t.Assessment
 			if t.ProposedReply != "" && !t.Decided() {
@@ -96,7 +138,7 @@ func threadDecision(r *state.Review, d state.Discussion, t state.Thread) (label,
 	case r.Answered(d):
 		return "DECIDE", "enter: resolve, or keep open and reply to the author"
 	}
-	return "NO REPLY", "the author has not answered yet · enter to resolve anyway"
+	return "NO ANSWER YET", "the author has not replied · enter to resolve anyway"
 }
 
 func verdictWord(v string) string {
@@ -116,6 +158,20 @@ func (m *model) decideThread(id, verdict, reply string) {
 	}
 	m.reload()
 	m.status = "thread " + verdictWord(verdict)
+	if m.step == nil || m.step.ID != extraThreads || verdict == state.VerdictNone {
+		return
+	}
+	found := m.seek(func(l line) bool {
+		if l.NoteKind != "hotspot" || !l.NoteHead || l.Thread == "" {
+			return false
+		}
+		d := m.review.Discussion(l.Thread)
+		return d != nil && m.review.Answered(*d) && !m.review.ThreadState(*d).Decided()
+	})
+	if !found {
+		m.status = "all answered threads decided · " + m.keys().key("next") + " on to the review"
+	}
+	m.clamp()
 }
 
 func (m *model) threadBadge(d state.Discussion) (label string, resolved bool) {

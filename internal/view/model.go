@@ -248,7 +248,7 @@ func (m *model) reload() {
 		prev = m.step.ID
 	}
 	m.review, m.err = r, nil
-	if !m.threadsShown && m.pendingThreads() > 0 {
+	if m.threadsDue() {
 		m.threadsShown, m.viewStep = true, extraThreads
 	}
 	target := r.Current
@@ -406,6 +406,12 @@ func (m *model) relist() {
 }
 
 func (m *model) endText() string {
+	if m.viewStep == extraThreads {
+		if m.review.Step(m.review.Current) == nil {
+			return "end of your threads · the agent is still planning the round"
+		}
+		return "end of your threads · enter → on to the review, " + m.review.Current
+	}
 	if m.viewStep != "" {
 		name := m.step.ID
 		if isExtra(name) {
@@ -506,16 +512,25 @@ func (m *model) refreshAgent() {
 			m.rebuild(false)
 		}
 	}
+	stopped := m.agentWaiting || m.agentIdle
 	if inbox.Waiting(m.store.ReviewDir(m.review.ID)) {
 		m.agentWaiting, m.agentIdle = true, false
-		return
+	} else {
+		idle, ok := inbox.IdleSince(m.store.ReviewDir(m.review.ID))
+		m.agentIdle = ok && idle.After(m.lastWait)
+		if m.agentWaiting || m.agentSince.IsZero() {
+			m.agentSince = m.clock()
+		}
+		m.agentWaiting = false
 	}
-	idle, ok := inbox.IdleSince(m.store.ReviewDir(m.review.ID))
-	m.agentIdle = ok && idle.After(m.lastWait)
-	if m.agentWaiting || m.agentSince.IsZero() {
-		m.agentSince = m.clock()
+	switch {
+	case m.threadsDue():
+		m.threadsShown = true
+		m.showStep(extraThreads)
+	case stopped != (m.agentWaiting || m.agentIdle) && m.src != nil && m.step != nil &&
+		m.step.ID == extraThreads:
+		m.rebuild(false)
 	}
-	m.agentWaiting = false
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -693,7 +708,11 @@ func (m *model) extraSteps() []state.Step {
 				hunks = append(hunks, state.StepHunk{File: d.File, Lines: fmt.Sprint(d.Line)})
 			}
 		}
-		out = append(out, state.Step{ID: extraThreads, Title: fmt.Sprintf("your threads · %d", len(ds)),
+		title := fmt.Sprintf("your threads · %d", len(ds))
+		if n := m.pendingThreads(); n > 0 {
+			title = fmt.Sprintf("your threads · %d to decide", n)
+		}
+		out = append(out, state.Step{ID: extraThreads, Title: title,
 			Kind: "extra", Hunks: hunks, Status: state.StatusPending})
 	}
 	add := func(id, title string, hunks []state.StepHunk) {
@@ -780,6 +799,10 @@ func (m *model) shiftStep(d int) tea.Cmd {
 }
 
 func (m *model) next() {
+	if m.viewStep == extraThreads {
+		m.leaveThreads()
+		return
+	}
 	if m.viewStep != "" {
 		m.status = "viewing an earlier step: esc to return, then >"
 		return

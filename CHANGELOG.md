@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Re-review threads no longer trap you. The viewer waits for the agent's take on every
+  answered thread («agent is checking» until then) instead of asking you to decide
+  blind; a ROUND N note on top says what the step is for; deciding moves to the next
+  thread; `>` and `esc` go on to the review (`viewing an earlier step` used to block it
+  until every thread was decided and the viewer reopened). Undecided threads only hold
+  up publishing. The agent assesses threads before anything else and leaves published
+  comments to you instead of resolving them itself.
 - `P` on a round that is already published did nothing; it now says so.
 - FLOW is gone; the code follows the cursor instead. The line under the step title shows
   the class and function you are in and who calls that function (`+N` for the ones that

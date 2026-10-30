@@ -254,9 +254,11 @@ check off each open hotspot (`x`); `gr step show` marks the checked ones. You on
 
 1. The diff is only what changed since the last round (or, after a rebase or a merge
    of the target branch, the files whose patch changed). Open comments from earlier rounds are listed.
-2. First step, before any plan: check each open comment against the new code.
-   `gr comment resolve ID` when it is addressed; otherwise keep it open. `gr say` a
-   summary: resolved, still open, new questions.
+2. First step, before any plan: check each open comment against the new code. A comment
+   that went out to the MR is one of your threads: assess it as below and leave the
+   decision to the human. Only a comment that never reached the MR is yours to close:
+   `gr comment resolve ID` when it is addressed. `gr say` a summary: resolved, still
+   open, new questions.
 3. Then plan and walk only the round diff as usual.
 4. "carried, not reviewed in an earlier round: r1-s7 …" lists steps the last round left
    pending (a `--partial` finish, or stale after a blocker). gr appends them after your
@@ -270,16 +272,20 @@ check off each open hotspot (`x`); `gr step show` marks the checked ones. You on
 ## Your threads on the MR (`gr init` printed "your threads: …")
 
 The reviewer's own open threads, with every reply, are in `gr thread list`. The
-human decides each one; you prepare the decision. Before planning:
+human decides each one; you prepare the decision. Do this before anything else in the
+round, before reading the rest of the diff: the viewer holds the threads back, showing
+"agent is checking", until every answered thread has your assessment or you stop.
 
 1. For every thread read the replies and the current code at that line. Then
    `gr thread assess ID --propose resolve|open [--reply TEXT] - <<'EOF' … EOF`: one or two
    sentences — fixed (where), the answer convinces (why), or it does not (what is still
    wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
    author asked something; keep it to the style of a review comment.
-2. `gr say` one line per answered thread (`d1 a.go:5: not fixed, suggest keeping it open`)
-   and tell them the viewer opens their threads first (`R` brings them back). Decisions
-   are the human's: the viewer records them itself and there is no command for it.
+2. `gr say` one line per answered thread (`d1 a.go:5: not fixed, suggest keeping it open`).
+   The viewer opens the threads by itself once they are assessed; `>` leaves them for the
+   review and `R` brings them back. Undecided threads never block the walk, only
+   publishing. Decisions are the human's: the viewer records them itself and there is no
+   command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
    if your view changed, assess it again.
 
