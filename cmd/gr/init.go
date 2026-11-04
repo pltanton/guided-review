@@ -310,14 +310,27 @@ func reviewFiles(
 		classify.Set{Source: ".gitattributes", Patterns: gitattrs},
 		classify.Set{Source: "default pattern", Patterns: classify.DefaultPatterns},
 	)
+	tests := classify.New(
+		classify.Set{Source: "config pattern", Patterns: s.cfg.Tests},
+		classify.Set{Source: "default pattern", Patterns: classify.TestPatterns},
+	)
+	other := classify.New(
+		classify.Set{Source: "config pattern", Patterns: s.cfg.Other},
+		classify.Set{Source: "default pattern", Patterns: classify.OtherPatterns},
+	)
 	out := make([]state.File, 0, len(files))
 	for _, f := range files {
 		tier, reason := state.TierCore, cls.Match(f.Path)
 		if reason == "" && f.Status != diff.Deleted && !f.Binary {
 			reason = marker(ctx, s, head, f.Path)
 		}
-		if reason != "" {
+		switch {
+		case reason != "":
 			tier = state.TierGenerated
+		case tests.Match(f.Path) != "":
+			tier = state.TierTests
+		case other.Match(f.Path) != "":
+			tier = state.TierOther
 		}
 		added, deleted := f.Stat()
 		out = append(out, state.File{

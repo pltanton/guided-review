@@ -71,9 +71,8 @@ the ones in "Publish" below, after the human said yes.
 ## Reading — in small writes, while the human reads
 
 Everything you learn goes to the viewer through `gr plan set` as soon as it is ready,
-in parts: a part is a YAML document with any of `briefing`, `boilerplate`, `files`,
-`hotspots`, `annotations`. Parts merge: a file named again gets its new `why` and
-`order`, a hotspot at the same file and line replaces the earlier one (checked stays
+in parts: a part is a YAML document with any of `briefing`, `files`, `hotspots`,
+`annotations`. Parts merge: a file named again gets its new `why`, `order` and `tier`, a hotspot at the same file and line replaces the earlier one (checked stays
 checked), an annotation at the same file, line and kind replaces the earlier one,
 `briefing` replaces the earlier briefing. gr rejects a part with a path or a line that is
 not in the diff; fix exactly what it lists and send it again.
@@ -97,8 +96,11 @@ the reading, I'll ask»): do what they said.
    Do not read code yet.
 2. Send the first part: `briefing` (two to four lines: the task, how the change solves
    it, what to watch; generated files `gr init` listed with ⚠ named, they are generated
-   only by a comment in the file), `boilerplate`, and every core file with `order` per
-   references/ordering.md and a `why` of about ten words. This part should reach the
+   only by a comment in the file), and every core file with `order` per
+   references/ordering.md and a `why` of about ten words. gr already put tests, CI and
+   repository plumbing into their own groups (`gr init` labels them `tests`, `other`);
+   name the boilerplate (DI wiring, mappers, route registration) with `tier: boilerplate`,
+   and move a file gr grouped wrongly with `tier: core`. This part should reach the
    viewer within a minute of `gr open`.
 3. Read the files in that order, each with enough surrounding code to be sure of what it
    does, looking for problems per references/checklist.md. After each file (or two or
@@ -129,8 +131,8 @@ briefing: |-
   Before: a retried POST /transfers debited twice.
   After: the idempotency key returns the first result.
   Watch the key check around the reserve transaction.
-boilerplate: [internal/di/wire.go]
 files:
+  - { path: internal/di/wire.go, tier: boilerplate }
   - {
       path: api/openapi.yaml,
       order: 1,
@@ -168,7 +170,7 @@ annotations:
 
 ## Parallel reading
 
-1. Send the first part yourself (briefing, boilerplate, files with order and why).
+1. Send the first part yourself (briefing, files with tier, order and why).
 2. Split the core files into groups of related files, three to six groups. In one
    message start one general-purpose subagent per group, so they run at once. Give
    each: the code path, base and head, the task in two lines, its file list, and the

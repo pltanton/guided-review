@@ -312,9 +312,9 @@ func TestInitMR(t *testing.T) {
 }
 
 const goodPlan = `briefing: negative amounts are rejected
-boilerplate: [wire.go]
 files:
   - {path: api/transfer.go, order: 1, why: the guard}
+  - {path: wire.go, tier: boilerplate}
 hotspots:
   - {cat: money, q: "0 for a negative amount — expected?", file: api/transfer.go, line: 4}
 `
@@ -1408,4 +1408,19 @@ func TestCheckHotspot(t *testing.T) {
 	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "3-5",
 		"--severity", "nit", "x")
 	assertContains(t, h.mustRun("", "status"), "hotspots 1/1 checked")
+}
+
+func TestTestsAndPlumbingGetTheirGroups(t *testing.T) {
+	h := newHarness(t)
+	h.repo.Write("api/transfer_test.go", "package api\n")
+	h.repo.Write(".github/workflows/ci.yml", "on: push\n")
+	h.repo.Write("tools/gen.go", "package tools\n")
+	h.repo.Write(".review.yaml", "other:\n  - tools/**\n")
+	h.repo.Commit("tests and ci")
+	out := h.mustRun("", "init")
+	assertContains(t, out, "api/transfer_test.go  [added, tests]", ".github/workflows/ci.yml  [added, other]",
+		"tools/gen.go  [added, other]")
+	assertContains(t, h.mustRun("", "status"), "tests 1 files, other 2 files")
+	h.mustRun("files: [{path: tools/gen.go, tier: core}]\n", "plan", "set")
+	assertContains(t, h.mustRun("", "status"), "tests 1 files, other 1 files")
 }

@@ -152,8 +152,8 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 		if f.Binary {
 			label += ", binary"
 		}
-		if rf.Tier == state.TierBoilerplate {
-			label += ", boilerplate"
+		if rf.Tier != state.TierCore {
+			label += ", " + string(rf.Tier)
 		}
 		ranges := make([]string, len(f.Hunks))
 		for i, h := range f.Hunks {

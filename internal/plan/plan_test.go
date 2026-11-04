@@ -26,8 +26,7 @@ func fixture() (*state.Review, []diff.File) {
 func validPlan() plan.Plan {
 	return plan.Plan{
 		Briefing:    "task → solution",
-		Boilerplate: []string{"wire.go"},
-		Files:       []plan.File{{Path: "api/a.go", Order: 1, Why: "the guard"}},
+		Files:       []plan.File{{Path: "api/a.go", Order: 1, Why: "the guard"}, {Path: "wire.go", Tier: state.TierBoilerplate}},
 		Hotspots:    []state.Hotspot{{Cat: "money", Q: "rounding?", File: "api/a.go", Line: 12}},
 		Annotations: []state.Annotation{{File: "api/a.go", Line: 11, Kind: "note", Text: "reserves"}},
 	}
@@ -47,7 +46,8 @@ func TestValidate(t *testing.T) {
 		{"hotspot without question", func(p *plan.Plan) { p.Hotspots[0].Q = " " }, "hotspot api/a.go:12 has no question"},
 		{"hotspot bad category", func(p *plan.Plan) { p.Hotspots[0].Cat = "perf" }, `category "perf"`},
 		{"hotspot file", func(p *plan.Plan) { p.Hotspots[0].File = "" }, "hotspot :12: not in diff"},
-		{"boilerplate not in diff", func(p *plan.Plan) { p.Boilerplate = []string{"x.go"} }, "boilerplate x.go: not in diff"},
+		{"bad tier", func(p *plan.Plan) { p.Files[1].Tier = "junk" }, `file wire.go: tier "junk"`},
+		{"generated is not a tier to pick", func(p *plan.Plan) { p.Files[1].Tier = state.TierGenerated }, `tier "generated"`},
 		{"annotation file", func(p *plan.Plan) { p.Annotations[0].File = "x.go" }, "annotation x.go:11: not in diff"},
 		{"annotation kind", func(p *plan.Plan) { p.Annotations[0].Kind = "todo" }, `kind "todo"`},
 		{"annotation line", func(p *plan.Plan) { p.Annotations[0].Line = 0 }, "line must be >= 1"},
@@ -87,7 +87,7 @@ func TestMergeReplacesAndAppends(t *testing.T) {
 	plan.Merge(r, validPlan())
 	r.Hotspots[0].Checked = true
 	plan.Merge(r, plan.Plan{
-		Files:       []plan.File{{Path: "api/a.go", Why: "the guard, now with a limit"}, {Path: "wire.go"}},
+		Files:       []plan.File{{Path: "api/a.go", Why: "the guard, now with a limit"}, {Path: "wire.go"}, {Path: "a.pb.go", Tier: state.TierCore}},
 		Hotspots:    []state.Hotspot{{Cat: "money", Q: "rounding twice?", File: "api/a.go", Line: 12, Detail: "d"}, {Cat: "security", Q: "auth?", File: "wire.go", Line: 1}},
 		Annotations: []state.Annotation{{File: "api/a.go", Line: 11, Kind: "note", Text: "reserves, longer"}},
 	})
@@ -96,7 +96,11 @@ func TestMergeReplacesAndAppends(t *testing.T) {
 		t.Fatalf("files after merge: %+v %+v briefing %q", a, w, r.Briefing)
 	}
 	if w.Tier != state.TierBoilerplate || r.File("a.pb.go").Tier != state.TierGenerated {
-		t.Fatalf("tiers: %+v", r.Files)
+		t.Fatalf("a tier stays unless the part names one; generated never moves: %+v", r.Files)
+	}
+	plan.Merge(r, plan.Plan{Files: []plan.File{{Path: "wire.go", Tier: state.TierCore}}})
+	if w.Tier != state.TierCore {
+		t.Fatalf("files after merge: %+v %+v briefing %q", a, w, r.Briefing)
 	}
 	if len(r.Hotspots) != 2 || r.Hotspots[0].Q != "rounding twice?" || !r.Hotspots[0].Checked || r.Hotspots[0].Detail != "d" {
 		t.Fatalf("hotspots: %+v", r.Hotspots)

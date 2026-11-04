@@ -34,7 +34,7 @@ func (m *model) treeItems() []treeItem {
 			byTier[f.Tier] = append(byTier[f.Tier], treeItem{file: f.Path, tier: f.Tier})
 		}
 	}
-	for _, t := range []state.Tier{state.TierBoilerplate, state.TierGenerated} {
+	for _, t := range state.Tiers[1:] {
 		if len(byTier[t]) == 0 {
 			continue
 		}

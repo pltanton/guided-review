@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Tests, CI and repository plumbing get their own folded groups (`tests`, `other`) by
+  path at `gr init`; `tests:` and `other:` in `.review.yaml` add patterns. The agent names
+  boilerplate with `tier: boilerplate` on a file and moves a file back with `tier: core`;
+  the `boilerplate:` list is gone.
 - The step walk is gone. The viewer shows the whole change as one diff with a file tree
   on the right and opens right after `gr init`, before the agent has read anything. The
   agent reads next to you and sends what it finds in parts (`gr plan set` merges them):

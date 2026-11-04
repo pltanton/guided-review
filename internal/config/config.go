@@ -26,6 +26,8 @@ type View struct {
 type Config struct {
 	Domain    string              `yaml:"domain"`
 	Generated []string            `yaml:"generated"`
+	Tests     []string            `yaml:"tests"`
+	Other     []string            `yaml:"other"`
 	Diff      string              `yaml:"diff"`
 	LSP       map[string][]string `yaml:"lsp"`
 	Keys      map[string][]string `yaml:"keys"`
@@ -57,7 +59,7 @@ func Load(repoRoot string) (Config, error) {
 	if err := read(filepath.Join(repoRoot, RepoFile), &repo); err != nil {
 		return c, err
 	}
-	c.Domain, c.Generated = repo.Domain, repo.Generated
+	c.Domain, c.Generated, c.Tests, c.Other = repo.Domain, repo.Generated, repo.Tests, repo.Other
 	if repo.Diff != "" {
 		c.Diff = repo.Diff
 	}

@@ -13,6 +13,19 @@ var DefaultPatterns = []string{
 	"**/build/generated/**", "vendor/**",
 }
 
+var TestPatterns = []string{
+	"*_test.go", "test_*.py", "*_test.py", "conftest.py", "*.spec.ts", "*.spec.js", "*.test.ts",
+	"*.test.tsx", "*.test.js", "*Test.kt", "*Spec.kt", "*Test.java", "*_spec.rb",
+	"**/tests/**", "**/test/**", "**/__tests__/**", "**/testdata/**", "**/fixtures/**", "spec/**",
+}
+
+// OtherPatterns: repository plumbing that is neither the change nor its tests.
+var OtherPatterns = []string{
+	".github/**", ".gitlab/**", ".gitlab-ci.yml", ".gitignore", ".gitattributes", ".editorconfig",
+	".pre-commit-config.yaml", ".dockerignore", "CODEOWNERS", "LICENSE*", "renovate.json",
+	".golangci.y*ml", ".envrc", "Makefile", "Justfile", "justfile",
+}
+
 const (
 	markerLines  = 40
 	MarkerReason = "marker"

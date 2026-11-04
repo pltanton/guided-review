@@ -14,16 +14,16 @@ import (
 
 type Plan struct {
 	Briefing    string             `yaml:"briefing,omitempty"`
-	Boilerplate []string           `yaml:"boilerplate,omitempty"`
 	Files       []File             `yaml:"files,omitempty"`
 	Hotspots    []state.Hotspot    `yaml:"hotspots,omitempty"`
 	Annotations []state.Annotation `yaml:"annotations,omitempty"`
 }
 
 type File struct {
-	Path  string `yaml:"path"`
-	Order int    `yaml:"order,omitempty"`
-	Why   string `yaml:"why,omitempty"`
+	Path  string     `yaml:"path"`
+	Order int        `yaml:"order,omitempty"`
+	Why   string     `yaml:"why,omitempty"`
+	Tier  state.Tier `yaml:"tier,omitempty"`
 }
 
 func Parse(data []byte) (Plan, error) {
@@ -45,11 +45,6 @@ func Validate(p Plan, files []diff.File) []error {
 	for _, f := range files {
 		inDiff[f.Path] = true
 	}
-	for _, b := range p.Boilerplate {
-		if !inDiff[b] {
-			fail("boilerplate %s: not in diff", b)
-		}
-	}
 	listed := map[string]bool{}
 	for _, f := range p.Files {
 		switch {
@@ -59,6 +54,8 @@ func Validate(p Plan, files []diff.File) []error {
 			fail("file %s: listed twice", f.Path)
 		case f.Order < 0:
 			fail("file %s: order must be >= 0", f.Path)
+		case f.Tier != "" && (f.Tier == state.TierGenerated || !slices.Contains(state.Tiers, f.Tier)):
+			fail("file %s: tier %q, want one of core, tests, boilerplate, other", f.Path, f.Tier)
 		}
 		listed[f.Path] = true
 	}
@@ -105,17 +102,15 @@ func Merge(r *state.Review, p Plan) {
 	if p.Briefing != "" {
 		r.Briefing = p.Briefing
 	}
-	for _, b := range p.Boilerplate {
-		if f := r.File(b); f != nil && f.Tier == state.TierCore {
-			f.Tier = state.TierBoilerplate
-		}
-	}
 	for _, pf := range p.Files {
 		f := r.File(pf.Path)
 		if f == nil {
 			continue
 		}
 		f.Read = true
+		if pf.Tier != "" && f.Tier != state.TierGenerated {
+			f.Tier = pf.Tier
+		}
 		if pf.Why != "" {
 			f.Why = pf.Why
 		}

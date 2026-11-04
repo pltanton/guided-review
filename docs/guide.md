@@ -30,16 +30,17 @@ viewer):
   from your words, and `tab` again a question (an empty one asks the agent to explain the
   line);
 - on your own comment it edits it, on an agent's note it shows the longer explanation,
-  on `⋯` or `▸` it opens the hidden lines, on a folded group (boilerplate, generated) it
-  opens the group.
+  on `⋯` or `▸` it opens the hidden lines, on a folded group (tests, boilerplate, other,
+  generated) it opens the group.
 
 `]`/`[` jump between changes, `}`/`{` between files in the tree's order, `n`/`N` between
 notes: flags, threads, comments. `f` focuses the tree; `enter` there jumps to the file.
 
 A tree row shows the file, its order number once the agent set one, `⚑N` for its flags
 and `●` while it has changes you have not seen; a file the agent has not read yet is dim.
-Boilerplate and generated files are two folded groups at the end of the tree and of the
-diff. A risk (`RISK`) stays open until you check it off with `x`, on its line or in its
+Tests, CI and repository plumbing (`other`) and generated files land in folded groups at
+the end of the tree and of the diff by their paths; the agent adds boilerplate to a group
+of its own and can move a file back. A risk (`RISK`) stays open until you check it off with `x`, on its line or in its
 details, or until you comment on its line. The footer shows `NORMAL`, or `VISUAL` with
 the number of selected lines.
 
@@ -168,6 +169,10 @@ your session, which applies them and offers another round.
         kotlin: [kotlin-lsp, --stdio]
       generated:               # extra generated-file patterns
         - api/gen/**
+      tests:                   # extra test patterns (default: *_test.go, tests/**, …)
+        - e2e/**
+      other:                   # extra repository-plumbing patterns (default: CI, Makefile, …)
+        - tools/**
 
 ## Extending
 

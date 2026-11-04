@@ -72,10 +72,14 @@ func printFiles(e env, r *state.Review) {
 	for _, f := range r.Files {
 		tiers[f.Tier]++
 	}
-	e.printf("\nread by the agent %d/%d (· not yet), seen by you %d/%d (● not yet), hotspots %d/%d checked, "+
-		"boilerplate %d files, generated %d files\n",
-		read, core, core-len(plan.Unread(r)), core, checked, len(r.Hotspots),
-		tiers[state.TierBoilerplate], tiers[state.TierGenerated])
+	e.printf("\nread by the agent %d/%d (· not yet), seen by you %d/%d (● not yet), hotspots %d/%d checked",
+		read, core, core-len(plan.Unread(r)), core, checked, len(r.Hotspots))
+	for _, t := range state.Tiers[1:] {
+		if tiers[t] > 0 {
+			e.printf(", %s %d files", t, tiers[t])
+		}
+	}
+	e.println()
 }
 
 func severityCounts(r *state.Review, sep string) string {
@@ -131,7 +135,6 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		p.Briefing = cmp.Or(p.Briefing, part.Briefing)
-		p.Boilerplate = append(p.Boilerplate, part.Boilerplate...)
 		p.Files = append(p.Files, part.Files...)
 		p.Hotspots = append(p.Hotspots, part.Hotspots...)
 		p.Annotations = append(p.Annotations, part.Annotations...)

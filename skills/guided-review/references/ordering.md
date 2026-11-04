@@ -23,9 +23,10 @@ In this order:
 5. **Mechanics** last: renames, moves, import churn, formatting. Still read, but fast;
    say so in the `why`. The viewer marks moved code `↕` and format-only lines `≈`.
 
-Boilerplate (DI wiring, DTO mappers, route registration, trivial config) goes into
-`boilerplate:`; generated files are excluded by gr. Both sit folded at the end of the
-tree, one keypress away.
+gr puts tests, CI and repository plumbing (`tests`, `other`) and generated files into
+their own groups by path. Boilerplate (DI wiring, DTO mappers, route registration,
+trivial config) is yours to name: `tier: boilerplate` on the file. Every group sits
+folded at the end of the tree, one keypress away; `tier: core` brings a file back.
 
 Within a file the reviewer reads top to bottom: there is no order inside a file. A file
 that serves two behaviours goes with the first; say so in its `why`.

@@ -15,9 +15,14 @@ type Tier string
 
 const (
 	TierCore        Tier = "core"
+	TierTests       Tier = "tests"
 	TierBoilerplate Tier = "boilerplate"
+	TierOther       Tier = "other"
 	TierGenerated   Tier = "generated"
 )
+
+// Tiers in reading order; every tier after core is a folded group in the viewer.
+var Tiers = []Tier{TierCore, TierTests, TierBoilerplate, TierOther, TierGenerated}
 
 type Severity string
 
@@ -268,13 +273,7 @@ func (r *Review) Detail(file string, line int) (string, bool) {
 }
 
 func tierRank(t Tier) int {
-	switch t {
-	case TierBoilerplate:
-		return 1
-	case TierGenerated:
-		return 2
-	}
-	return 0
+	return max(slices.Index(Tiers, t), 0)
 }
 
 func (r *Review) FileOrder() []File {

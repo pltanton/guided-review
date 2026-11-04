@@ -68,3 +68,24 @@ func TestGitattributesPatterns(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+func TestTestAndOtherPatterns(t *testing.T) {
+	tests := classify.New(classify.Set{Source: "default pattern", Patterns: classify.TestPatterns})
+	other := classify.New(classify.Set{Source: "default pattern", Patterns: classify.OtherPatterns})
+	for _, p := range []string{"api/transfer_test.go", "tests/unit/test_claim.py", "src/App.test.tsx",
+		"src/test/kotlin/FooTest.kt", "spec/models/user_spec.rb", "internal/testdata/x.json"} {
+		if tests.Match(p) == "" {
+			t.Errorf("%s is a test file", p)
+		}
+	}
+	for _, p := range []string{".github/workflows/ci.yml", ".gitlab-ci.yml", "Makefile", "LICENSE", ".golangci.yaml"} {
+		if other.Match(p) == "" {
+			t.Errorf("%s is repository plumbing", p)
+		}
+	}
+	for _, p := range []string{"api/transfer.go", "docs/specs/x.md", "deploy/values.yaml", "contest/x.go"} {
+		if tests.Match(p) != "" || other.Match(p) != "" {
+			t.Errorf("%s stays core", p)
+		}
+	}
+}
