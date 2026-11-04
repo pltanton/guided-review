@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- While the agent reads the change for the first time, a small pixel flag sits above the
+  chat with a square per file, lit as the agent reads it, the next one blinking, and the
+  agent's progress line under it. It goes once every file is read or the agent stops.
 - Tests, CI and repository plumbing get their own folded groups (`tests`, `other`) by
   path at `gr init`; `tests:` and `other:` in `.review.yaml` add patterns. The agent names
   boilerplate with `tier: boilerplate` on a file and moves a file back with `tier: core`;

@@ -144,3 +144,23 @@ func TestWholeFilePeek(t *testing.T) {
 		t.Fatal("esc closes it")
 	}
 }
+
+func TestReadingBlockWhileTheAgentReads(t *testing.T) {
+	m, _ := twoFileModel(t)
+	m.width = 160
+	m.review.Files[1].Read, m.review.Files[2].Read = false, false
+	m.review.Progress = &state.Progress{Text: "reading b.go"}
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "reading 1/3") || !strings.Contains(v, "■■■") || !strings.Contains(v, "reading b.go") {
+		t.Fatalf("the reading block shows the flag, a square per file and the progress:\n%s", v)
+	}
+	m.review.Files[1].Read, m.review.Files[2].Read = true, true
+	if v := ansi.Strip(m.View()); strings.Contains(v, "reading 3/3") {
+		t.Fatalf("once every file is read the block goes:\n%s", v)
+	}
+	m.review.Files[2].Read = false
+	m.agentIdle = true
+	if v := ansi.Strip(m.View()); strings.Contains(v, "reading 2/3") {
+		t.Fatal("a stopped agent is not reading")
+	}
+}
