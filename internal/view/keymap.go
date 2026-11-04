@@ -28,7 +28,7 @@ var (
 	previewActions = []string{"finish", "edit-comment", "delete-comment", "message", "act"}
 	essentials     = []string{
 		"down", "up", "next-hunk", "prev-hunk", "next-note", "act", "select", "message", "ask",
-		"check-risk", "files", "finish", "command", "quit",
+		"check-risk", "whole-file", "files", "finish", "command", "quit",
 	}
 )
 
@@ -106,6 +106,8 @@ func DefaultActions() []Action {
 			Keys:  k("O"),
 			run:   do((*model).toggleRemoved),
 		},
+		{Name: "whole-file", Group: dif, Desc: "the whole file over the code, changes marked, at this line",
+			Keys: k("F"), run: do((*model).openWholeFile)},
 		{Name: "more-context", Group: dif, Desc: "more context around changes", Keys: k("tab"),
 			run: do((*model).moreContext)},
 		{Name: "reset-context", Group: dif, Desc: "default context", Keys: k("shift+tab"),

@@ -446,6 +446,16 @@ func (m *model) openPeek(loc lspLoc) {
 	}
 }
 
+func (m *model) openWholeFile() {
+	cur := m.current()
+	if cur.File == "" {
+		m.status = "put the cursor on a file's code"
+		return
+	}
+	m.openPeek(lspLoc{Path: cur.File, Line: max(cur.Line, 1)})
+	m.popup.title = fmt.Sprintf("%s:%d", cur.File, max(cur.Line, 1))
+}
+
 func (m *model) refPreview(p *popup, loc lspLoc, width, rows int) []string {
 	if p.files == nil {
 		p.files = map[string][]string{}

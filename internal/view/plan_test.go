@@ -129,3 +129,18 @@ func TestFilesModalWhenNarrow(t *testing.T) {
 		t.Fatalf("enter in the files modal jumps: focus %v file %s", m.focusFiles, m.current().File)
 	}
 }
+
+func TestWholeFilePeek(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.peekFile = func(string) []string { return numbered(20) }
+	m.cursor = 4
+	m.Update(key("F"))
+	if m.popup == nil || m.popup.kind != "peek" || m.popup.loc.Path != "a.go" || m.popup.loc.Line != 3 ||
+		m.popup.title != "a.go:3" {
+		t.Fatalf("F opens the file at the cursor line: %+v", m.popup)
+	}
+	m.Update(key("esc"))
+	if m.popup != nil {
+		t.Fatal("esc closes it")
+	}
+}

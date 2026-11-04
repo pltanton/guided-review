@@ -106,7 +106,7 @@ func TestPreviewKeysFollowTheKeymap(t *testing.T) {
 	m, ran := finishModel(t, true)
 	var err error
 	m.km, err = newKeymap(map[string][]string{
-		"verdict": {"V"}, "delete-comment": {"X"}, "finish": {"F"},
+		"verdict": {"V"}, "delete-comment": {"X"}, "finish": {"Z"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestPreviewKeysFollowTheKeymap(t *testing.T) {
 	}) {
 		t.Fatalf("the remapped delete key deletes in the preview: %q", *ran)
 	}
-	m.Update(key("F"))
+	m.Update(key("Z"))
 	if !slices.ContainsFunc(*ran, func(a []string) bool { return slices.Equal(a, []string{"export"}) }) {
 		t.Fatalf("the remapped finish key hands the review over: %q", *ran)
 	}

@@ -96,7 +96,9 @@ The unified view shows the resulting code. Large removals fold away, moved code 
 marked as moved, whitespace-only changes and renames are marked instead of highlighted,
 and only the changed words inside a line are coloured. Long lines wrap under the code
 column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
-instead, and `h`/`l` scroll sideways. With a language server you get
+instead, and `h`/`l` scroll sideways. `F` opens the whole file over
+the code at the cursor's line, changed lines marked, where `/` searches and `esc` closes.
+With a language server you get
 definitions, references, implementations, callers (`g` lists them). A target inside the
 change moves the cursor there (`C-o` back, `S-enter` peeks anyway); others open over the
 code, where `/` searches and `esc` closes. The line under the title follows the
