@@ -249,7 +249,7 @@ func (m *model) reload() {
 }
 
 func (m *model) loadAsync(gen int) tea.Cmd {
-	src, files, hotspots, context, notes, open := m.src, m.review.Files, m.review.Hotspots,
+	src, files, hotspots, context, notes, open := m.src, m.review.FileOrder(), m.review.Hotspots,
 		m.context, m.notes(), m.tierOpen
 	return func() tea.Msg {
 		rows, err := buildRows(src, files, hotspots, context, notes, nil, open)
@@ -262,7 +262,7 @@ func (m *model) closeCards() {
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	rows, err := buildRows(m.src, m.review.Files, m.review.Hotspots, m.context, m.notes(),
+	rows, err := buildRows(m.src, m.review.FileOrder(), m.review.Hotspots, m.context, m.notes(),
 		m.reveal, m.tierOpen)
 	if err != nil {
 		m.err = err

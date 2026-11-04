@@ -3,6 +3,7 @@ package view
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -80,6 +81,11 @@ func TestFoldedTiersOpenOnEnter(t *testing.T) {
 	m.Update(key("enter"))
 	if m.tierOpen[state.TierBoilerplate] || strings.Contains(ansi.Strip(m.View()), "▍ wire.go") {
 		t.Fatal("enter on the group row folds it again")
+	}
+	m.review.Files[0].Order, m.review.Files[1].Tier, m.review.Files[1].Order = 2, state.TierCore, 1
+	m.rebuild(true)
+	if files := m.shownFiles(); !slices.Equal(files, []string{"wire.go", "a.go"}) {
+		t.Fatalf("the diff follows the agent's order: %v", files)
 	}
 }
 
