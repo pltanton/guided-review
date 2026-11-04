@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/config"
-	"github.com/pltanton/guided-review/internal/state"
 )
 
 func modalBox(w, h int, title, hint string, body []string) []string {
@@ -61,8 +60,6 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return modalContent{"keys", hint, lines[m.helpTop:]}, true
 	}
 	switch {
-	case m.gateOpen:
-		return m.gateModal(w), true
 	case m.finishCard:
 		return m.finishCardModal(w), true
 	case m.pub != nil:
@@ -71,10 +68,6 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 		return m.threadCardModal(w), true
 	case m.newsOpen:
 		return m.newsModal(w, h), true
-	case len(m.staleSteps) > 0:
-		return m.staleModal(w), true
-	case m.focusPlan:
-		return m.planModal(w, h), true
 	case m.focusFiles && m.chatWidth() == 0:
 		return m.filesModal(w, h), true
 	case m.popup != nil && m.popup.kind != "hover":
@@ -90,10 +83,7 @@ const (
 
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		!m.gateOpen && !m.finishCard && m.pub == nil &&
-		m.threadCard == "" && !m.newsOpen &&
-		len(m.staleSteps) == 0 &&
-		!m.focusPlan
+		!m.finishCard && m.pub == nil && m.threadCard == "" && !m.newsOpen
 }
 
 func (m *model) drawModal(out []string) {
@@ -135,7 +125,7 @@ func (m *model) drawModal(out []string) {
 
 const paletteRows = 8
 
-// planWidth is the inner width of a card-sized modal, the plan among them.
+// planWidth is the inner width of a card-sized modal.
 func (m *model) planWidth() int {
 	return min(max(m.width-4, 8), cardWidth) - 4
 }
@@ -186,27 +176,6 @@ func (m *model) cursorY() int {
 	return y
 }
 
-func (m *model) planModal(w, h int) modalContent {
-	items := m.planItems()
-	m.planCursor = max(0, min(m.planCursor, len(items)-1))
-	row, plain, selected := sideRows(w + 2)
-	entries, at := m.planEntries(items, w, row, plain, selected)
-	key := fmt.Sprint(h, " ", m.planCursor)
-	top := scrollWindow(&m.planTop, &m.planFollow, key, true, at[m.planCursor], h, len(entries))
-	body := entries[top:]
-	reviewed := 0
-	for _, st := range m.review.Steps {
-		if st.Status != state.StatusPending {
-			reviewed++
-		}
-	}
-	title := fmt.Sprintf("plan · %d/%d reviewed", reviewed, len(m.review.Steps))
-	if m.review.Round > 1 {
-		title += fmt.Sprintf(" · round %d", m.review.Round)
-	}
-	return modalContent{title, "enter show · h/l fold · esc close", body}
-}
-
 func (m *model) filesModal(w, h int) modalContent {
 	row, plain, selected := sideRows(w + 2)
 	entries, at := m.fileEntries(row, plain, selected)
@@ -216,7 +185,7 @@ func (m *model) filesModal(w, h int) modalContent {
 	for _, e := range entries[top:] {
 		body = append(body, e.text)
 	}
-	return modalContent{"files · " + m.step.ID, "enter jump · esc close", body}
+	return modalContent{"files", "enter jump · esc close", body}
 }
 
 func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
@@ -224,18 +193,8 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 	press := msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft
 	r := msg.Y - m.modalY - 1
 	switch {
-	case m.focusPlan && wheel[msg.Button] != 0:
-		m.planCursor = max(0, min(m.planCursor+wheel[msg.Button], len(m.planItems())-1))
-	case m.focusPlan && press && r >= 0:
-		items := m.planItems()
-		row, plain, selected := sideRows(m.width)
-		_, at := m.planEntries(items, m.width-4, row, plain, selected)
-		if i := slices.Index(at, m.planTop+r); i >= 0 {
-			m.planCursor = i
-			return m.handlePlanKey(tea.KeyMsg{Type: tea.KeyEnter})
-		}
 	case m.focusFiles && wheel[msg.Button] != 0:
-		m.fileCursor = max(0, min(m.fileCursor+wheel[msg.Button], len(m.stepFiles())-1))
+		m.fileCursor = max(0, min(m.fileCursor+wheel[msg.Button], len(m.treeItems())-1))
 	case m.focusFiles && press && r >= 0:
 		row, plain, selected := sideRows(m.width)
 		entries, _ := m.fileEntries(row, plain, selected)
@@ -247,73 +206,10 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 	return nil
 }
 
-func (m *model) gateModal(w int) modalContent {
-	var body []string
-	item := func(i int, text string) { body = append(body, cardItem(i, m.gateSel, text, w)) }
-	if len(m.step.Hotspots) > 0 {
-		body = append(body, dimStyle.Render("risks — enter checks one off once you are sure"), "")
-	}
-	for i, h := range m.step.Hotspots {
-		mark := hotStyle.Render("⚑ ")
-		if h.Checked {
-			mark = addStyle.Render("✓ ")
-		}
-		for k, l := range strings.Split(ansi.Wrap(h.Q, max(w-4, 10), ""), "\n") {
-			if k > 0 {
-				mark = "  "
-			}
-			if k == 0 {
-				item(i, mark+l)
-			} else {
-				body = append(body, "   "+l)
-			}
-		}
-	}
-	if n := m.unseen(); n > 0 {
-		body = append(body, "", hotStyle.Render(fmt.Sprintf("%d changed lines not seen yet", n)))
-	}
-	if waiting := m.threadsWaiting(); waiting != "" {
-		body = append(body, "", waiting)
-	}
-	body = append(body, "")
-	item(len(m.step.Hotspots), boldStyle.Render("move on to the next step"))
-	return modalContent{"before " + m.step.ID + " is done", "enter · esc back to the step", body}
-}
-
 func (m *model) blocked() bool {
-	return m.help || m.gateOpen || m.finishCard || m.pub != nil ||
+	return m.help || m.finishCard || m.pub != nil ||
 		m.threadCard != "" || m.themeWas != "" || m.newsOpen ||
-		len(m.staleSteps) > 0 || m.focusPlan ||
 		m.popup != nil && m.popup.kind != "hover"
-}
-
-var staleItems = []string{"continue with the other steps", "finish now"}
-
-func (m *model) staleModal(w int) modalContent {
-	body := []string{
-		hotStyle.Render("a blocker: these steps may change once it is fixed"),
-		"   " + strings.Join(m.staleSteps, " "),
-		dimStyle.Render("they stay in the plan marked ~ and go to the next round if you finish now"),
-		"",
-	}
-	for i, it := range staleItems {
-		body = append(body, cardItem(i, m.staleSel, it, w))
-	}
-	return modalContent{"blocker", "enter · esc continue", body}
-}
-
-func (m *model) handleStaleKey(msg tea.KeyMsg) tea.Cmd {
-	switch cardNav(msg.String(), len(staleItems), &m.staleSel) {
-	case "esc":
-		m.staleSteps = nil
-	case "enter":
-		finish := m.staleSel == 1
-		m.staleSteps = nil
-		if finish {
-			m.openFinish()
-		}
-	}
-	return nil
 }
 
 func cardItem(i, sel int, text string, w int) string {

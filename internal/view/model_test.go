@@ -1,7 +1,6 @@
 package view
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -14,11 +13,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/config"
-	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/lsp"
 	"github.com/pltanton/guided-review/internal/state"
-	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
 func key(s string) tea.KeyMsg {
@@ -55,12 +52,9 @@ func testRows() []Row {
 func newTestModel(t *testing.T) (*model, *[]inbox.Event) {
 	t.Helper()
 	var sent []inbox.Event
-	r := &state.Review{ID: "mr-1", Current: "s1", Steps: []state.Step{
-		{ID: "s1", Title: "first", Kind: "logic", Status: state.StatusPending},
-		{ID: "s2", Title: "second", Kind: "logic", Status: state.StatusPending},
-	}}
+	r := &state.Review{ID: "mr-1", Files: []state.File{{Path: "a.go", Tier: state.TierCore, Read: true}}}
 	m := &model{
-		review: r, step: &r.Steps[0], rows: testRows(), width: 100, height: 30,
+		review: r, rows: testRows(), width: 100, height: 30,
 		context: DefaultContext,
 		send:    func(e inbox.Event) error { sent = append(sent, e); return nil },
 	}
@@ -73,7 +67,7 @@ func TestNavigation(t *testing.T) {
 	steps := []struct {
 		key  string
 		want int
-	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 6}, {"gg", 0}}
+	}{{"]", 2}, {"]", 5}, {"]", 5}, {"[", 2}, {"n", 3}, {"N", 3}, {"j", 4}, {"k", 3}, {"G", 5}, {"gg", 0}}
 	for _, s := range steps {
 		m.Update(key(s.key))
 		if m.cursor != s.want {
@@ -118,25 +112,20 @@ func TestEventsFromKeys(t *testing.T) {
 	typeText(m, "ok")
 	m.Update(key("enter"))
 	m.Update(key("esc"))
-	m.Update(key("S"))
-	typeText(m, "trivial")
-	m.Update(key("enter"))
-	m.Update(key(">"))
 	m.Update(key("c"))
 	typeText(m, "dropped")
 	m.Update(key("esc"))
 
 	want := []inbox.Event{
-		{Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "2"},
-		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "2-3", Text: "is this safe"},
-		{Kind: inbox.KindMessage, Step: "s1", File: "a.go", Lines: "3", Text: "ok"},
+		{Kind: inbox.KindExplain, File: "a.go", Lines: "2"},
+		{Kind: inbox.KindMessage, File: "a.go", Lines: "2-3", Text: "is this safe"},
+		{Kind: inbox.KindMessage, File: "a.go", Lines: "3", Text: "ok"},
 	}
 	if !reflect.DeepEqual(*sent, want) {
 		t.Fatalf("sent\n%+v\nwant\n%+v", *sent, want)
 	}
-	wantRan := [][]string{{"step", "skip", "--reason", "trivial"}, {"step", "next"}}
-	if !reflect.DeepEqual(ran, wantRan) {
-		t.Fatalf("skip and next run gr, not the agent: %q", ran)
+	if len(ran) != 0 {
+		t.Fatalf("no key here runs gr: %q", ran)
 	}
 	if m.composing || m.visual {
 		t.Fatal("compose and visual must be off after sending")
@@ -189,10 +178,10 @@ func TestMouse(t *testing.T) {
 
 func TestViewRenders(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.review.Messages = []state.Message{{Step: "s1", Text: "Adds x and y."}}
+	m.review.Messages = []state.Message{{Text: "Adds x and y."}}
 	out := ansi.Strip(m.View())
 	for _, want := range []string{
-		" s1  logic › first", "1/2", "why x", "claude │ Adds x and y.",
+		"mr-1", "why x", "claude │ Adds x and y.",
 	} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("view lacks %q:\n%s", want, out)
@@ -248,45 +237,6 @@ func TestGroupedRunes(t *testing.T) {
 	}
 }
 
-func TestIntakeBeforePlan(t *testing.T) {
-	var sent []inbox.Event
-	r := &state.Review{ID: "mr-1", MR: &state.MR{IID: 1, Title: "Add guard"},
-		Messages: []state.Message{{Text: "Task: reject negatives. Верно понял?"}},
-		Files: []state.File{
-			{Path: "a.go", Added: 10, Deleted: 2},
-			{Path: "a.pb.go", Tier: state.TierGenerated, Added: 300},
-		},
-		Discussions: []state.Discussion{{Author: "bob"}, {Author: "ci", Resolved: true}}}
-	m := &model{review: r, width: 100, height: 20,
-		send: func(e inbox.Event) error { sent = append(sent, e); return nil }}
-	out := ansi.Strip(m.View())
-	for _, want := range []string{
-		"guided review · MR !1 Add guard", "● task & plan  ›  ○ steps  ›  ○ finish",
-		"2 files  +310 −2   core 1 · boilerplate 0 · generated 1", "1 open discussions",
-		"claude │ Task: reject negatives. Верно понял?",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("intake view lacks %q:\n%s", want, out)
-		}
-	}
-	if !strings.Contains(out, "› press c or enter to answer the agent") {
-		t.Fatalf("intake must show where to answer:\n%s", out)
-	}
-	if strings.Contains(out, "── intake ──") || len(strings.Split(out, "\n")) != 20 {
-		t.Fatalf("intake must fill the screen without a chat section label:\n%s", out)
-	}
-	m.Update(key("c"))
-	typeText(m, "да")
-	m.Update(key("enter"))
-	if len(sent) != 1 || sent[0] != (inbox.Event{Kind: inbox.KindMessage, Text: "да"}) {
-		t.Fatalf("sent %+v", sent)
-	}
-	m.Update(key(">"))
-	if len(sent) != 1 {
-		t.Fatalf("next without a plan must not be sent: %+v", sent)
-	}
-}
-
 func TestAgentStatus(t *testing.T) {
 	m, _ := newTestModel(t)
 	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
@@ -307,9 +257,8 @@ func TestAgentStatus(t *testing.T) {
 	if got := ansi.Strip(m.agentStatus()); got != "⠹ строю план: читаю diff · 1m20s" {
 		t.Fatalf("progress: %q", got)
 	}
-	m.review.Steps, m.step = nil, nil
 	if out := ansi.Strip(m.View()); !strings.Contains(out, "⠹ строю план: читаю diff · 1m20s") {
-		t.Fatalf("intake view lacks spinner:\n%s", out)
+		t.Fatalf("header lacks the agent status:\n%s", out)
 	}
 }
 
@@ -352,42 +301,19 @@ func TestNotesWrapIntoBlocks(t *testing.T) {
 
 func TestButtons(t *testing.T) {
 	m, sent := newTestModel(t)
-	next := 0
-	m.runGr = func(args ...string) (string, error) {
-		if slices.Equal(args, []string{"step", "next"}) {
-			next++
-		}
-		return "", nil
-	}
 	m.View()
 	m.Update(key(" "))
-	if len(*sent) != 0 || next != 0 {
+	if len(*sent) != 0 {
 		t.Fatalf("space must do nothing: %+v", *sent)
-	}
-	m.Update(key(">"))
-	if next != 1 {
-		t.Fatalf("> must move on: %d", next)
 	}
 	out := ansi.Strip(m.View())
 	last := out[strings.LastIndex(out, "\n")+1:]
-	for _, b := range []string{"next · >", "comment · enter", "ask · a", "skip · S"} {
+	for _, b := range []string{"comment · enter", "ask · a", "finish · P"} {
 		if !strings.Contains(last, b) {
 			t.Fatalf("footer lacks %q: %q", b, last)
 		}
 	}
-	x := ansi.StringWidth(last[:strings.Index(last, "next · >")])
-	m.Update(
-		tea.MouseMsg{
-			X:      x + 2,
-			Y:      m.height - 1,
-			Button: tea.MouseButtonLeft,
-			Action: tea.MouseActionPress,
-		},
-	)
-	if next != 2 {
-		t.Fatalf("click on next: %d", next)
-	}
-	x = ansi.StringWidth(last[:strings.Index(last, "comment · enter")])
+	x := ansi.StringWidth(last[:strings.Index(last, "comment · enter")])
 	m.Update(
 		tea.MouseMsg{
 			X:      x + 2,
@@ -407,9 +333,9 @@ func TestPendingRequests(t *testing.T) {
 	m.src = nil
 	m.lastWait = t0
 	m.events = []inbox.Event{
-		{Time: t0.Add(-time.Minute), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "1"},
-		{Time: t0.Add(time.Second), Kind: inbox.KindExplain, Step: "s1", File: "a.go", Lines: "3"},
-		{Time: t0.Add(2 * time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"},
+		{Time: t0.Add(-time.Minute), Kind: inbox.KindExplain, File: "a.go", Lines: "1"},
+		{Time: t0.Add(time.Second), Kind: inbox.KindExplain, File: "a.go", Lines: "3"},
+		{Time: t0.Add(2 * time.Second), Kind: inbox.KindMessage, Text: "why?"},
 	}
 	pendingNotes := func() []Note {
 		var out []Note
@@ -440,6 +366,9 @@ func TestPendingRequests(t *testing.T) {
 
 func twoFileModel(t *testing.T) (*model, *[]inbox.Event) {
 	m, sent := newTestModel(t)
+	m.review.Files = append(m.review.Files,
+		state.File{Path: "api/b.go", Tier: state.TierCore, Read: true},
+		state.File{Path: "api/c.go", Tier: state.TierCore, Read: true})
 	m.rows = append(testRows(),
 		Row{Kind: RowFile, File: "api/b.go", Text: "api/b.go"},
 		Row{Kind: RowAdded, File: "api/b.go", Line: 4, Text: "b := 4", HunkStart: true},
@@ -454,8 +383,8 @@ func TestFilesPanel(t *testing.T) {
 	m, _ := twoFileModel(t)
 	m.width = 160
 	m.relist()
-	if got := m.stepFiles(); !reflect.DeepEqual(got, []string{"a.go", "api/b.go", "api/c.go"}) {
-		t.Fatalf("stepFiles = %v", got)
+	if got := m.shownFiles(); !reflect.DeepEqual(got, []string{"a.go", "api/b.go", "api/c.go"}) {
+		t.Fatalf("shownFiles = %v", got)
 	}
 	m.Update(key("}"))
 	if it := m.current(); it.File != "api/b.go" {
@@ -515,41 +444,6 @@ func TestResolvedDiscussionsHidden(t *testing.T) {
 	}
 }
 
-func TestStepPreview(t *testing.T) {
-	m, sent := newTestModel(t)
-	m.review.Steps[0].Status = state.StatusDone
-	m.review.Current = "s2"
-	m.step = &m.review.Steps[1]
-	m.Update(key("H"))
-	if m.step.ID != "s1" || m.review.Current != "s2" ||
-		m.review.Steps[0].Status != state.StatusDone {
-		t.Fatalf("H: step %s current %s", m.step.ID, m.review.Current)
-	}
-	if out := ansi.Strip(m.View()); !strings.Contains(out, "viewing s1 · current is s2") {
-		t.Fatalf("preview banner missing:\n%s", out)
-	}
-	m.Update(key(">"))
-	if len(*sent) != 0 {
-		t.Fatalf("> in preview must not send: %+v", *sent)
-	}
-	m.Update(key("c"))
-	typeText(m, "late thought")
-	m.Update(key("enter"))
-	if len(*sent) != 1 || (*sent)[0].Step != "s1" {
-		t.Fatalf("message in preview must carry s1: %+v", *sent)
-	}
-	m.Update(key("esc"))
-	m.Update(key("L"))
-	if m.step.ID != "s2" || m.viewStep != "" {
-		t.Fatalf("L back to current: step %s view %q", m.step.ID, m.viewStep)
-	}
-	m.Update(key("H"))
-	m.Update(key("esc"))
-	if m.step.ID != "s2" {
-		t.Fatalf("esc must return to current, got %s", m.step.ID)
-	}
-}
-
 func TestAgentStopped(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.agentIdle = true
@@ -602,7 +496,7 @@ func TestFoldKeys(t *testing.T) {
 	}
 	m.cursor = 1
 	m.Update(key("o"))
-	if len(m.lines) != len(m.rows)+1 {
+	if len(m.lines) != len(m.rows) {
 		t.Fatalf("o must unfold: %d rows", len(m.lines))
 	}
 	m.cursor = 2
@@ -611,7 +505,7 @@ func TestFoldKeys(t *testing.T) {
 		t.Fatal("o on an unfolded removed row must fold it back")
 	}
 	m.Update(key("O"))
-	if len(m.lines) != len(m.rows)+1 {
+	if len(m.lines) != len(m.rows) {
 		t.Fatal("O must show every removed line")
 	}
 }
@@ -686,66 +580,19 @@ func TestComposeAnchorAndCommentActions(t *testing.T) {
 	m.Update(key("enter"))
 
 	want := []inbox.Event{
-		{Kind: inbox.KindMessage, Step: "s1", Text: "general"},
+		{Kind: inbox.KindMessage, Text: "general"},
 		{
-			Kind:    inbox.KindMessage,
-			Step:    "s1",
+			Kind: inbox.KindMessage,
+
 			File:    "a.go",
 			Lines:   "2",
 			Comment: 7,
 			Text:    "why nit?",
 		},
-		{Kind: inbox.KindEdit, Step: "s1", Comment: 7, Text: "rename yx"},
+		{Kind: inbox.KindEdit, Comment: 7, Text: "rename yx"},
 	}
 	if !reflect.DeepEqual(*sent, want) {
 		t.Fatalf("sent\n%+v\nwant\n%+v", *sent, want)
-	}
-}
-
-func TestExtraViews(t *testing.T) {
-	m, sent := newTestModel(t)
-	m.review.Files = []state.File{
-		{Path: "a.go", Tier: state.TierCore},
-		{Path: "wire.go", Tier: state.TierBoilerplate},
-		{Path: "a.pb.go", Tier: state.TierGenerated},
-		{Path: "b.pb.go", Tier: state.TierGenerated},
-	}
-	ids := []string{}
-	for _, st := range m.extraSteps() {
-		ids = append(ids, st.ID)
-	}
-	if !reflect.DeepEqual(ids, []string{"~boilerplate", "~generated", "~all"}) {
-		t.Fatalf("extra steps = %v", ids)
-	}
-	if all := m.extraSteps()[2]; len(all.Hunks) != 4 {
-		t.Fatalf("~all must cover every file: %+v", all.Hunks)
-	}
-	out := strings.Join(planText(m), "\n")
-	for _, want := range []string{
-		"◇ boilerplate", "◇ generated", "◇ all changes",
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("plan lacks %q:\n%s", want, out)
-		}
-	}
-	m.Update(key("L"))
-	m.Update(key("L"))
-	if m.step.ID != "~boilerplate" || m.review.Current != "s1" {
-		t.Fatalf("L past the plan: step %s current %s", m.step.ID, m.review.Current)
-	}
-	if out := ansi.Strip(m.View()); !strings.Contains(out, "outside the plan") {
-		t.Fatalf("extra view banner missing:\n%s", out)
-	}
-	m.Update(key("c"))
-	typeText(m, "why here")
-	m.Update(key("enter"))
-	if len(*sent) != 1 || (*sent)[0].Step != "~boilerplate" {
-		t.Fatalf("sent %+v", *sent)
-	}
-	m.Update(key("esc"))
-	m.Update(key("esc"))
-	if m.step.ID != "s1" {
-		t.Fatalf("esc must return to the current step, got %s", m.step.ID)
 	}
 }
 
@@ -841,7 +688,7 @@ func TestFinishButton(t *testing.T) {
 	if len(ran) != 2 || ran[1][0] != "export" || len(ran[1]) != 1 {
 		t.Fatalf("second P must run gr export: %v", ran)
 	}
-	want := inbox.Event{Kind: inbox.KindFinished, Step: "s1", Text: "/tmp/guided-review/mr-1"}
+	want := inbox.Event{Kind: inbox.KindFinished, Text: "/tmp/guided-review/mr-1"}
 	if m.preview != "" || len(*sent) != 1 || (*sent)[0] != want {
 		t.Fatalf("agent must get the export path: preview %q sent %+v", m.preview, *sent)
 	}
@@ -978,7 +825,7 @@ func TestHelpOverlay(t *testing.T) {
 	m.width = 160
 	m.Update(key("?"))
 	out := ansi.Strip(m.View())
-	for _, want := range []string{"essentials", "done with this step", "? all keys"} {
+	for _, want := range []string{"essentials", "check off the risk", "? all keys"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("essentials lack %q:\n%s", want, out)
 		}
@@ -1016,7 +863,7 @@ func TestEnterOpensFolds(t *testing.T) {
 	m := foldModel(t)
 	m.cursor = 1
 	m.Update(key("enter"))
-	if m.composing || len(m.lines) != len(m.rows)+1 {
+	if m.composing || len(m.lines) != len(m.rows) {
 		t.Fatalf(
 			"enter on a fold row must open it: composing %v rows %d",
 			m.composing,
@@ -1047,11 +894,6 @@ func TestCommandMode(t *testing.T) {
 		t.Fatalf("split action and set: split %v context %d", m.splitView, m.context)
 	}
 	runCmd(m, "split")
-	runCmd(m, "s2")
-	if m.step.ID != "s2" {
-		t.Fatalf(":s2 → step %s", m.step.ID)
-	}
-	runCmd(m, "s1")
 	m.cursor = 2
 	runCmd(m, "msg hello there")
 	if len(*sent) != 1 || (*sent)[0].Text != "hello there" || (*sent)[0].Lines != "2" {
@@ -1115,15 +957,10 @@ func TestChatPanel(t *testing.T) {
 	m.width = 160
 	base := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
 	for i := range 30 {
-		step := "s1"
-		if i < 10 {
-			step = "s0"
-		}
 		m.review.Messages = append(
 			m.review.Messages,
 			state.Message{
 				Time: base.Add(time.Duration(i) * time.Minute),
-				Step: step,
 				Text: fmt.Sprintf("message %02d", i),
 			},
 		)
@@ -1204,7 +1041,7 @@ func TestRawComment(t *testing.T) {
 	}
 	m.Update(key("enter"))
 	want := []string{
-		"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "nit", "--step", "s1",
+		"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "nit",
 		"--", "-x stays, exactly",
 	}
 	if !slices.Equal(ran, want) {
@@ -1237,7 +1074,7 @@ func TestAskDeleteAndChatSize(t *testing.T) {
 		t.Fatalf("ask prompt missing:\n%s", v)
 	}
 	m.Update(key("enter"))
-	want := inbox.Event{Kind: inbox.KindAsk, Step: "s1", File: "a.go", Lines: "2", Text: "why 1?"}
+	want := inbox.Event{Kind: inbox.KindAsk, File: "a.go", Lines: "2", Text: "why 1?"}
 	if n := len(*sent); n == 0 || (*sent)[n-1] != want {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
@@ -1278,7 +1115,7 @@ func TestCtrlXDetachesLine(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	typeText(m, "general")
 	m.Update(key("enter"))
-	want := inbox.Event{Kind: inbox.KindMessage, Step: "s1", Text: "general"}
+	want := inbox.Event{Kind: inbox.KindMessage, Text: "general"}
 	if n := len(*sent); n == 0 || (*sent)[n-1] != want {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
@@ -1370,11 +1207,11 @@ func TestChatGutter(t *testing.T) {
 	m, _ := newTestModel(t)
 	t0 := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
 	m.review.Messages = []state.Message{
-		{Time: t0, Step: "s1", Text: strings.Repeat("long answer ", 12)},
-		{Time: t0.Add(2 * time.Second), Step: "s1", Text: "and more"},
+		{Time: t0, Text: strings.Repeat("long answer ", 12)},
+		{Time: t0.Add(2 * time.Second), Text: "and more"},
 	}
 	m.events = []inbox.Event{
-		{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Step: "s1", Text: "why?"},
+		{Time: t0.Add(time.Second), Kind: inbox.KindMessage, Text: "why?"},
 	}
 	m.lastWait = t0.Add(time.Minute)
 	got := make([]string, 0)
@@ -1382,7 +1219,6 @@ func TestChatGutter(t *testing.T) {
 		got = append(got, strings.TrimRight(ansi.Strip(r.text), " "))
 	}
 	want := []string{
-		"── s1 first ──",
 		"claude │ long answer long answer long answer long answer",
 		"       │ long answer long answer long answer long answer",
 		"       │ long answer long answer long answer long answer",
@@ -1410,7 +1246,7 @@ func TestGeneralMessage(t *testing.T) {
 	m.Update(key("C"))
 	typeText(m, "overall looks fine")
 	m.Update(key("enter"))
-	want := inbox.Event{Kind: inbox.KindMessage, Step: "s1", Text: "overall looks fine"}
+	want := inbox.Event{Kind: inbox.KindMessage, Text: "overall looks fine"}
 	if len(*sent) != 1 || (*sent)[0] != want {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
@@ -1445,7 +1281,7 @@ func TestSideChatInput(t *testing.T) {
 func TestDragResize(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 200
-	m.review.Messages = []state.Message{{Step: "s1", Text: "hi"}}
+	m.review.Messages = []state.Message{{Text: "hi"}}
 	drag := func(fromX, fromY, toX, toY int) {
 		m.handleMouse(tea.MouseMsg{X: fromX, Y: fromY, Action: tea.MouseActionPress,
 			Button: tea.MouseButtonLeft})
@@ -1480,12 +1316,12 @@ func TestNoteDetails(t *testing.T) {
 		!strings.Contains(ansi.Strip(strings.Join(m.popup.lines, "")), "writing the details") {
 		t.Fatalf("i must open a waiting popup: %+v", m.popup)
 	}
-	want := inbox.Event{Kind: inbox.KindDetail, Step: "s1", File: note.File,
+	want := inbox.Event{Kind: inbox.KindDetail, File: note.File,
 		Lines: fmt.Sprint(note.Line), Text: "why x"}
 	if n := len(*sent); n != 1 || (*sent)[0] != want {
 		t.Fatalf("sent %+v, want %+v", *sent, want)
 	}
-	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+	m.review.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
 		Text: note.Text, Detail: "x is the **fee**.\n```go\nx := fee(a)\n```"}}
 	m.refreshDetail()
 	body := ansi.Strip(strings.Join(m.popup.lines, "\n"))
@@ -1499,50 +1335,10 @@ func TestNoteDetails(t *testing.T) {
 	}
 }
 
-func TestLocalNext(t *testing.T) {
-	m, sent := newTestModel(t)
-	m.review.Steps[0].Message = "s1: guard"
-	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?"}}
-	var ran [][]string
-	out := "step s2\n"
-	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return out, nil }
-	m.View()
-	m.Update(key(">"))
-	v := ansi.Strip(m.View())
-	if len(ran) != 0 || !m.gateOpen || !strings.Contains(v, "┌ before s1 is done") ||
-		!strings.Contains(v, "⚑ rounding?") {
-		t.Fatalf("> on a step with an open risk asks first: ran %v\n%s", ran, v)
-	}
-	m.Update(key("enter"))
-	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "check", "s1", "1"}) ||
-		!m.review.Steps[0].Hotspots[0].Checked {
-		t.Fatalf("enter on a risk checks it off: ran %v", ran)
-	}
-	m.Update(key("enter"))
-	if len(ran) != 2 || !slices.Equal(ran[1], []string{"step", "next"}) || len(*sent) != 0 ||
-		m.gateOpen {
-		t.Fatalf("enter on move on moves without the agent: ran %v sent %+v", ran, *sent)
-	}
-	m.Update(key("S"))
-	typeText(m, "trivial")
-	m.Update(key("enter"))
-	if want := []string{"step", "skip", "--reason", "trivial"}; !slices.Equal(ran[2], want) {
-		t.Fatalf("skip ran %v, want %v", ran[2], want)
-	}
-	out = "all steps reviewed: run gr status\n"
-	m.review.Steps[0].Hotspots = nil
-	m.View()
-	m.Update(key(">"))
-	if len(*sent) != 0 || !m.finishCard {
-		t.Fatalf("after the last step the viewer opens the finish itself: %+v", *sent)
-	}
-}
-
 func TestFinishCard(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.review.MR = &state.MR{URL: "https://gitlab/x/-/merge_requests/1", Me: "me"}
-	m.review.Steps[0].Status, m.review.Steps[1].Status = state.StatusDone, state.StatusSkipped
-	m.review.Steps[1].SkipReason = "trivial"
+	m.review.Files = append(m.review.Files, state.File{Path: "b.go", Tier: state.TierCore})
 	m.review.Comments = []state.Comment{{ID: 1, File: "a.go", Lines: "2", Severity: state.SeverityNit}}
 	var ran [][]string
 	m.runGr = func(args ...string) (string, error) {
@@ -1552,10 +1348,11 @@ func TestFinishCard(t *testing.T) {
 		}
 		return "", nil
 	}
+	m.View()
 	m.openFinish()
 	v := ansi.Strip(m.View())
 	for _, want := range []string{"┌ finish", "verdict  approve", "0 blocker · 0 major · 0 minor · 1 nit",
-		"Skipped s2 «second»: trivial", "approve the MR when it is published?"} {
+		"not read: b.go", "the agent is still reading 1 file", "approve the MR when it is published?"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("finish card lacks %q:\n%s", want, v)
 		}
@@ -1568,7 +1365,7 @@ func TestFinishCard(t *testing.T) {
 	if m.approvePick != 2 {
 		t.Fatalf("enter on «do not approve» picks it: %d", m.approvePick)
 	}
-	want := []string{"prepare", "--verdict", "approve", "--decisions", "- Skipped s2 «second»: trivial"}
+	want := []string{"prepare", "--verdict", "approve", "--decisions", ""}
 	if len(ran) < 2 || !slices.Equal(ran[0], want) || m.preview == "" || len(*sent) != 0 {
 		t.Fatalf("show the result prepares without the agent and opens the preview: ran %q", ran)
 	}
@@ -1611,7 +1408,7 @@ func TestDetailPopupUX(t *testing.T) {
 	m.clamp()
 	m.Update(key("enter"))
 	detail := strings.Repeat("detail line\n", 30)
-	m.step.Annotations = []state.Annotation{
+	m.review.Annotations = []state.Annotation{
 		{File: "a.go", Line: 59, Kind: "note", Text: "late note", Detail: detail},
 	}
 	m.refreshDetail()
@@ -1634,14 +1431,6 @@ func TestClickChatInput(t *testing.T) {
 		Button: tea.MouseButtonLeft})
 	if !m.composing || m.composeKind != inbox.KindMessage {
 		t.Fatal("a click on the side chat's input line must open the input")
-	}
-
-	r := &state.Review{ID: "mr-1"}
-	intake := &model{review: r, width: 100, height: 20, send: func(inbox.Event) error { return nil }}
-	intake.handleMouse(tea.MouseMsg{X: 30, Y: 17, Action: tea.MouseActionPress,
-		Button: tea.MouseButtonLeft})
-	if !intake.composing {
-		t.Fatal("a click on the intake answer field must open the input")
 	}
 }
 
@@ -1666,7 +1455,7 @@ func TestAnswerOptions(t *testing.T) {
 	}
 
 	s, sentS := newTestModel(t)
-	s.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: []string{"да"}}}
+	s.review.Messages = []state.Message{{Time: t0, Text: "?", Options: []string{"да"}}}
 	s.Update(key("1"))
 	if len(*sentS) != 1 || (*sentS)[0].Text != "да" {
 		t.Fatalf("while answers are offered, a bare digit picks one: %+v", *sentS)
@@ -1733,47 +1522,23 @@ func TestLSPFromPeek(t *testing.T) {
 
 func TestSeenLines(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.review.Steps[0].Message = "s1"
-	var ran int
-	m.runGr = func(...string) (string, error) { ran++; return "", nil }
+	store := state.Store{Dir: t.TempDir()}
+	if err := store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.store = store
 	if m.unseen() == 0 {
-		t.Fatal("nothing is seen before the step is on screen")
+		t.Fatal("nothing is seen before the change is on screen")
 	}
-	m.Update(key(">"))
-	if ran != 0 || !m.gateOpen ||
-		!strings.Contains(ansi.Strip(m.View()), "changed lines not seen yet") {
-		t.Fatalf("> must warn about unseen lines: ran %d gate %v", ran, m.gateOpen)
-	}
-	m.Update(key("esc"))
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "✓ seen") || m.unseen() != 0 {
-		t.Fatalf("rendering the whole step marks it seen:\n%s", v)
+		t.Fatalf("rendering the whole change marks it seen:\n%s", v)
 	}
-	m.Update(key(">"))
-	if ran != 1 {
-		t.Fatal("a fully seen step moves on the first >")
-	}
-}
-
-func TestHeaderOneLine(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.step.Chapter = "Transfers"
-	m.step.Intro = "Before: a retry debited twice."
-	m.step.Note = "an aside about the step"
-	m.step.MayChange = true
-	m.step.Hotspots = []state.Hotspot{{Q: "second charge on retry?"}}
-	hdr := m.header()
-	if len(hdr) != 2 {
-		t.Fatalf("header has %d lines, want title and rule: %q", len(hdr), hdr)
-	}
-	title := ansi.Strip(hdr[0])
-	for _, want := range []string{"s1", "Transfers › first", "may change", "○○ 1/2"} {
-		if !strings.Contains(title, want) {
-			t.Errorf("title %q lacks %q", title, want)
-		}
-	}
-	m.viewStep, m.step = "s2", &m.review.Steps[1]
-	if hdr := m.header(); len(hdr) != 3 || !strings.Contains(ansi.Strip(hdr[1]), "esc to return") {
-		t.Fatalf("viewing another step keeps the way back: %q", hdr)
+	r, err := store.LoadCurrent()
+	if err != nil || !r.File("a.go").Seen {
+		t.Fatalf("a file whose changes were on screen is saved as seen: %+v %v", r.Files, err)
 	}
 }
 
@@ -1813,7 +1578,6 @@ func TestHerePanel(t *testing.T) {
 		}
 	}
 	m.Update(key("G"))
-	m.Update(key("k"))
 	m.Update(hereTickMsg{m.here.seq})
 	v = ansi.Strip(m.View())
 	if !strings.Contains(v, "── Wallet ──") || strings.Contains(v, "← Handle") ||
@@ -1879,8 +1643,7 @@ func TestYank(t *testing.T) {
 
 func TestCheckOffRisk(t *testing.T) {
 	m, _ := newTestModel(t)
-	m.review.Steps[0].Message = "s1"
-	m.review.Steps[0].Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?", Line: 2}}
+	m.review.Hotspots = []state.Hotspot{{Cat: "money", Q: "rounding?", File: "a.go", Line: 2}}
 	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: "rounding?",
 		NoteKind: "hotspot", Risk: 1})
 	m.relist()
@@ -1892,15 +1655,14 @@ func TestCheckOffRisk(t *testing.T) {
 		t.Fatalf("a risk row says how to check it off: %q", ansi.Strip(f))
 	}
 	m.Update(key("x"))
-	if !m.review.Steps[0].Hotspots[0].Checked || len(ran) != 1 {
+	if !m.review.Hotspots[0].Checked || len(ran) != 1 {
 		t.Fatalf("x checks the risk off: ran %v", ran)
 	}
 	if got := m.notes(); len(got) == 0 || got[0].Label != "✓ DONE" || !got[0].Dim {
 		t.Fatalf("a checked risk shows as such: %+v", got)
 	}
 	m.Update(key("x"))
-	if m.review.Steps[0].Hotspots[0].Checked ||
-		!slices.Equal(ran[1], []string{"step", "check", "--undo", "s1", "1"}) {
+	if m.review.Hotspots[0].Checked || !slices.Equal(ran[1], []string{"check", "--undo", "1"}) {
 		t.Fatalf("x again reopens it: ran %v", ran)
 	}
 	m.Update(key("enter"))
@@ -1908,10 +1670,8 @@ func TestCheckOffRisk(t *testing.T) {
 		t.Fatalf("details of a risk offer to check it off: %q", m.popupHint())
 	}
 	m.Update(key("x"))
-	m.Update(key("esc"))
-	m.Update(key(">"))
-	if m.gateOpen || ran[len(ran)-1][1] != "next" {
-		t.Fatalf("a seen step with every risk checked moves on at once: ran %v", ran)
+	if !m.review.Hotspots[0].Checked {
+		t.Fatal("x in the details checks the risk off")
 	}
 }
 
@@ -1989,7 +1749,7 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	m.peekFile = func(string) []string { return numbered(20) }
 	m.seek(func(l line) bool { return l.Kind == RowNote })
 	note := m.current()
-	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+	m.review.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
 		Text: note.Text, Detail: "claim races in a.go:7 and (a.go:7), not in missing.go:3."}}
 	m.Update(key("enter"))
 	if got := m.popup.refs; len(got) != 1 || got[0] != (lspLoc{Path: "a.go", Line: 7}) {
@@ -2006,125 +1766,6 @@ func TestNoteDetailsShowMentionedCode(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.popup == nil || m.popup.kind != "detail" {
 		t.Fatalf("ctrl+o must return to the details: %+v", m.popup)
-	}
-}
-
-func TestThreadsStep(t *testing.T) {
-	tr := testrepo.New(t)
-	tr.Write("a.go", strings.Join(numbered(10), "\n")+"\n")
-	tr.Write("b.go", "package b\n")
-	base := tr.Commit("base")
-	tr.Write("b.go", "package b\n\nvar X = 1\n")
-	head := tr.Commit("head")
-
-	m, sent := newTestModel(t)
-	m.ctx, m.repo, m.algo = context.Background(), gitx.Repo{Dir: tr.Dir}, gitx.DefaultDiffAlgorithm
-	m.review.BaseSHA, m.review.HeadSHA = base, head
-	m.review.Steps[0].Hunks = []state.StepHunk{{File: "b.go"}}
-	m.review.MR = &state.MR{IID: 7, Title: "guard", Me: "me"}
-	m.review.Discussions = []state.Discussion{
-		{ID: "d1", Author: "me", Body: "**major** return an error", File: "a.go", Line: 5,
-			Resolvable: true, Notes: []state.Note{
-				{Author: "me", Body: "**major** return an error"},
-				{Author: "alice", Body: "zero is expected"}}},
-		{ID: "d2", Author: "me", Body: "**nit** spacing", Resolvable: true,
-			Notes: []state.Note{{Author: "me", Body: "**nit** spacing"}}},
-	}
-	m.store = state.Store{Dir: t.TempDir(), Key: "k"}
-	if err := m.store.Save(m.review); err != nil {
-		t.Fatal(err)
-	}
-	if err := m.store.SetCurrent(m.review.ID); err != nil {
-		t.Fatal(err)
-	}
-	m.height = 60
-	m.reload()
-	if m.step.ID != "s1" {
-		t.Fatalf("threads wait for the agent's assessment: %s", m.step.ID)
-	}
-	m.Update(key("R"))
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "agent is checking the reply") {
-		t.Fatalf("an unassessed thread says the agent is on it:\n%s", v)
-	}
-	m.Update(key("esc"))
-	m.threadsShown = false
-	err := m.store.UpdateCurrent(func(r *state.Review) error {
-		r.Threads = []state.Thread{{ID: "d1", Notes: 2, Assessment: "callers cannot tell",
-			Proposed: state.VerdictOpen, ProposedReply: "please return an error"}}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	saved := func() state.Thread {
-		t.Helper()
-		r, err := m.store.LoadCurrent()
-		if err != nil {
-			t.Fatal(err)
-		}
-		return r.ThreadState(r.Discussions[0])
-	}
-	m.reload()
-	if m.step == nil || m.step.ID != extraThreads {
-		t.Fatalf("an assessed thread opens the threads step first: %+v", m.step)
-	}
-	v := ansi.Strip(m.View())
-	for _, want := range []string{"your threads · 1 to decide", "answered 1 of your 2 open threads",
-		"L5", "@alice", "zero is expected",
-		"AGENT · keep open?", "reply it suggests: please return an error", "DECIDE",
-		"general · nit spacing", "NO ANSWER YET", "end of your threads · enter → on to the review, s1"} {
-		if !strings.Contains(v, want) {
-			t.Fatalf("threads step misses %q:\n%s", want, v)
-		}
-	}
-	onDecision := func() bool {
-		return m.seek(func(l line) bool { return l.Thread == "d1" && l.NoteKind == "hotspot" })
-	}
-	if !onDecision() {
-		t.Fatal("no decision row for d1")
-	}
-	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "enter decide · n/N next/previous thread") {
-		t.Fatalf("a thread row says what to do: %q", ansi.Strip(f))
-	}
-	m.Update(key("enter"))
-	m.Update(key("3"))
-	if th := saved(); !th.Decided() || th.Verdict != state.VerdictOpen ||
-		th.Reply != "please return an error" || th.DecidedBy != state.DecidedByViewer {
-		t.Fatalf("3 takes the agent's proposal: %+v", th)
-	}
-	if !strings.Contains(m.status, "all answered threads decided") {
-		t.Fatalf("the last decision says what is next: %q", m.status)
-	}
-	onDecision()
-	m.Update(key("enter"))
-	m.Update(key("2"))
-	if !m.composing || !m.inlineCompose() || string(m.input) != "please return an error" ||
-		!strings.Contains(ansi.Strip(m.View()), "REPLY TO AUTHOR") {
-		t.Fatalf("2 edits the reply in place, starting from the agent's: %q", string(m.input))
-	}
-	typeText(m, ", please")
-	m.Update(key("enter"))
-	if th := saved(); th.Reply != "please return an error, please" || len(*sent) != 0 {
-		t.Fatalf("the reply is stored, not sent to the agent: %+v %+v", th, *sent)
-	}
-	m.Update(key("c"))
-	typeText(m, "why?")
-	m.Update(key("enter"))
-	if n := len(*sent); n != 1 || (*sent)[0].Text != "re thread d1: why?" {
-		t.Fatalf("c on a thread asks the agent about it: %+v", *sent)
-	}
-	m.Update(key("esc"))
-	m.Update(key("esc"))
-	if m.step.ID != "s1" {
-		t.Fatalf("esc goes back to the current step: %s", m.step.ID)
-	}
-	m.Update(key("R"))
-	if m.step.ID != extraThreads {
-		t.Fatalf("R opens the threads step: %s", m.step.ID)
-	}
-	m.Update(key(">"))
-	if m.step.ID != "s1" {
-		t.Fatalf("> leaves the threads for the review: %s", m.step.ID)
 	}
 }
 
@@ -2203,76 +1844,6 @@ func TestTopNoteDetails(t *testing.T) {
 	}
 }
 
-func TestChapterIntroInThePlan(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.review.Steps = append(m.review.Steps,
-		state.Step{ID: "s3", Title: "third", Chapter: "Bare", Status: state.StatusPending})
-	m.review.Steps[0].Chapter, m.review.Steps[1].Chapter = "Transfers", "Transfers"
-	m.review.Steps[0].Intro = "Before: a retry debited twice."
-	m.showStep("s1")
-	if !m.focusPlan || m.planCursor != 1 {
-		t.Fatalf("the first step of a chapter opens the plan on that step: %v %d",
-			m.focusPlan, m.planCursor)
-	}
-	v := ansi.Strip(m.View())
-	for _, want := range []string{"┌ plan", "TRANSFERS", "Before: a retry debited twice.",
-		"▶ s1 first", "○ s2 second", "BARE"} {
-		if !strings.Contains(v, want) {
-			t.Fatalf("plan lacks %q:\n%s", want, v)
-		}
-	}
-	if strings.Contains(v, "s3 third") {
-		t.Fatalf("other chapters stay folded:\n%s", v)
-	}
-	m.Update(key("enter"))
-	if m.focusPlan || m.composing || m.viewStep != "" {
-		t.Fatal("enter on the current step closes the plan")
-	}
-	m.showStep("s2")
-	if m.focusPlan {
-		t.Fatal("the intro shows once per chapter")
-	}
-	m.Update(key("I"))
-	if !m.focusPlan || m.planCursor != 2 {
-		t.Fatalf("I reopens the plan on the current step: %v %d", m.focusPlan, m.planCursor)
-	}
-	m.Update(key("j"))
-	m.Update(key("j"))
-	m.Update(key("l"))
-	v = ansi.Strip(m.View())
-	if !strings.Contains(v, "s3 third") || !strings.Contains(v, "Before: a retry") {
-		t.Fatalf("l unfolds another chapter while the intro stays:\n%s", v)
-	}
-}
-
-func TestEndRowAndEnter(t *testing.T) {
-	m, sent := newTestModel(t)
-	var ran [][]string
-	m.runGr = func(args ...string) (string, error) { ran = append(ran, args); return "", nil }
-	last := m.lines[len(m.lines)-1]
-	if last.Kind != RowEnd || !strings.Contains(ansi.Strip(m.View()), "✓ end of s1 · enter → next step") {
-		t.Fatalf("the step ends with the end row: %+v", last)
-	}
-	m.cursor = 2
-	m.Update(key("enter"))
-	if !m.composing || m.anchorFile != "a.go" || m.anchorLines != "2" || len(*sent) != 0 {
-		t.Fatalf("enter on code composes there: composing %v at %s:%s sent %+v",
-			m.composing, m.anchorFile, m.anchorLines, *sent)
-	}
-	m.Update(key("esc"))
-	m.cursor = 3
-	m.Update(key("enter"))
-	if m.popup == nil || m.popup.kind != "detail" {
-		t.Fatal("enter on an agent note opens its details")
-	}
-	m.Update(key("esc"))
-	m.Update(key("G"))
-	m.Update(key("enter"))
-	if len(ran) != 1 || !slices.Equal(ran[0], []string{"step", "next"}) {
-		t.Fatalf("enter on the end row moves on: %q", ran)
-	}
-}
-
 func TestEnterEditsOwnComment(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.review.Comments = []state.Comment{{ID: 7, File: "a.go", Lines: "2", Body: "rename x"}}
@@ -2283,20 +1854,6 @@ func TestEnterEditsOwnComment(t *testing.T) {
 	m.Update(key("enter"))
 	if m.composeKind != inbox.KindEdit || string(m.input) != "rename x" {
 		t.Fatalf("enter on own comment edits it: kind %q input %q", m.composeKind, string(m.input))
-	}
-}
-
-func TestEndRowWhileViewing(t *testing.T) {
-	m, sent := newTestModel(t)
-	m.viewStep, m.step = "s2", &m.review.Steps[1]
-	m.relist()
-	if !strings.Contains(m.lines[len(m.lines)-1].Text, "back to s1") {
-		t.Fatalf("end row while viewing: %q", m.lines[len(m.lines)-1].Text)
-	}
-	m.Update(key("G"))
-	m.Update(key("enter"))
-	if len(*sent) != 0 {
-		t.Fatalf("enter on a viewed step's end only goes back: %+v", *sent)
 	}
 }
 
@@ -2407,13 +1964,13 @@ func TestPalette(t *testing.T) {
 	m.Update(key("esc"))
 
 	m.Update(key(":"))
-	typeText(m, "s2")
+	typeText(m, "f a.go")
 	if len(m.paletteItems()) != 0 {
-		t.Fatal("a step id is a command, not a search")
+		t.Fatal("a known command with an argument is not a search")
 	}
 	m.Update(key("enter"))
-	if m.step.ID != "s2" {
-		t.Fatalf(":s2 still shows s2, step %s", m.step.ID)
+	if m.current().File != "a.go" {
+		t.Fatalf(":f jumps to the file, got %+v", m.current())
 	}
 }
 
@@ -2461,7 +2018,7 @@ func TestInfoModalScrollStopsAtTheEnd(t *testing.T) {
 	for i := range 30 {
 		d = append(d, fmt.Sprintf("paragraph %d", i))
 	}
-	m.step.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
+	m.review.Annotations = []state.Annotation{{File: note.File, Line: note.Line, Kind: "note",
 		Text: note.Text, Detail: strings.Join(d, "\n\n")}}
 	m.Update(key("enter"))
 	m.View()
@@ -2485,7 +2042,7 @@ func TestChatCollapsed(t *testing.T) {
 	m.width = 200
 	for i := range 20 {
 		m.review.Messages = append(m.review.Messages,
-			state.Message{Step: "s1", Text: fmt.Sprintf("message %02d", i)})
+			state.Message{Text: fmt.Sprintf("message %02d", i)})
 	}
 	small := m.chatWidth()
 	v := ansi.Strip(m.View())
@@ -2505,7 +2062,7 @@ func TestChatCollapsed(t *testing.T) {
 
 func TestRiskChatShowsTopic(t *testing.T) {
 	m, sent := newTestModel(t)
-	m.review.Steps[0].Hotspots = []state.Hotspot{{Q: "second charge on retry?", Line: 2}}
+	m.review.Hotspots = []state.Hotspot{{Q: "second charge on retry?", File: "a.go", Line: 2}}
 	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2,
 		Text: "second charge on retry?", NoteKind: "hotspot", Risk: 1})
 	m.relist()
@@ -2529,7 +2086,7 @@ func TestRiskChatShowsTopic(t *testing.T) {
 func TestSideChatSitsAtTheBottom(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.width = 160
-	m.review.Messages = []state.Message{{Step: "s1", Text: "hello from the agent"}}
+	m.review.Messages = []state.Message{{Text: "hello from the agent"}}
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	files := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "FILES") })
 	chat := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "CHAT") })
@@ -2544,7 +2101,7 @@ func TestAnswersWhileChatting(t *testing.T) {
 	m, sent := newTestModel(t)
 	m.width = 160
 	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
-	m.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: []string{"yes", "no"}}}
+	m.review.Messages = []state.Message{{Time: t0, Text: "?", Options: []string{"yes", "no"}}}
 	m.Update(key("C"))
 	if v := ansi.Strip(m.View()); !strings.Contains(v, "A-1 yes") || !strings.Contains(v, "A-2 no") {
 		t.Fatalf("an open chat shows the answers with A-n:\n%s", v)
@@ -2552,35 +2109,6 @@ func TestAnswersWhileChatting(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("2"), Alt: true})
 	if len(*sent) != 1 || (*sent)[0].Text != "no" || !m.composing || len(m.input) != 0 {
 		t.Fatalf("A-2 answers and the chat stays open: %+v input %q", *sent, string(m.input))
-	}
-}
-
-func TestLessThanShowsPreviousStep(t *testing.T) {
-	m, sent := newTestModel(t)
-	m.review.Current, m.step = "s2", &m.review.Steps[1]
-	m.Update(key("<"))
-	if m.step.ID != "s1" || m.review.Current != "s2" || len(*sent) != 0 {
-		t.Fatalf("< looks at the previous step: step %s current %s", m.step.ID, m.review.Current)
-	}
-}
-
-func TestBlockerAsksContinueOrFinish(t *testing.T) {
-	m, _ := newTestModel(t)
-	m.runGr = func(args ...string) (string, error) {
-		return "comment #2 blocker a.go:2\nstale (depend on a blocked step): s2 s3\n", nil
-	}
-	m.cursor = 2
-	m.Update(key("enter"))
-	typeText(m, "this breaks retries")
-	m.Update(key("enter"))
-	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "┌ blocker") || !strings.Contains(v, "s2 s3") {
-		t.Fatalf("a saved blocker asks continue or finish, without the agent:\n%s", v)
-	}
-	m.Update(key("j"))
-	m.Update(key("enter"))
-	if len(m.staleSteps) != 0 || !m.finishCard {
-		t.Fatal("finish now opens the finish card")
 	}
 }
 
@@ -2662,7 +2190,7 @@ func TestThreadCardInCode(t *testing.T) {
 		NoteKind: "mr", NoteLabel: "YOU ↩2", Thread: "d1"})
 	m.relist()
 	m.cursor = 4
-	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "enter open the thread · R all your threads") {
+	if f, _ := m.footer(); !strings.Contains(ansi.Strip(f), "enter open the thread · n/N next/previous note") {
 		t.Fatalf("a thread row says how to open it: %q", ansi.Strip(f))
 	}
 	m.Update(key("enter"))

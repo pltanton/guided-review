@@ -1,176 +1,85 @@
 package view
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/state"
+	"github.com/pltanton/guided-review/internal/testrepo"
 )
 
-func bigPlanModel(t *testing.T, current int) *model {
-	t.Helper()
-	m, _ := newTestModel(t)
-	r := &state.Review{ID: "mr-1"}
-	for i := range 76 {
-		st := state.Step{
-			ID: fmt.Sprintf("s%d", i+1), Title: fmt.Sprintf("step %d", i+1), Kind: "logic",
-			Chapter: fmt.Sprintf("chapter %d", i/6+1), Status: state.StatusPending,
-		}
-		if i < current {
-			st.Status = state.StatusDone
-		}
-		if i%5 == 0 {
-			st.Hotspots = []state.Hotspot{{}}
-		}
-		r.Steps = append(r.Steps, st)
-	}
-	r.Current = r.Steps[current].ID
-	m.review, m.step = r, &r.Steps[current]
-	m.height = 16
-	m.relist()
-	return m
-}
-
-func planText(m *model) []string {
-	if !m.focusPlan {
-		m.focusPlanPanel()
-		defer func() { m.focusPlan = false }()
-	}
-	c := m.planModal(m.width-6, m.height-4)
+func treeText(m *model) string {
+	row, plain, selected := sideRows(40)
+	entries, _ := m.fileEntries(row, plain, selected)
 	var out []string
-	for _, line := range c.body {
-		out = append(out, ansi.Strip(line))
+	for _, e := range entries {
+		out = append(out, ansi.Strip(e.text))
 	}
-	return out
+	return strings.Join(out, "\n")
 }
 
-func planRow(t *testing.T, m *model, want string) int {
-	t.Helper()
-	for i, line := range planText(m) {
-		if strings.Contains(line, want) {
-			return i
+func TestTreeOrderAndMarks(t *testing.T) {
+	m, _ := twoFileModel(t)
+	m.review.Files = []state.File{
+		{Path: "a.go", Tier: state.TierCore},
+		{Path: "api/b.go", Tier: state.TierCore, Order: 2, Read: true},
+		{Path: "api/c.go", Tier: state.TierCore, Order: 1, Read: true},
+		{Path: "gen.pb.go", Tier: state.TierGenerated},
+		{Path: "wire.go", Tier: state.TierBoilerplate},
+	}
+	m.review.Hotspots = []state.Hotspot{{Cat: "money", Q: "?", File: "api/c.go", Line: 7}}
+	m.width = 160
+	m.relist()
+	got := treeText(m)
+	lines := strings.Split(got, "\n")
+	want := []string{"api/", "c.go", "b.go", "a.go", "▸ boilerplate", "▸ generated"}
+	for i, w := range want {
+		if i >= len(lines) || !strings.Contains(lines[i], w) {
+			t.Fatalf("tree row %d lacks %q:\n%s", i, w, got)
 		}
 	}
-	t.Fatalf("plan lacks %q:\n%s", want, strings.Join(planText(m), "\n"))
-	return -1
-}
-
-func ctrlP() tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyCtrlP} }
-
-func TestBigPlanKeepsCurrentVisible(t *testing.T) {
-	for _, cur := range []int{0, 37, 75} {
-		m := bigPlanModel(t, cur)
-		plan := strings.Join(planText(m), "\n")
-		if !strings.Contains(plan, fmt.Sprintf("▶ s%d ", cur+1)) {
-			t.Fatalf("current s%d not shown:\n%s", cur+1, plan)
-		}
-		if n := strings.Count(plan, "▾"); n != 1 {
-			t.Fatalf("want only the current chapter open, %d open:\n%s", n, plan)
-		}
+	if !strings.Contains(lines[1], "● ⚑1 1") || !strings.Contains(lines[2], "● 2") {
+		t.Fatalf("order, flags and the unseen dot:\n%s", got)
 	}
-	m := bigPlanModel(t, 37)
-	if line := planText(m)[planRow(t, m, "CHAPTER 3 ")]; !strings.Contains(line, "▸") ||
-		!strings.HasSuffix(strings.TrimSpace(line), "6/6") {
-		t.Fatalf("collapsed chapter row: %q", line)
-	}
-	if line := planText(m)[planRow(t, m, "CHAPTER 7 ")]; !strings.Contains(line, "1/6 ⚑1") {
-		t.Fatalf("current chapter row: %q", line)
-	}
-}
-
-func TestPlanModal(t *testing.T) {
-	m := bigPlanModel(t, 37)
-	m.Update(key("p"))
-	if !m.focusPlan || !strings.Contains(ansi.Strip(m.View()), "┌ plan · 37/76 reviewed") {
-		t.Fatalf("p opens the plan modal:\n%s", ansi.Strip(m.View()))
-	}
-	m.Update(key("p"))
-	if m.focusPlan {
-		t.Fatal("p again closes it")
-	}
-}
-
-func TestPlanFoldsChapters(t *testing.T) {
-	m := bigPlanModel(t, 37)
-	m.Update(ctrlP())
-	if !m.focusPlan {
-		t.Fatal("ctrl+p must open the plan")
-	}
-	m.Update(key("h"))
-	plan := strings.Join(planText(m), "\n")
-	if strings.Contains(plan, "▾") || strings.Contains(plan, "s38 ") {
-		t.Fatalf("h must fold the current chapter:\n%s", plan)
-	}
-	if line := planText(m)[planRow(t, m, "CHAPTER 7 ")]; !strings.HasPrefix(line, "▌") {
-		t.Fatalf("cursor must sit on the folded chapter: %q", line)
-	}
-	m.Update(key("k"))
-	m.Update(key("enter"))
-	if !strings.Contains(strings.Join(planText(m), "\n"), "s31 ") {
-		t.Fatalf("enter must open chapter 6:\n%s", strings.Join(planText(m), "\n"))
-	}
-	for range 3 {
-		m.Update(key("j"))
-	}
-	m.Update(key("enter"))
-	if m.focusPlan || m.step.ID != "s33" || m.review.Current != "s38" {
-		t.Fatalf("enter on a step shows it: focus %v step %s current %s",
-			m.focusPlan, m.step.ID, m.review.Current)
-	}
-	m.Update(key("esc"))
-	m.Update(ctrlP())
-	m.Update(key("esc"))
-	if m.focusPlan {
-		t.Fatal("esc must close the plan")
-	}
-}
-
-func TestPlanScrolls(t *testing.T) {
-	m := bigPlanModel(t, 0)
-	m.planOpen = map[string]bool{}
-	for i := range 13 {
-		m.planOpen[fmt.Sprintf("chapter %d", i+1)] = true
-	}
-	m.Update(ctrlP())
-	for range 40 {
-		m.Update(key("j"))
-	}
-	plan := strings.Join(planText(m), "\n")
-	if !strings.Contains(plan, "s35 ") || strings.Contains(plan, "▶ s1 ") {
-		t.Fatalf("j must scroll the plan:\n%s", plan)
-	}
-	m.Update(key("esc"))
-	if plan := strings.Join(planText(m), "\n"); !strings.Contains(plan, "▶ s1 ") {
-		t.Fatalf("reopening the plan brings the current step back:\n%s", plan)
-	}
-	m.Update(ctrlP())
-	at := m.planCursor
-	m.Update(tea.MouseMsg{X: 2, Y: 5, Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
-	if m.planCursor != at+1 || m.offset != 0 {
-		t.Fatalf("wheel over the plan: cursor %d (was %d), code offset %d", m.planCursor, at, m.offset)
-	}
-}
-
-func TestPlanMouseFoldsChapter(t *testing.T) {
-	m := bigPlanModel(t, 37)
-	m.Update(ctrlP())
 	m.View()
-	click := func(want string) {
-		m.View()
-		y := m.modalY + 1 + planRow(t, m, want)
-		m.Update(tea.MouseMsg{X: 4, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+	if strings.Contains(treeText(m), "●") {
+		t.Fatalf("after the change was on screen no dot stays:\n%s", treeText(m))
 	}
-	click("CHAPTER 2 ")
-	if !strings.Contains(strings.Join(planText(m), "\n"), " s7 ") {
-		t.Fatalf("click must open chapter 2:\n%s", strings.Join(planText(m), "\n"))
+	items := m.treeItems()
+	if len(items) != 5 || items[3].file != "" || items[3].tier != state.TierBoilerplate {
+		t.Fatalf("treeItems = %+v", items)
 	}
-	click("CHAPTER 2 ")
-	if strings.Contains(strings.Join(planText(m), "\n"), " s7 ") {
-		t.Fatal("second click must fold chapter 2")
+}
+
+func TestFoldedTiersOpenOnEnter(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.Files = append(m.review.Files, state.File{Path: "wire.go", Tier: state.TierBoilerplate})
+	tr := testrepo.New(t)
+	tr.Write("a.go", "package a\n")
+	base := tr.Commit("base")
+	tr.Write("a.go", "package a\n\nvar X = 1\n")
+	tr.Write("wire.go", "package a\n")
+	head := tr.Commit("head")
+	m.src = newGitSource(context.Background(), gitx.Repo{Dir: tr.Dir}, gitx.DefaultDiffAlgorithm, base, head)
+	m.width = 160
+	m.rebuild(true)
+	if strings.Contains(ansi.Strip(m.View()), "▍ wire.go") {
+		t.Fatal("a boilerplate file is folded away at first")
+	}
+	m.Update(key("f"))
+	m.Update(key("G"))
+	m.Update(key("enter"))
+	if !m.tierOpen[state.TierBoilerplate] || !strings.Contains(ansi.Strip(m.View()), "▍ wire.go") {
+		t.Fatalf("enter on the group opens it:\n%s", ansi.Strip(m.View()))
+	}
+	m.Update(key("enter"))
+	if m.tierOpen[state.TierBoilerplate] || strings.Contains(ansi.Strip(m.View()), "▍ wire.go") {
+		t.Fatal("enter on the group row folds it again")
 	}
 }
 
@@ -178,6 +87,7 @@ func TestFilesScroll(t *testing.T) {
 	m, _ := twoFileModel(t)
 	for i := range 20 {
 		f := fmt.Sprintf("pkg/f%02d.go", i)
+		m.review.Files = append(m.review.Files, state.File{Path: f, Tier: state.TierCore, Read: true})
 		m.rows = append(m.rows, Row{Kind: RowFile, File: f, Text: f},
 			Row{Kind: RowAdded, File: f, Line: 1, Text: "x", HunkStart: true})
 	}
@@ -203,7 +113,7 @@ func TestFilesModalWhenNarrow(t *testing.T) {
 	m.relist()
 	m.Update(key("f"))
 	v := ansi.Strip(m.View())
-	if m.chatWidth() != 0 || !strings.Contains(v, "┌ files · s1") || !strings.Contains(v, "c.go") {
+	if m.chatWidth() != 0 || !strings.Contains(v, "┌ files") || !strings.Contains(v, "c.go") {
 		t.Fatalf("narrow: f opens the files modal:\n%s", v)
 	}
 	m.Update(key("j"))

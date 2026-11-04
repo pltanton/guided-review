@@ -3,7 +3,6 @@ package view
 import (
 	"cmp"
 	"fmt"
-	"slices"
 	"strings"
 	"time"
 
@@ -13,10 +12,7 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-const (
-	kindThreadReply = "thread-reply"
-	kindSkip        = "skip"
-)
+const kindThreadReply = "thread-reply"
 
 func (m *model) myThreads() []state.Discussion {
 	if m.review == nil {
@@ -41,20 +37,6 @@ func (m *model) assessing(d state.Discussion) bool {
 		!m.agentWaiting && !m.agentIdle
 }
 
-func (m *model) threadsDue() bool {
-	return !m.threadsShown && m.viewStep == "" && m.pendingThreads() > 0 &&
-		(len(m.review.Steps) == 0 || m.review.Current == m.review.Steps[0].ID) &&
-		!slices.ContainsFunc(m.myThreads(), m.assessing)
-}
-
-func (m *model) leaveThreads() {
-	if m.review.Step(m.review.Current) == nil {
-		m.status = "the agent is still planning the round · your threads stay here meanwhile"
-		return
-	}
-	m.showStep(m.review.Current)
-}
-
 func (m *model) threadsIntro() Note {
 	k, answered := m.keys(), 0
 	for _, d := range m.myThreads() {
@@ -62,28 +44,16 @@ func (m *model) threadsIntro() Note {
 			answered++
 		}
 	}
-	text := fmt.Sprintf("The author answered %d of your %d open threads. For each: read the reply "+
-		"and the agent's take, then %s — resolve, or keep it open with a reply. Nothing reaches "+
-		"the MR before you publish. %s goes on to the review.",
-		answered, len(m.myThreads()), k.key("act"), k.key("next"))
-	label := "YOUR THREADS"
-	if m.review.Round > 1 {
-		label = fmt.Sprintf("ROUND %d", m.review.Round)
-	}
-	return Note{Top: true, Kind: "note", Label: label, Text: text}
-}
-
-func (m *model) openThreads() {
-	if len(m.myThreads()) == 0 {
-		m.status = "no open threads of yours on the MR"
-		return
-	}
-	m.showStep(extraThreads)
+	text := fmt.Sprintf("The author answered %d of your %d open threads. They sit on their lines "+
+		"(%s/%s walk the notes): read the reply and the agent's take, then %s — resolve, or keep "+
+		"it open with a reply. Nothing reaches the MR before you publish.",
+		answered, len(m.myThreads()), k.key("next-note"), k.key("prev-note"), k.key("act"))
+	return Note{Top: true, Kind: "note", Label: fmt.Sprintf("ROUND %d", m.review.Round), Text: text}
 }
 
 func (m *model) threadNotes() []Note {
 	r := m.review
-	out := []Note{m.threadsIntro()}
+	var out []Note
 	for _, d := range m.myThreads() {
 		t := r.ThreadState(d)
 		add := func(kind, label, text string, dim bool) {
@@ -158,7 +128,7 @@ func (m *model) decideThread(id, verdict, reply string) {
 	}
 	m.reload()
 	m.status = "thread " + verdictWord(verdict)
-	if m.step == nil || m.step.ID != extraThreads || verdict == state.VerdictNone {
+	if verdict == state.VerdictNone {
 		return
 	}
 	found := m.seek(func(l line) bool {
@@ -169,7 +139,7 @@ func (m *model) decideThread(id, verdict, reply string) {
 		return d != nil && m.review.Answered(*d) && !m.review.ThreadState(*d).Decided()
 	})
 	if !found {
-		m.status = "all answered threads decided · " + m.keys().key("next") + " on to the review"
+		m.status = "all answered threads decided"
 	}
 	m.clamp()
 }
@@ -301,6 +271,6 @@ func (m *model) threadsWaiting() string {
 	if n == 1 {
 		what = "thread of yours waits"
 	}
-	return hotStyle.Render(fmt.Sprintf("%d answered %s for your decision · press %s",
-		n, what, m.keys().key("replies")))
+	return hotStyle.Render(fmt.Sprintf("%d answered %s for your decision · %s walks the notes",
+		n, what, m.keys().key("next-note")))
 }

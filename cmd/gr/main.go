@@ -21,19 +21,17 @@ review
   init [--base REV] [--id ID] [--force] [--self] [MR-URL | PR-URL | BRANCH | BASE..HEAD]
                        BASE..HEAD = BASE...HEAD: HEAD since it forked from BASE, or
                        against BASE itself when they share no history; --base: BRANCH only
-  status [--gate]
+  status
   hunks
-  plan set [-f FILE]...
-  step [show [ID] | next | skip --reason TEXT | goto ID | check [--undo] ID N]
-  comment add --file F --lines N[-M] --severity S [--step ID] [--suggestion TEXT] BODY...
+  plan set [-f FILE]...  merge a partial plan: briefing, files (order, why), hotspots, annotations
+  check [--undo] N     check hotspot N off (the viewer: x)
+  comment add --file F --lines N[-M] --severity S [--suggestion TEXT] BODY...
   comment list | resolve ID | delete ID | edit ID [--severity S] TEXT...
-  note add --file F --line N | --lines N-M [--kind note|spec] [--step ID] TEXT...
-  note detail --file F --line N [--step ID] TEXT... | -   details behind a note (viewer: i)
   discussions
   thread list | assess ID --propose resolve|open [--reply T] TEXT|-
-                       your MR threads; the reviewer decides them in the viewer (R)
+                       your MR threads; the reviewer decides them in the viewer
   prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F]
-          [--approve] [--partial]
+          [--approve]
   export [--dry-run | --dir]   write the result to <git common dir>/guided-review/exports/<id>
                        and print that dir (--dir: only print it)
   version              print the version (the viewer: :changelog lists what changed)
@@ -61,9 +59,8 @@ var commands = map[string]command{
 	"status":         cmdStatus,
 	"hunks":          cmdHunks,
 	"plan":           cmdPlan,
-	"step":           cmdStep,
+	"check":          cmdCheck,
 	"comment":        cmdComment,
-	"note":           cmdNote,
 	"discussions":    cmdDiscussions,
 	"thread":         cmdThread,
 	"prepare":        cmdPrepare,

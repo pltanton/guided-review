@@ -184,8 +184,6 @@ func TestPublishGitLabRetriesOnlyTheRest(t *testing.T) {
 		"--severity", "nit", "first")
 	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "7",
 		"--severity", "nit", "second")
-	h.mustRun("", "step", "next")
-	h.mustRun("", "step", "next")
 	h.mustRun("", "prepare", "--verdict", "approve", "--approve")
 	h.mustRun("", "export")
 
@@ -235,8 +233,6 @@ func TestPublishGitHubThreadRetry(t *testing.T) {
 	h.mustRun(goodPlan, "plan", "set")
 	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "5",
 		"--severity", "nit", "first")
-	h.mustRun("", "step", "next")
-	h.mustRun("", "step", "next")
 	h.edit(func(r *state.Review) {
 		r.Discussions = []state.Discussion{{ID: "t1", Author: "me", Body: "**nit** old",
 			Resolvable: true, ReplyTo: 9, Notes: []state.Note{
@@ -260,8 +256,6 @@ func TestPublishGitHubThreadRetry(t *testing.T) {
 
 func TestMarkPublishedChecksTheExport(t *testing.T) {
 	h, _ := mrHarness(t)
-	h.mustRun("", "step", "next")
-	h.mustRun("", "step", "next")
 	h.mustRun("", "prepare", "--verdict", "changes")
 	h.mustRun("", "export")
 	h.mustRun("", "prepare", "--verdict", "blocked")

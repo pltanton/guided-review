@@ -19,7 +19,6 @@ import (
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 	"github.com/pltanton/guided-review/internal/gitx"
-	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -346,31 +345,29 @@ func markerOnly(f state.File) bool {
 	return f.Tier == state.TierGenerated && strings.HasPrefix(f.Reason, classify.MarkerReason)
 }
 
-func unreviewedMarkerFiles(r *state.Review) []string {
-	var out []string
+func startRound(ctx context.Context, s session, r *state.Review, t target) ([]diff.File, error) {
+	old := r.HeadSHA
+	var unseen []string
 	for _, f := range r.Files {
-		inStep := slices.ContainsFunc(r.Steps, func(st state.Step) bool {
-			return slices.ContainsFunc(st.Hunks, func(h state.StepHunk) bool { return h.File == f.Path })
-		})
-		if markerOnly(f) && !inStep {
-			out = append(out, f.Path)
+		if f.Tier == state.TierCore && !f.Seen {
+			unseen = append(unseen, f.Path)
 		}
 	}
-	return out
-}
-
-func startRound(ctx context.Context, s session, r *state.Review, t target) ([]diff.File, error) {
-	old, oldRound := r.HeadSHA, max(r.Round, 1)
-	steps := r.Steps
-	if len(steps) == 0 {
-		steps = r.Carried
-	}
-	r.Round = oldRound + 1
+	r.Round = max(r.Round, 1) + 1
 	r.PrevHeadSHA = old
-	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles, r.Carried = "", false, nil, nil
-	if t.base == r.BaseSHA && s.repo.IsAncestor(ctx, old, t.head) {
+	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles = "", false, nil
+	switch {
+	case t.base == r.BaseSHA && s.repo.IsAncestor(ctx, old, t.head) && len(unseen) == 0:
 		r.RoundBaseSHA = old
-	} else {
+	case t.base == r.BaseSHA && s.repo.IsAncestor(ctx, old, t.head):
+		since, err := s.diff(ctx, old, t.head)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range since {
+			r.RoundFiles = append(r.RoundFiles, f.Path)
+		}
+	default:
 		prev, err := s.diff(ctx, r.BaseSHA, old)
 		if err != nil {
 			return nil, err
@@ -381,48 +378,21 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 		}
 		r.RoundRebased, r.RoundFiles = true, changedPatches(prev, cur)
 	}
-	r.BaseSHA, r.StartSHA, r.HeadSHA = t.base, t.start, t.head
-	if err := carrySteps(ctx, s, r, steps, oldRound, old); err != nil {
-		return nil, err
+	for _, path := range unseen {
+		if !slices.Contains(r.RoundFiles, path) {
+			r.RoundFiles = append(r.RoundFiles, path)
+		}
 	}
+	r.BaseSHA, r.StartSHA, r.HeadSHA = t.base, t.start, t.head
 	files, stateFiles, err := reviewFiles(ctx, s, r.DiffBase(), r.HeadSHA)
 	if err != nil {
 		return nil, err
 	}
-	r.Files = stateFiles
-	r.Steps, r.Current, r.Summary, r.Publish = nil, "", "", nil
+	r.Files = slices.DeleteFunc(stateFiles, func(f state.File) bool { return !r.InRound(f.Path) })
+	r.Briefing, r.Hotspots, r.Annotations, r.Publish = "", nil, nil, nil
 	r.RoundStart = time.Now()
 	files = slices.DeleteFunc(files, func(f diff.File) bool { return !r.InRound(f.Path) })
 	return files, nil
-}
-
-func carrySteps(
-	ctx context.Context,
-	s session,
-	r *state.Review,
-	steps []state.Step,
-	oldRound int,
-	oldHead string,
-) error {
-	if !slices.ContainsFunc(steps, plan.Unreviewed) {
-		return nil
-	}
-	since, err := s.diff(ctx, oldHead, r.HeadSHA)
-	if err != nil {
-		return err
-	}
-	full, err := s.diff(ctx, r.BaseSHA, r.HeadSHA)
-	if err != nil {
-		return err
-	}
-	if r.Carried = plan.Carry(steps, oldRound, since, full); len(r.Carried) == 0 || r.RoundRebased {
-		return nil
-	}
-	r.RoundBaseSHA, r.RoundFiles = "", make([]string, len(since))
-	for i, f := range since {
-		r.RoundFiles[i] = f.Path
-	}
-	return nil
 }
 
 func changedPatches(prev, cur []diff.File) []string {
@@ -454,14 +424,10 @@ func printIntro(e env, s session, r *state.Review, files []diff.File) {
 	printHeader(e, s, r)
 	e.println()
 	printHunks(e, r, files)
-	next := "pipe a plan (YAML) to `gr plan set`"
+	next := "`gr open`, then pipe plan parts (YAML) to `gr plan set` as you read"
 	if r.Round > 1 {
-		next = "check open comments against the new code, " +
-			"then pipe a plan for this round to `gr plan set`"
-	}
-	if len(r.Carried) > 0 && len(files) == 0 {
-		next = "check open comments against the new code, then `echo 'steps: []' | gr plan set` " +
-			"to go on with the carried steps"
+		next = "`gr open`, check open comments against the new code, " +
+			"then pipe plan parts for this round to `gr plan set`"
 	}
 	e.printf("\nnext: %s\n", next)
 }
@@ -503,14 +469,6 @@ func printHeader(e env, s session, r *state.Review) {
 		for _, c := range open {
 			e.printf("  #%d %s %s:%s  %s\n", c.ID, c.Severity, c.File, c.Lines, c.Body)
 		}
-	}
-	if len(r.Carried) > 0 {
-		ids := make([]string, len(r.Carried))
-		for i, st := range r.Carried {
-			ids[i] = st.ID
-		}
-		e.printf("carried, not reviewed in an earlier round: %s (they follow this round's plan)\n",
-			strings.Join(ids, " "))
 	}
 	printDiscussions(e, r, false)
 }

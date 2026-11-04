@@ -20,7 +20,7 @@ import (
 )
 
 func (m *model) startCompose(kind string) {
-	if m.review == nil || m.step == nil && kind != inbox.KindMessage {
+	if m.review == nil {
 		return
 	}
 	m.composing, m.composeKind, m.input, m.inputPos = true, kind, nil, 0
@@ -54,8 +54,8 @@ func (m *model) discussNote() {
 	if p == nil || !m.composing {
 		return
 	}
-	if p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots) {
-		q := m.step.Hotspots[p.risk-1].Q
+	if p.risk > 0 && p.risk <= len(m.review.Hotspots) {
+		q := m.review.Hotspots[p.risk-1].Q
 		m.chatAbout, m.chatTopic = "about the risk «"+q+"»: ", "⚑ "+q
 	} else {
 		m.chatTopic = p.title
@@ -125,7 +125,7 @@ func (m *model) placeInline() {
 }
 
 func (m *model) inlineCompose() bool {
-	if !m.composing || m.chatting || m.cmdMode != 0 || m.step == nil || m.preview != "" ||
+	if !m.composing || m.chatting || m.cmdMode != 0 || m.review == nil || m.preview != "" ||
 		m.composeThread != "" && m.composeKind != kindThreadReply {
 		return false
 	}
@@ -277,8 +277,6 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":
 			m.emit(inbox.Event{Kind: inbox.KindExplain, File: m.anchorFile, Lines: m.anchorLines})
 		case text == "":
-		case m.composeKind == kindSkip:
-			m.moveStep("skip", "--reason", text)
 		case raw:
 			m.saveRaw(text, suggestion)
 		default:
@@ -403,11 +401,8 @@ func (m *model) deleteCommentID(ref int) {
 }
 
 func (m *model) emit(e inbox.Event) {
-	if m.review == nil || m.step == nil && e.Kind != inbox.KindMessage {
+	if m.review == nil {
 		return
-	}
-	if e.Step == "" && m.step != nil {
-		e.Step = m.step.ID
 	}
 	if err := m.send(e); err != nil {
 		m.err = err
@@ -418,7 +413,7 @@ func (m *model) emit(e inbox.Event) {
 	if m.review != nil && m.store.Dir != "" {
 		m.events, _ = inbox.All(m.store.ReviewDir(m.review.ID))
 	}
-	if m.step != nil && m.src != nil {
+	if m.src != nil {
 		m.rebuild(false)
 	}
 }
@@ -474,9 +469,6 @@ func (m *model) saveRaw(text, suggestion string) {
 			"comment", "add", "--file", m.anchorFile, "--lines", m.anchorLines,
 			"--severity", string(m.severity()),
 		}
-		if m.step != nil && !isExtra(m.step.ID) {
-			args = append(args, "--step", m.step.ID)
-		}
 		if suggestion != "" {
 			args = append(args, "--suggestion", suggestion)
 		}
@@ -487,10 +479,6 @@ func (m *model) saveRaw(text, suggestion string) {
 		return
 	}
 	out, err := m.runGr(args...)
-	if _, ids, ok := strings.Cut(out, "stale (depend on a blocked step): "); ok && err == nil {
-		first, _, _ := strings.Cut(ids, "\n")
-		m.staleSteps, m.staleSel = strings.Fields(first), 0
-	}
 	out = strings.Join(strings.Split(strings.TrimSpace(out), "\n"), " · ")
 	if err != nil {
 		m.err = fmt.Errorf("%v: %s", err, out)
@@ -514,7 +502,7 @@ func (m *model) noteDetails() {
 	text := m.noteText(cur)
 	if cur.Line == 0 {
 		width := min(max(m.mainWidth()-4, 20), detailWidth)
-		title := strings.ToLower(noteKinds[cur.NoteKind].label) + " · " + m.step.ID
+		title := strings.ToLower(noteKinds[cur.NoteKind].label)
 		m.popup = &popup{
 			kind: "detail", title: title, lines: markdownLines(text, width), risk: cur.Risk,
 		}
@@ -545,10 +533,10 @@ func (m *model) noteText(cur line) string {
 
 func (m *model) refreshDetail() bool {
 	p := m.popup
-	if p == nil || p.kind != "detail" || m.step == nil {
+	if p == nil || p.kind != "detail" || m.review == nil {
 		return false
 	}
-	text, ok := m.step.Detail(p.loc.Path, p.loc.Line)
+	text, ok := m.review.Detail(p.loc.Path, p.loc.Line)
 	if ok {
 		width := min(max(m.mainWidth()-4, 20), detailWidth)
 		p.refs = m.detailRefs(text)

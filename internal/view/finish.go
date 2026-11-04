@@ -293,15 +293,14 @@ func (m *model) toggleApprove() {
 		m.prepare(p.Verdict, false)
 	case len(m.review.OpenThreads()) > 0:
 		m.status = "approve waits for your open threads: " +
-			strings.Join(m.review.OpenThreads(), " ") + " (" + m.keys().key("replies") + ")"
+			strings.Join(m.review.OpenThreads(), " ")
 	default:
 		m.prepare(plan.VerdictApprove, true)
 	}
 }
 
 func (m *model) prepare(verdict string, approve bool) {
-	partial := len(plan.Gate(m.review)) > 0
-	if !m.runPrepare(verdict, approve, m.review.Publish.Decisions, partial) {
+	if !m.runPrepare(verdict, approve, m.review.Publish.Decisions) {
 		return
 	}
 	m.status = "verdict: " + ansi.Strip(verdictStyle(verdict))
@@ -312,13 +311,10 @@ func (m *model) prepare(verdict string, approve bool) {
 }
 
 // runPrepare runs gr prepare and mirrors the plan it wrote; false when gr refused.
-func (m *model) runPrepare(verdict string, approve bool, decisions string, partial bool) bool {
+func (m *model) runPrepare(verdict string, approve bool, decisions string) bool {
 	args := []string{"prepare", "--verdict", verdict, "--decisions", decisions}
 	if approve {
 		args = append(args, "--approve")
-	}
-	if partial {
-		args = append(args, "--partial")
 	}
 	if out, err := m.runGr(args...); err != nil {
 		m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
@@ -408,6 +404,16 @@ func (m *model) finishCardModal(w int) modalContent {
 			body = append(body, strings.Split(ansi.Wrap(l, max(w, 20), ""), "\n")...)
 		}
 	}
+	if unread := plan.Unread(m.review); len(unread) > 0 {
+		body = append(body, "", hotStyle.Render("not read: "+strings.Join(unread, ", ")))
+	}
+	if n := m.unreadByAgent(); n > 0 {
+		what := "files"
+		if n == 1 {
+			what = "file"
+		}
+		body = append(body, "", hotStyle.Render(fmt.Sprintf("the agent is still reading %d %s", n, what)))
+	}
 	if waiting := m.threadsWaiting(); waiting != "" {
 		body = append(body, "", waiting)
 	}
@@ -422,6 +428,16 @@ func (m *model) finishCardModal(w int) modalContent {
 		body = append(body, "", delStyle.Render(m.err.Error()))
 	}
 	return modalContent{"finish", "enter · esc back to the review", body}
+}
+
+func (m *model) unreadByAgent() int {
+	n := 0
+	for _, f := range m.review.Files {
+		if f.Tier == state.TierCore && !f.Read {
+			n++
+		}
+	}
+	return n
 }
 
 func severityCounts(r *state.Review) string {
@@ -441,11 +457,6 @@ func severityCounts(r *state.Review) string {
 
 func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 	items := m.finishItems()
-	if k := msg.String(); k == m.keys().key("replies") {
-		m.finishCard = false
-		m.openThreads()
-		return nil
-	}
 	switch cardNav(msg.String(), len(items), &m.finishSel) {
 	case "esc":
 		m.finishCard = false
@@ -461,8 +472,7 @@ func (m *model) handleFinishCardKey(msg tea.KeyMsg) tea.Cmd {
 func (m *model) prepareFinish() tea.Cmd {
 	verdict, _ := plan.SuggestVerdict(m.review)
 	approve := m.askApprove(verdict) && m.approvePick == 1
-	partial := len(plan.Gate(m.review)) > 0
-	if !m.runPrepare(verdict, approve, plan.Decisions(m.review), partial) {
+	if !m.runPrepare(verdict, approve, plan.Decisions(m.review)) {
 		return nil
 	}
 	m.finishCard = false

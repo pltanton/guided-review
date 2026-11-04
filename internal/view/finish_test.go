@@ -18,9 +18,6 @@ func finishModel(t *testing.T, mr bool) (*model, *[][]string) {
 		m.review.MR = &state.MR{Host: "gitlab.com", Project: "g/p", IID: 7}
 	}
 	m.review.Publish = &state.PublishPlan{Verdict: "changes", Decisions: "kept the cache"}
-	for i := range m.review.Steps {
-		m.review.Steps[i].Status = state.StatusDone
-	}
 	var ran [][]string
 	m.runGr = func(args ...string) (string, error) {
 		ran = append(ran, args)
@@ -67,13 +64,9 @@ func TestPreviewVerdictAndApprove(t *testing.T) {
 	}
 }
 
-func TestPreviewPartialAndOpenThreads(t *testing.T) {
+func TestPreviewOpenThreads(t *testing.T) {
 	m, ran := finishModel(t, true)
-	m.review.Steps[1].Status = state.StatusPending
 	m.Update(key("v"))
-	if got := lastPrepare(*ran); !slices.Contains(got, "--partial") {
-		t.Fatalf("a review with steps left stays partial when the verdict changes: %q", got)
-	}
 	m.review.MR.Me = "me"
 	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true}}
 	n := len(*ran)

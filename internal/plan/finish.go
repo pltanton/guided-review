@@ -43,34 +43,32 @@ func SuggestVerdict(r *state.Review) (verdict, why string) {
 	return VerdictApprove, "no blocker or major, no open threads"
 }
 
-func Decisions(r *state.Review) string {
-	var lines, pending, unchecked []string
-	checked, risks := 0, 0
-	for _, s := range r.Steps {
-		switch s.Status {
-		case state.StatusSkipped:
-			lines = append(lines, fmt.Sprintf("- Skipped %s «%s»: %s", s.ID, s.Title, s.SkipReason))
-		case state.StatusPending, state.StatusStale:
-			pending = append(pending, s.ID)
-		}
-		for _, h := range s.Hotspots {
-			risks++
-			if h.Checked {
-				checked++
-			} else {
-				unchecked = append(unchecked, fmt.Sprintf("«%s» (%s)", h.Q, s.ID))
-			}
+func Unread(r *state.Review) []string {
+	var out []string
+	for _, f := range r.Files {
+		if f.Tier == state.TierCore && !f.Seen && r.InRound(f.Path) {
+			out = append(out, f.Path)
 		}
 	}
-	if risks > 0 {
-		line := fmt.Sprintf("- Risks checked: %d of %d", checked, risks)
+	return out
+}
+
+func Decisions(r *state.Review) string {
+	var lines, unchecked []string
+	checked := 0
+	for _, h := range r.Hotspots {
+		if h.Checked {
+			checked++
+		} else {
+			unchecked = append(unchecked, fmt.Sprintf("«%s» (%s:%d)", h.Q, path.Base(h.File), h.Line))
+		}
+	}
+	if len(r.Hotspots) > 0 {
+		line := fmt.Sprintf("- Risks checked: %d of %d", checked, len(r.Hotspots))
 		if len(unchecked) > 0 {
 			line += "; not checked: " + strings.Join(unchecked, ", ")
 		}
 		lines = append(lines, line)
-	}
-	if len(pending) > 0 {
-		lines = append(lines, "- Not reviewed yet: "+strings.Join(pending, ", "))
 	}
 	return strings.Join(lines, "\n")
 }

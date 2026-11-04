@@ -18,10 +18,9 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case m.newsOpen:
 		return nil
-	case m.gateOpen || m.finishCard || m.pub != nil || m.threadCard != "" ||
-		m.themeWas != "" || len(m.staleSteps) > 0:
+	case m.finishCard || m.pub != nil || m.threadCard != "" || m.themeWas != "":
 		return nil
-	case m.focusPlan || m.focusFiles && m.chatWidth() == 0:
+	case m.focusFiles && m.chatWidth() == 0:
 		return m.modalMouse(msg)
 	case m.help && msg.Button == tea.MouseButtonWheelUp:
 		m.helpTop = max(m.helpTop-wheelStep, 0)
@@ -149,7 +148,7 @@ func (m *model) overChat(x, y int) bool {
 
 func (m *model) onChatEdge(x, y int) bool {
 	cw := m.chatWidth()
-	return m.step != nil && m.preview == "" && cw > 0 && x == m.width-cw &&
+	return m.review != nil && m.preview == "" && cw > 0 && x == m.width-cw &&
 		y < m.height-len(m.bottomLines())
 }
 
@@ -161,8 +160,6 @@ func (m *model) onChatInput(x, y int) bool {
 		return x > m.width-m.chatWidth() && y >= top-1 && y < bodyH
 	case pills:
 		return y >= top && y < m.height-1
-	case m.step == nil:
-		return y == m.height-3
 	case m.chatWidth() > 0:
 		return x > m.width-m.chatWidth() && y >= bodyH-2 && y < bodyH
 	}

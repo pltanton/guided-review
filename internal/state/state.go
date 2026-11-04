@@ -1,6 +1,7 @@
 package state
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -17,27 +18,6 @@ const (
 	TierBoilerplate Tier = "boilerplate"
 	TierGenerated   Tier = "generated"
 )
-
-type StepStatus string
-
-const (
-	StatusPending StepStatus = "pending"
-	StatusDone    StepStatus = "done"
-	StatusSkipped StepStatus = "skipped"
-	StatusStale   StepStatus = "stale"
-)
-
-func (s StepStatus) Glyph() string {
-	switch s {
-	case StatusDone:
-		return "✓"
-	case StatusSkipped:
-		return "↷"
-	case StatusStale:
-		return "~"
-	}
-	return "·"
-}
 
 type Severity string
 
@@ -71,10 +51,9 @@ type Review struct {
 	RoundFiles   []string     `yaml:"round_files,omitempty"`
 	Domain       string       `yaml:"domain,omitempty"`
 	Files        []File       `yaml:"files"`
-	Summary      string       `yaml:"summary,omitempty"`
-	Steps        []Step       `yaml:"steps,omitempty"`
-	Carried      []Step       `yaml:"carried,omitempty"`
-	Current      string       `yaml:"current,omitempty"`
+	Briefing     string       `yaml:"briefing,omitempty"`
+	Hotspots     []Hotspot    `yaml:"hotspots,omitempty"`
+	Annotations  []Annotation `yaml:"annotations,omitempty"`
 	Comments     []Comment    `yaml:"comments,omitempty"`
 	Discussions  []Discussion `yaml:"discussions,omitempty"`
 	Threads      []Thread     `yaml:"threads,omitempty"`
@@ -86,7 +65,6 @@ type Review struct {
 
 type Message struct {
 	Time    time.Time `yaml:"time"`
-	Step    string    `yaml:"step,omitempty"`
 	Text    string    `yaml:"text"`
 	Options []string  `yaml:"options,omitempty"`
 }
@@ -167,31 +145,10 @@ type File struct {
 	Reason  string `yaml:"reason,omitempty"`
 	Added   int    `yaml:"added"`
 	Deleted int    `yaml:"deleted"`
-}
-
-type Step struct {
-	ID          string       `yaml:"id"`
-	Title       string       `yaml:"title"`
-	Kind        string       `yaml:"kind"`
-	Chapter     string       `yaml:"chapter,omitempty"`
-	Intro       string       `yaml:"intro,omitempty"`
-	Hunks       []StepHunk   `yaml:"hunks"`
-	Hotspots    []Hotspot    `yaml:"hotspots,omitempty"`
-	DependsOn   []string     `yaml:"depends_on,omitempty"`
-	Annotations []Annotation `yaml:"annotations,omitempty"`
-	Note        string       `yaml:"note,omitempty"`
-	Message     string       `yaml:"message,omitempty"`
-	WhyBig      string       `yaml:"why_big,omitempty"`
-	Announced   bool         `yaml:"announced,omitempty"`
-	Status      StepStatus   `yaml:"status,omitempty"`
-	MayChange   bool         `yaml:"may_change,omitempty"`
-	SkipReason  string       `yaml:"skip_reason,omitempty"`
-	FromRound   int          `yaml:"from_round,omitempty"`
-}
-
-type StepHunk struct {
-	File  string `yaml:"file"`
-	Lines string `yaml:"lines,omitempty"`
+	Order   int    `yaml:"order,omitempty"`
+	Why     string `yaml:"why,omitempty"`
+	Read    bool   `yaml:"read,omitempty"`
+	Seen    bool   `yaml:"seen,omitempty"`
 }
 
 type Hotspot struct {
@@ -232,7 +189,6 @@ func (c Code) MarshalYAML() (any, error) {
 
 type Comment struct {
 	ID            int      `yaml:"id"`
-	Step          string   `yaml:"step"`
 	File          string   `yaml:"file"`
 	Lines         string   `yaml:"lines"`
 	SHA           string   `yaml:"sha"`
@@ -261,26 +217,10 @@ func (r *Review) DiffBase() string {
 }
 
 func (r *Review) InRound(path string) bool {
-	if !r.RoundRebased && len(r.Carried) == 0 {
+	if !r.RoundRebased && len(r.RoundFiles) == 0 {
 		return true
 	}
 	return slices.Contains(r.RoundFiles, path)
-}
-
-func (r *Review) Step(id string) *Step {
-	if i := r.StepIndex(id); i >= 0 {
-		return &r.Steps[i]
-	}
-	return nil
-}
-
-func (r *Review) StepIndex(id string) int {
-	for i := range r.Steps {
-		if r.Steps[i].ID == id {
-			return i
-		}
-	}
-	return -1
 }
 
 func (r *Review) File(path string) *File {
@@ -313,58 +253,47 @@ func ParseLines(s string) (start, end int, err error) {
 	return start, end, nil
 }
 
-func (s *Step) Detail(file string, line int) (string, bool) {
-	if d := s.detailAt(file, line); d != nil && *d != "" {
-		return *d, true
+func (r *Review) Detail(file string, line int) (string, bool) {
+	for _, h := range r.Hotspots {
+		if h.File == file && h.Line == line && h.Detail != "" {
+			return h.Detail, true
+		}
+	}
+	for _, a := range r.Annotations {
+		if a.File == file && max(a.To, a.Line) == line && a.Detail != "" {
+			return a.Detail, true
+		}
 	}
 	return "", false
 }
 
-func (s *Step) SetDetail(file string, line int, text string) bool {
-	d := s.detailAt(file, line)
-	if d != nil {
-		*d = text
+func tierRank(t Tier) int {
+	switch t {
+	case TierBoilerplate:
+		return 1
+	case TierGenerated:
+		return 2
 	}
-	return d != nil
+	return 0
 }
 
-func (s *Step) detailAt(file string, line int) *string {
-	var slots []*string
-	for i, a := range s.Annotations {
-		if a.File == file && max(a.To, a.Line) == line {
-			slots = append(slots, &s.Annotations[i].Detail)
+func (r *Review) FileOrder() []File {
+	files := slices.Clone(r.Files)
+	slices.SortStableFunc(files, func(a, b File) int {
+		if c := cmp.Compare(tierRank(a.Tier), tierRank(b.Tier)); c != 0 {
+			return c
 		}
-	}
-	for i, h := range s.Hotspots {
-		if f, _ := s.HotspotFile(h); f == file && h.Line == line && line > 0 {
-			slots = append(slots, &s.Hotspots[i].Detail)
+		switch {
+		case a.Order > 0 && b.Order > 0:
+			return cmp.Compare(a.Order, b.Order)
+		case a.Order > 0:
+			return -1
+		case b.Order > 0:
+			return 1
 		}
-	}
-	for _, d := range slots {
-		if *d != "" {
-			return d
-		}
-	}
-	if len(slots) == 0 {
-		return nil
-	}
-	return slots[0]
-}
-
-func (s *Step) HotspotFile(h Hotspot) (file string, sure bool) {
-	if h.File != "" || len(s.Hunks) == 0 {
-		return h.File, true
-	}
-	var files []string
-	for _, sh := range s.Hunks {
-		if from, to, err := ParseLines(sh.Lines); err == nil && from <= h.Line && h.Line <= to {
-			return sh.File, true
-		}
-		if !slices.Contains(files, sh.File) {
-			files = append(files, sh.File)
-		}
-	}
-	return files[0], len(files) == 1
+		return cmp.Compare(a.Path, b.Path)
+	})
+	return files
 }
 
 const ProviderGitHub = "github"

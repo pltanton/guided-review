@@ -179,40 +179,6 @@ func printHunks(e env, r *state.Review, files []diff.File) {
 		}
 	}
 }
-
-func printStep(e env, r *state.Review, st *state.Step) {
-	pos := r.StepIndex(st.ID) + 1
-	e.printf("%s %d/%d [%s] %s · %s\n", st.ID, pos, len(r.Steps), st.Status, st.Kind, st.Title)
-	if st.FromRound > 0 {
-		e.printf("carried: not reviewed in round %d\n", st.FromRound)
-	}
-	if st.Note != "" {
-		e.printf("note: %s\n", st.Note)
-	}
-	for _, h := range st.Hunks {
-		e.printf("hunk: %s %s\n", h.File, cmp.Or(h.Lines, "whole file"))
-	}
-	for _, h := range st.Hotspots {
-		mark := ""
-		if h.Checked {
-			mark = " (checked by the human)"
-		}
-		e.printf("hotspot %s: %s%s\n", h.Cat, h.Q, mark)
-	}
-	for _, a := range st.Annotations {
-		e.printf("%s %s:%d: %s\n", a.Kind, a.File, a.Line, a.Text)
-	}
-	if len(st.DependsOn) > 0 {
-		e.printf("depends on: %s\n", strings.Join(st.DependsOn, " "))
-	}
-	if st.MayChange {
-		e.println("may change: an earlier blocker/major touches a step this one depends on")
-	}
-	if st.SkipReason != "" {
-		e.printf("skipped: %s\n", st.SkipReason)
-	}
-}
-
 func printDiscussions(e env, r *state.Review, full bool) {
 	if r.MR == nil {
 		return

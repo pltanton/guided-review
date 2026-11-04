@@ -41,15 +41,25 @@ func TestSuggestVerdict(t *testing.T) {
 }
 
 func TestDecisions(t *testing.T) {
-	r := &state.Review{Steps: []state.Step{
-		{ID: "s1", Status: state.StatusDone, Hotspots: []state.Hotspot{{Q: "rounding?", Checked: true}}},
-		{ID: "s2", Title: "wiring", Status: state.StatusSkipped, SkipReason: "trivial"},
-		{ID: "s3", Status: state.StatusPending, Hotspots: []state.Hotspot{{Q: "retry twice?"}}},
-	}}
-	want := "- Skipped s2 «wiring»: trivial\n" +
-		"- Risks checked: 1 of 2; not checked: «retry twice?» (s3)\n" +
-		"- Not reviewed yet: s3"
+	r := &state.Review{
+		Files: []state.File{
+			{Path: "a.go", Tier: state.TierCore, Seen: true},
+			{Path: "x/b.go", Tier: state.TierCore},
+			{Path: "gen.pb.go", Tier: state.TierGenerated},
+		},
+		Hotspots: []state.Hotspot{
+			{Q: "rounding?", File: "a.go", Line: 3, Checked: true},
+			{Q: "retry twice?", File: "x/b.go", Line: 9},
+		},
+	}
+	want := "- Risks checked: 1 of 2; not checked: «retry twice?» (b.go:9)"
 	if got := plan.Decisions(r); got != want {
+		t.Errorf("Decisions =\n%s\nwant\n%s", got, want)
+	}
+	if got := plan.Unread(r); len(got) != 1 || got[0] != "x/b.go" {
+		t.Errorf("Unread = %v", got)
+	}
+	if got := plan.Decisions(&state.Review{Hotspots: r.Hotspots}); got != want {
 		t.Errorf("Decisions =\n%s\nwant\n%s", got, want)
 	}
 	if got := plan.Decisions(&state.Review{}); got != "" {

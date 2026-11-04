@@ -37,11 +37,11 @@ func TestAppendReadWait(t *testing.T) {
 	if evs, err := inbox.All(dir); err != nil || len(evs) != 0 {
 		t.Fatalf("empty inbox: %v, %v", evs, err)
 	}
-	ev := inbox.Event{Kind: inbox.KindMessage, Text: "why?", File: "a.go", Lines: "3-4", Step: "s1"}
+	ev := inbox.Event{Kind: inbox.KindMessage, Text: "why?", File: "a.go", Lines: "3-4"}
 	if err := inbox.Append(dir, ev); err != nil {
 		t.Fatal(err)
 	}
-	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindAsk, Step: "s1"}); err != nil {
+	if err := inbox.Append(dir, inbox.Event{Kind: inbox.KindAsk}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -79,40 +79,38 @@ func TestFormat(t *testing.T) {
 		{
 			inbox.Event{
 				Kind:  inbox.KindMessage,
-				Step:  "s3",
 				File:  "a.go",
 				Lines: "57-58",
 				Text:  "what if it fails?",
 			},
-			"[message] s3 a.go:57-58: what if it fails?",
+			"[message] a.go:57-58: what if it fails?",
 		},
 		{
-			inbox.Event{Kind: inbox.KindMessage, Step: "s3", Text: "looks fine"},
-			"[message] s3: looks fine",
+			inbox.Event{Kind: inbox.KindMessage, Text: "looks fine"},
+			"[message]: looks fine",
 		},
 		{
-			inbox.Event{Kind: inbox.KindExplain, Step: "s3", File: "a.go", Lines: "40-52"},
-			"[explain] s3 a.go:40-52",
+			inbox.Event{Kind: inbox.KindExplain, File: "a.go", Lines: "40-52"},
+			"[explain] a.go:40-52",
 		},
-		{inbox.Event{Kind: inbox.KindAsk, Step: "s3", Text: "why?"}, "[ask] s3: why?"},
+		{inbox.Event{Kind: inbox.KindAsk, Text: "why?"}, "[ask]: why?"},
 		{
 			inbox.Event{
 				Kind:    inbox.KindMessage,
-				Step:    "s3",
 				File:    "a.go",
 				Lines:   "57",
 				Comment: 2,
 				Text:    "not a nit",
 			},
-			"[message] s3 a.go:57 re #2: not a nit",
+			"[message] a.go:57 re #2: not a nit",
 		},
 		{
-			inbox.Event{Kind: inbox.KindEdit, Step: "s3", Comment: 2, Text: "rename to total"},
-			"[edit] s3 #2: rename to total",
+			inbox.Event{Kind: inbox.KindEdit, Comment: 2, Text: "rename to total"},
+			"[edit] #2: rename to total",
 		},
 		{
-			inbox.Event{Kind: inbox.KindMessage, Step: "s3", Text: "two things:\n- a\n[x] b"},
-			"[message] s3: two things:\n    - a\n    [x] b",
+			inbox.Event{Kind: inbox.KindMessage, Text: "two things:\n- a\n[x] b"},
+			"[message]: two things:\n    - a\n    [x] b",
 		},
 	}
 	for _, tt := range tests {

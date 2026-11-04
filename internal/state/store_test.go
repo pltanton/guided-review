@@ -78,13 +78,13 @@ func TestUpdate(t *testing.T) {
 	}
 	stop := errors.New("stop")
 	err = s.Update("mr-1", func(r *state.Review) error {
-		r.Summary = "changed"
+		r.Briefing = "changed"
 		return stop
 	})
 	if !errors.Is(err, stop) {
 		t.Fatalf("Update must return the apply error: %v", err)
 	}
-	if r, _ := s.Load("mr-1"); r.Summary != "" {
+	if r, _ := s.Load("mr-1"); r.Briefing != "" {
 		t.Fatal("a failed apply must not be saved")
 	}
 }

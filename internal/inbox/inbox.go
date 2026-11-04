@@ -33,7 +33,6 @@ const (
 type Event struct {
 	Time    time.Time `json:"time"`
 	Kind    string    `json:"kind"`
-	Step    string    `json:"step,omitempty"`
 	File    string    `json:"file,omitempty"`
 	Lines   string    `json:"lines,omitempty"`
 	Comment int       `json:"comment,omitempty"`
@@ -42,7 +41,7 @@ type Event struct {
 
 func (e Event) String() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "[%s] %s", e.Kind, e.Step)
+	fmt.Fprintf(&b, "[%s]", e.Kind)
 	if e.File != "" {
 		fmt.Fprintf(&b, " %s:%s", e.File, e.Lines)
 	}

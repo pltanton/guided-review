@@ -90,7 +90,7 @@ func (m *model) defaultHere(req hereReq) tea.Cmd {
 
 func (m *model) followHere() tea.Cmd {
 	cur := m.current()
-	if m.hereDo == nil || m.step == nil || cur.File == "" || cur.Line == 0 || cur.Kind == RowRemoved {
+	if m.hereDo == nil || m.review == nil || cur.File == "" || cur.Line == 0 || cur.Kind == RowRemoved {
 		return nil
 	}
 	var cmds []tea.Cmd

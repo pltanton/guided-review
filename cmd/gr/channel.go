@@ -71,7 +71,7 @@ func cmdSay(ctx context.Context, e env, args []string) error {
 		return errors.New("usage: gr say [--option ANSWER]... TEXT (or - to read stdin)")
 	}
 	return update(ctx, e, func(r *state.Review) {
-		msg := state.Message{Time: time.Now(), Step: r.Current, Text: text, Options: options}
+		msg := state.Message{Time: time.Now(), Text: text, Options: options}
 		r.Messages = append(r.Messages, msg)
 		r.Messages = r.Messages[max(len(r.Messages)-state.MaxMessages, 0):]
 		r.Progress = nil

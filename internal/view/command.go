@@ -12,9 +12,10 @@ import (
 
 	"github.com/pltanton/guided-review/internal/gitx"
 	"github.com/pltanton/guided-review/internal/inbox"
+	"github.com/pltanton/guided-review/internal/state"
 )
 
-var commandNames = []string{"q", "all", "boilerplate", "generated", "f", "set", "msg", "skip"}
+var commandNames = []string{"q", "f", "set", "msg"}
 
 var setOptions = []string{"context=", "diff=", "wrap", "nowrap"}
 
@@ -46,8 +47,7 @@ func (m *model) knownCommand(line string) bool {
 	if _, err := strconv.Atoi(name); err == nil || slices.Contains(commandNames, name) {
 		return true
 	}
-	return m.review != nil && m.stepByID(name) != nil ||
-		slices.ContainsFunc(m.keys().actions, func(a Action) bool { return a.Name == name })
+	return slices.ContainsFunc(m.keys().actions, func(a Action) bool { return a.Name == name })
 }
 
 func (m *model) submitCmd() tea.Cmd {
@@ -81,30 +81,21 @@ func (m *model) execCommand(line string) tea.Cmd {
 	switch name {
 	case "q":
 		return tea.Quit
-	case "all", "boilerplate", "generated":
-		name = "~" + name
 	case "f":
 		m.jumpToFileMatch(arg)
 		return nil
 	case "set":
 		m.setOption(arg)
 		return nil
-	case "msg", "skip":
+	case "msg":
 		if arg == "" {
-			m.status = "usage: :" + name + " <text>"
-			return nil
-		}
-		if name == "skip" {
-			m.moveStep("skip", "--reason", arg)
+			m.status = "usage: :msg <text>"
 			return nil
 		}
 		e := inbox.Event{Kind: inbox.KindMessage, Text: arg}
 		e.File, e.Lines, e.Comment = m.anchorAt()
 		m.emit(e)
 		return nil
-	}
-	if m.review != nil && m.stepByID(name) != nil {
-		return m.showStep(name)
 	}
 	for _, a := range m.keys().actions {
 		if a.Name == name {
@@ -151,13 +142,16 @@ func (m *model) gotoLine(n int) {
 
 func (m *model) jumpToFileMatch(q string) {
 	q = strings.ToLower(q)
-	for _, f := range m.stepFiles() {
-		if strings.Contains(strings.ToLower(f), q) {
-			m.jumpToFile(f)
+	for _, it := range m.treeItems() {
+		if it.file != "" && strings.Contains(strings.ToLower(it.file), q) {
+			if it.tier != state.TierCore && !m.tierOpen[it.tier] {
+				m.toggleTier(it.tier)
+			}
+			m.jumpToFile(it.file)
 			return
 		}
 	}
-	m.status = "no file matching " + q + " in this step"
+	m.status = "no file matching " + q
 }
 
 func (m *model) setOption(arg string) {
@@ -184,7 +178,7 @@ func (m *model) setOption(arg string) {
 		m.status = "usage: :set context=N | diff=ALGORITHM | wrap | nowrap"
 		return
 	}
-	if m.src != nil && m.step != nil {
+	if m.src != nil && m.review != nil {
 		m.rebuild(false)
 	}
 }
@@ -204,9 +198,6 @@ func (m *model) complete() {
 		names := slices.Clone(commandNames)
 		for _, a := range m.keys().actions {
 			names = append(names, a.Name)
-		}
-		if m.review != nil {
-			names = append(names, m.stepIDs()...)
 		}
 		for _, n := range names {
 			if strings.HasPrefix(n, line) && !slices.Contains(candidates, n) {

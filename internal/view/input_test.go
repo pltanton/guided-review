@@ -85,8 +85,6 @@ func TestComposeStatusline(t *testing.T) {
 			"tab ai comment · S-tab severity · C-s suggestion · C-j new line · esc cancel"},
 		{"edit", func(m *model) { m.composeKind, m.composeRef = inbox.KindEdit, 3 },
 			" AI EDIT #3        enter send · tab edit", "tab edit · C-j new line · esc cancel"},
-		{"skip", func(m *model) { m.composeKind = kindSkip },
-			" SKIP          enter skip · C-j new line", "enter skip · C-j new line · esc cancel"},
 		{"thread reply", func(m *model) {
 			m.review.Discussions = []state.Discussion{{ID: "d1", File: "x/b.go", Line: 9}}
 			m.composeKind, m.composeThread = kindThreadReply, "d1"
@@ -273,7 +271,7 @@ func TestInlineComposer(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
 	m.Update(key("enter"))
 	want := []string{"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "nit",
-		"--step", "s1", "--", "why x"}
+		"--", "why x"}
 	if !slices.Equal(ran, want) || len(*sent) != 1 || (*sent)[0].Kind != inbox.KindComment {
 		t.Fatalf("a plain comment is saved as written: ran %q sent %+v", ran, *sent)
 	}
@@ -300,7 +298,7 @@ func TestCommentWithSuggestion(t *testing.T) {
 	typeText(m, "!")
 	m.Update(key("enter"))
 	want := []string{"comment", "add", "--file", "a.go", "--lines", "2", "--severity", "minor",
-		"--step", "s1", "--suggestion", "fee := 1", "--", "name it fee!"}
+		"--suggestion", "fee := 1", "--", "name it fee!"}
 	if !slices.Equal(ran, want) {
 		t.Fatalf("gr args = %q, want %q", ran, want)
 	}

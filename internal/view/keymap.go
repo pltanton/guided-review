@@ -27,8 +27,8 @@ var (
 	groups         = []string{"navigate", "diff", "lsp", "review", "view", finishGroup}
 	previewActions = []string{"finish", "edit-comment", "delete-comment", "message", "act"}
 	essentials     = []string{
-		"down", "up", "next-hunk", "prev-hunk", "act", "select", "message", "ask", "next",
-		"skip", "check-risk", "plan", "finish", "command", "quit",
+		"down", "up", "next-hunk", "prev-hunk", "next-note", "act", "select", "message", "ask",
+		"check-risk", "files", "finish", "command", "quit",
 	}
 )
 
@@ -67,35 +67,24 @@ func DefaultActions() []Action {
 		{
 			Name:  "next-note",
 			Group: nav,
-			Desc:  "next search match, else next annotation",
+			Desc:  "next search match, else next note: flag, thread, comment",
 			Keys:  k("n"),
 			run:   do(func(m *model) { m.nextNote(1) }),
 		},
-		{Name: "prev-note", Group: nav, Desc: "previous match or annotation", Keys: k("N"),
+		{Name: "prev-note", Group: nav, Desc: "previous match or note", Keys: k("N"),
 			run: do(func(m *model) { m.nextNote(-1) })},
 		{Name: "jump-back", Group: nav, Desc: "back to where an LSP jump started", Keys: k("ctrl+o"),
 			run: do((*model).jumpBack)},
-		{Name: "search", Group: nav, Desc: "search this step (n/N walk, esc clears)", Keys: k("/"),
+		{Name: "search", Group: nav, Desc: "search the change (n/N walk, esc clears)", Keys: k("/"),
 			run: do(func(m *model) { m.startCmd('/') })},
 		{Name: "next-file", Group: nav, Desc: "next file", Keys: k("}"), run: jump(1, file)},
 		{Name: "prev-file", Group: nav, Desc: "previous file", Keys: k("{"), run: jump(-1, file)},
-		{Name: "files", Group: nav, Desc: "the files of this step", Keys: k("f"),
+		{Name: "files", Group: nav, Desc: "the file tree: order, flags, what is unread", Keys: k("f"),
 			run: do((*model).focusFilesPanel)},
-		{Name: "steps", Group: nav, Desc: "the plan: fold chapters, look at steps",
-			Keys: k("ctrl+p"), run: do((*model).focusPlanPanel)},
-		{
-			Name:  "prev-step",
-			Group: nav,
-			Desc:  "look at the previous step (progress stays)",
-			Keys:  k("H", "<"),
-			run:   func(m *model) tea.Cmd { return m.shiftStep(-1) },
-		},
-		{Name: "next-step-view", Group: nav, Desc: "look at the next step, then extra views",
-			Keys: k("L"), run: func(m *model) tea.Cmd { return m.shiftStep(1) }},
 		{
 			Name:  "back",
 			Group: nav,
-			Desc:  "clear selection / search / chat, back to the current step",
+			Desc:  "clear selection / search / chat",
 			Keys:  k("esc", "q"),
 			run:   (*model).back,
 		},
@@ -141,10 +130,8 @@ func DefaultActions() []Action {
 		{Name: "hover", Group: lsp, Desc: "type and docs", Keys: k("K"),
 			run: func(m *model) tea.Cmd { return m.lspRequest("hover") }},
 
-		{Name: "next", Group: rev, Desc: "done with this step, go on", Keys: k(">"),
-			run: do((*model).next)},
 		{Name: "act", Group: rev, Desc: "comment here · edit your comment · details of a note ·" +
-			" open ⋯ / ▸ · next step at the end", Keys: k("enter"), run: (*model).act},
+			" open ⋯ / ▸ / a folded group", Keys: k("enter"), run: (*model).act},
 		{Name: "message", Group: rev, Desc: "chat with the agent about this line; esc leaves",
 			Keys: k("c"), run: do((*model).messageOrOpen)},
 		{Name: "message-general", Group: rev, Desc: "chat with the agent without a line",
@@ -159,14 +146,10 @@ func DefaultActions() []Action {
 			Keys: k("y"), run: do((*model).yank)},
 		{Name: "select", Group: rev, Desc: "select lines", Keys: k("v"),
 			run: do(func(m *model) { m.visual, m.anchor = !m.visual, m.cursor })},
-		{Name: "skip", Group: rev, Desc: "skip the step with a reason", Keys: k("S"),
-			run: do(func(m *model) { m.startCompose(kindSkip) })},
 		{Name: "edit-comment", Group: rev, Desc: "edit the comment under the cursor", Keys: k("E"),
 			run: do((*model).startEdit)},
 		{Name: "delete-comment", Group: rev, Desc: "delete the comment under the cursor (twice)",
 			Keys: k("D"), run: do((*model).deleteComment)},
-		{Name: "replies", Group: rev, Desc: "your MR threads: answers, resolve or keep open",
-			Keys: k("R"), run: do((*model).openThreads)},
 		{Name: "finish", Group: rev, Desc: "finish: preview, then hand to the agent",
 			Keys: k("P"), run: (*model).finish},
 		{Name: "editor", Group: rev, Desc: "open $EDITOR at the line", Keys: k("e"),
@@ -178,10 +161,6 @@ func DefaultActions() []Action {
 			run: do((*model).openChangelog)},
 		{Name: "theme", Group: vw, Desc: "pick a colour theme (saved to your config)", Keys: k(),
 			run: do((*model).openThemes)},
-		{Name: "chapter", Group: vw, Desc: "the plan, opened on this chapter and its intro", Keys: k("I"),
-			run: do((*model).openChapter)},
-		{Name: "plan", Group: vw, Desc: "the plan: chapters and steps", Keys: k("p"),
-			run: do((*model).focusPlanPanel)},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("A"),
@@ -195,7 +174,7 @@ func DefaultActions() []Action {
 		{
 			Name:  "command",
 			Group: vw,
-			Desc:  "find an action by name; also :42, :s3, :f name",
+			Desc:  "find an action by name; also :42, :f name",
 			Keys:  k(":"),
 			run:   do(func(m *model) { m.startCmd(':') }),
 		},
@@ -374,25 +353,12 @@ func (m *model) runCounted(a Action) tea.Cmd {
 	return a.run(m)
 }
 
-func (m *model) focusFilesPanel() {
-	files := m.stepFiles()
-	if len(files) == 0 {
-		return
-	}
-	m.focusFiles, m.focusPlan = true, false
-	m.fileCursor = max(0, slices.Index(files, m.current().File))
-}
-
 func (m *model) back() tea.Cmd {
 	switch {
 	case m.visual:
 		m.visual = false
 	case m.search != "":
 		m.search = ""
-	case m.viewStep == extraThreads:
-		m.leaveThreads()
-	case m.viewStep != "":
-		return m.showStep(m.review.Current)
 	}
 	return nil
 }
@@ -413,7 +379,7 @@ func (m *model) wordPrev() {
 
 func (m *model) toggleRemoved() {
 	if !m.showRemoved && !m.hasFolds() {
-		m.status = "no removed lines are folded in this step"
+		m.status = "no removed lines are folded"
 		return
 	}
 	m.showRemoved = !m.showRemoved
@@ -425,14 +391,14 @@ func (m *model) toggleRemoved() {
 }
 
 func (m *model) moreContext() {
-	if m.step != nil {
+	if m.review != nil {
 		m.context += 10
 		m.rebuild(false)
 	}
 }
 
 func (m *model) resetContext() {
-	if m.step != nil {
+	if m.review != nil {
 		m.context = m.baseCtx
 		m.rebuild(false)
 	}

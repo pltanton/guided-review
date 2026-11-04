@@ -15,10 +15,8 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	r := &state.Review{
 		ID: "mr-7", BaseSHA: "b", HeadSHA: "h",
-		Files: []state.File{{Path: "a.go", Status: "modified", Tier: state.TierCore, Added: 1}},
-		Steps: []state.Step{{ID: "s1", Title: "t", Kind: "logic", Status: state.StatusPending,
-			Hunks: []state.StepHunk{{File: "a.go", Lines: "1-3"}}}},
-		Current:  "s1",
+		Files:    []state.File{{Path: "a.go", Status: "modified", Tier: state.TierCore, Added: 1}},
+		Hotspots: []state.Hotspot{{Cat: "money", Q: "q", File: "a.go", Line: 2, Detail: "d"}},
 		Comments: []state.Comment{{ID: 1, Suggestion: "\tif x {\n\t\treturn\n\t}"}},
 	}
 	if err := s.Save(r); err != nil {
@@ -31,9 +29,27 @@ func TestStoreRoundTrip(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, r) {
 		t.Fatalf("LoadCurrent = %+v, %v; want %+v", got, err, r)
 	}
-	if got.Step("s1") == nil || got.Step("nope") != nil || got.StepIndex("s1") != 0 ||
-		got.File("a.go") == nil {
+	if d, ok := got.Detail("a.go", 2); !ok || d != "d" || got.File("a.go") == nil {
 		t.Fatal("lookup helpers")
+	}
+}
+
+func TestFileOrder(t *testing.T) {
+	r := &state.Review{Files: []state.File{
+		{Path: "z.go", Tier: state.TierCore},
+		{Path: "gen.pb.go", Tier: state.TierGenerated},
+		{Path: "b.go", Tier: state.TierCore, Order: 2},
+		{Path: "a.go", Tier: state.TierCore},
+		{Path: "wire.go", Tier: state.TierBoilerplate},
+		{Path: "c.go", Tier: state.TierCore, Order: 1},
+	}}
+	var got []string
+	for _, f := range r.FileOrder() {
+		got = append(got, f.Path)
+	}
+	want := []string{"c.go", "b.go", "a.go", "z.go", "wire.go", "gen.pb.go"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("FileOrder = %v, want %v", got, want)
 	}
 }
 
@@ -94,47 +110,15 @@ func TestStoreKeysAndList(t *testing.T) {
 	}
 }
 
-func TestHotspotFile(t *testing.T) {
-	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "1-20"}, {File: "b.go", Lines: "30-60"}}}
-	tests := []struct {
-		name string
-		h    state.Hotspot
-		want string
-	}{
-		{"explicit", state.Hotspot{File: "a.go", Line: 40}, "a.go"},
-		{"inside b's range", state.Hotspot{Line: 40}, "b.go"},
-		{"outside every range falls back to the first file", state.Hotspot{Line: 25}, "a.go"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got, _ := st.HotspotFile(tt.h); got != tt.want {
-				t.Fatalf("HotspotFile(%+v) = %q, want %q", tt.h, got, tt.want)
-			}
-		})
-	}
-	one := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
-	if got, sure := one.HotspotFile(state.Hotspot{Line: 99}); got != "a.go" || !sure {
-		t.Fatalf("a single-file step owns its hotspots, got %q", got)
-	}
-}
-
-func TestStepDetail(t *testing.T) {
-	st := state.Step{
-		Hunks:       []state.StepHunk{{File: "a.go"}},
-		Hotspots:    []state.Hotspot{{Cat: "money", Q: "?", Line: 7}},
+func TestDetail(t *testing.T) {
+	r := state.Review{
+		Hotspots:    []state.Hotspot{{Cat: "money", Q: "?", File: "a.go", Line: 7, Detail: "risk"}},
 		Annotations: []state.Annotation{{File: "a.go", Line: 3, To: 5, Kind: "note", Text: "t"}},
 	}
-	if _, ok := st.Detail("a.go", 5); ok {
+	if _, ok := r.Detail("a.go", 5); ok {
 		t.Fatal("a note without a detail has none")
 	}
-	if !st.SetDetail("a.go", 5, "why") || !st.SetDetail("a.go", 7, "risk") ||
-		st.SetDetail("a.go", 4, "x") {
-		t.Fatal("a detail lands only on the last line of a note or on a hotspot")
-	}
-	if d, _ := st.Detail("a.go", 5); d != "why" || st.Annotations[0].Detail != "why" {
-		t.Fatalf("annotation detail: %+v", st.Annotations)
-	}
-	if d, _ := st.Detail("a.go", 7); d != "risk" || st.Hotspots[0].Detail != "risk" {
-		t.Fatalf("hotspot detail: %+v", st.Hotspots)
+	if d, _ := r.Detail("a.go", 7); d != "risk" {
+		t.Fatalf("hotspot detail = %q", d)
 	}
 }

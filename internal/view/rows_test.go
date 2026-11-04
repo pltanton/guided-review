@@ -62,7 +62,7 @@ func TestBuildRowsWholeFile(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(20)},
 	}
-	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +79,7 @@ func TestBuildRowsRemovedBlankLine(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(3)},
 	}
-	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1, nil, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,11 +100,8 @@ func TestBuildRowsRangeAndHotspot(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(10)},
 	}
-	st := state.Step{
-		Hunks:    []state.StepHunk{{File: "a.go", Lines: "5-6"}},
-		Hotspots: []state.Hotspot{{Cat: "money", Q: "?", Line: 6}},
-	}
-	rows, err := buildRows(src, st, 0, nil, nil)
+	hotspots := []state.Hotspot{{Cat: "money", Q: "?", File: "a.go", Line: 6}}
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, hotspots, 0, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +124,7 @@ func TestBuildRowsDeletedFile(t *testing.T) {
 		},
 		lines: map[string][]string{},
 	}
-	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "gone.go"}}}, 3, nil, nil)
+	rows, err := buildRows(src, []state.File{{Path: "gone.go"}}, nil, 3, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,13 +162,12 @@ func TestBuildRowsNotesAndOldLines(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(30)},
 	}
-	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "2-3"}}}
 	notes := []Note{
 		{File: "a.go", Line: 3, Kind: "note", Text: "retry wrapper", Focus: true},
 		{File: "a.go", Line: 21, Kind: "spec", Text: "spec says 409", Focus: true},
 		{File: "a.go", Line: 28, Kind: "mr", Text: "@alice: far away"},
 	}
-	rows, err := buildRows(src, st, 1, notes, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, notes, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,13 +202,7 @@ func TestWholeFileNoteOutsideHunks(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
-	rows, err := buildRows(
-		src,
-		state.Step{Hunks: []state.StepHunk{{File: "a.go"}}},
-		1,
-		[]Note{{File: "a.go", Line: 5, Kind: "note", Text: "far note", Focus: true}},
-		nil,
-	)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, []Note{{File: "a.go", Line: 5, Kind: "note", Text: "far note", Focus: true}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,8 +218,8 @@ func TestGapsAndReveal(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
-	st := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
-	rows, err := buildRows(src, st, 1, nil, nil)
+	st := []state.File{{Path: "a.go"}}
+	rows, err := buildRows(src, st, nil, 1, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +232,7 @@ func TestGapsAndReveal(t *testing.T) {
 	if !reflect.DeepEqual(gaps, [][2]int{{1, 28}, {32, 40}}) {
 		t.Fatalf("gaps = %v", gaps)
 	}
-	rows, err = buildRows(src, st, 1, nil, map[string][][2]int{"a.go": {{1, 28}}})
+	rows, err = buildRows(src, st, nil, 1, nil, map[string][][2]int{"a.go": {{1, 28}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,13 +268,7 @@ func TestFileHeaders(t *testing.T) {
 		},
 		lines: map[string][]string{"a.go": numbered(1), "b.go": numbered(1)},
 	}
-	rows, err := buildRows(
-		src,
-		state.Step{Hunks: []state.StepHunk{{File: "a.go"}, {File: "b.go"}}},
-		0,
-		nil,
-		nil,
-	)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}, {Path: "b.go"}}, nil, 0, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -314,9 +298,8 @@ func TestOneHeaderPerFile(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": numbered(40)},
 	}
-	st := state.Step{Hunks: []state.StepHunk{{File: "a.go", Lines: "3"}, {File: "a.go", Lines: "30"}}}
 	note := Note{File: "a.go", Line: 30, Kind: "note", Text: "n", Focus: true}
-	rows, err := buildRows(src, st, 1, []Note{note}, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, []Note{note}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -351,8 +334,7 @@ func TestNoteMarksItsLines(t *testing.T) {
 		lines: map[string][]string{"a.go": numbered(10)},
 	}
 	note := Note{File: "a.go", Line: 2, To: 4, Kind: "comment", Text: "range"}
-	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 1,
-		[]Note{note}, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, []Note{note}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,8 +375,7 @@ func TestTopNotes(t *testing.T) {
 		{Top: true, Kind: "hotspot", Text: "second charge on retry?"},
 		{Top: true, Kind: "note", Text: "an aside"},
 	}
-	st := state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}
-	rows, err := buildRows(src, st, 1, notes, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 1, notes, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

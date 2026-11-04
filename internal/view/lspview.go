@@ -629,14 +629,14 @@ func (m *model) popupHint() string {
 	case p.filtering:
 		return "type to filter · enter done · esc clear"
 	case p.items != nil:
-		return "enter go (jumps when it is in this step) · S-enter peek · / filter · e editor · esc close"
+		return "enter go (jumps when it is in the change) · S-enter peek · / filter · e editor · esc close"
 	case p.kind == "peek" && p.filter != "":
 		return "n/N next match · / search · g… K lsp · C-o back · e editor · esc close"
 	case p.kind == "peek":
 		return "/ search · g… K lsp · C-o back · tab forward · e editor · esc close"
-	case p.kind == "detail" && p.risk > 0 && m.step != nil && p.risk <= len(m.step.Hotspots):
+	case p.kind == "detail" && p.risk > 0 && m.review != nil && p.risk <= len(m.review.Hotspots):
 		verb := "check off the risk"
-		if m.step.Hotspots[p.risk-1].Checked {
+		if m.review.Hotspots[p.risk-1].Checked {
 			verb = "reopen the risk"
 		}
 		return "enter discuss · x " + verb + " · esc close"

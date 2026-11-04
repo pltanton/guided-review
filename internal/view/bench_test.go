@@ -10,13 +10,11 @@ import (
 
 func bigStepModel(b *testing.B, rows, width, height int) *model {
 	b.Helper()
-	r := &state.Review{ID: "mr-1", Current: "s1", Steps: []state.Step{
-		{ID: "s1", Title: "first", Kind: "logic", Status: state.StatusPending},
-	}}
-	m := &model{review: r, step: &r.Steps[0], width: width, height: height, context: 3}
+	r := &state.Review{ID: "mr-1"}
+	m := &model{review: r, width: width, height: height, context: 3}
 	for i := range 30 {
 		m.review.Messages = append(m.review.Messages, state.Message{
-			Time: time.Now(), Step: "s1", Text: fmt.Sprintf("message %d with some words in it", i),
+			Time: time.Now(), Text: fmt.Sprintf("message %d with some words in it", i),
 		})
 	}
 	file := ""

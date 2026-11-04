@@ -16,7 +16,7 @@ func TestAnswerPillsFitTheWidth(t *testing.T) {
 	m, sent := newTestModel(t)
 	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
 	options := []string{"да, всё верно", "нет, поправлю", "не знаю, посмотри сам"}
-	m.review.Messages = []state.Message{{Time: t0, Step: "s1", Text: "?", Options: options}}
+	m.review.Messages = []state.Message{{Time: t0, Text: "?", Options: options}}
 
 	lines := strings.Split(ansi.Strip(m.View()), "\n")
 	i := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "1 да") })

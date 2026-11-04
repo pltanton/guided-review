@@ -1,7 +1,6 @@
 package plan_test
 
 import (
-	"slices"
 	"strings"
 	"testing"
 
@@ -15,43 +14,22 @@ func fixture() (*state.Review, []diff.File) {
 		{Path: "api/a.go", Tier: state.TierCore},
 		{Path: "wire.go", Tier: state.TierCore},
 		{Path: "a.pb.go", Tier: state.TierGenerated},
-		{Path: "gone.go", Tier: state.TierCore},
 	}}
 	files := []diff.File{
-		{
-			Path: "api/a.go",
-			Hunks: []diff.Hunk{
-				{NewStart: 10, NewLines: 5},
-				{OldStart: 38, OldLines: 2, NewStart: 40, NewLines: 0},
-			},
-		},
+		{Path: "api/a.go", Hunks: []diff.Hunk{{NewStart: 10, NewLines: 5}}},
 		{Path: "wire.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 3}}},
 		{Path: "a.pb.go", Hunks: []diff.Hunk{{NewStart: 1, NewLines: 100}}},
-		{Path: "gone.go", Status: diff.Deleted, Hunks: []diff.Hunk{{OldStart: 1, OldLines: 4}}},
 	}
 	return r, files
 }
 
 func validPlan() plan.Plan {
 	return plan.Plan{
-		Summary:     "task → solution",
+		Briefing:    "task → solution",
 		Boilerplate: []string{"wire.go"},
-		Steps: []plan.Step{
-			{
-				ID:    "s1",
-				Title: "contract",
-				Kind:  "contract",
-				Hunks: []state.StepHunk{{File: "api/a.go", Lines: "1-20"}, {File: "gone.go"}},
-			},
-			{
-				ID:        "s2",
-				Title:     "logic",
-				Kind:      "logic",
-				Hunks:     []state.StepHunk{{File: "api/a.go", Lines: "38-45"}},
-				DependsOn: []string{"s1"},
-				Hotspots:  []state.Hotspot{{Cat: "money", Q: "rounding?"}},
-			},
-		},
+		Files:       []plan.File{{Path: "api/a.go", Order: 1, Why: "the guard"}},
+		Hotspots:    []state.Hotspot{{Cat: "money", Q: "rounding?", File: "api/a.go", Line: 12}},
+		Annotations: []state.Annotation{{File: "api/a.go", Line: 11, Kind: "note", Text: "reserves"}},
 	}
 }
 
@@ -62,114 +40,30 @@ func TestValidate(t *testing.T) {
 		want   string
 	}{
 		{"valid", func(*plan.Plan) {}, ""},
-		{"no steps", func(p *plan.Plan) { p.Steps = nil }, "plan has no steps"},
-		{
-			"uncovered hunk",
-			func(p *plan.Plan) { p.Steps = p.Steps[:1] },
-			"not covered: api/a.go:40(del)",
-		},
-		{"uncovered file", func(p *plan.Plan) { p.Boilerplate = nil }, "not covered: wire.go:1-3"},
-		{
-			"deleted file is covered by its old lines",
-			func(p *plan.Plan) { p.Steps[0].Hunks[1].Lines = "1-3" },
-			"not covered: gone.go:4",
-		},
-		{
-			"part of a hunk is not covered",
-			func(p *plan.Plan) { p.Steps[0].Hunks[0].Lines = "1-11" },
-			"not covered: api/a.go:12-14",
-		},
-		{
-			"two steps cover one hunk together",
-			func(p *plan.Plan) {
-				p.Steps[0].Hunks[0].Lines = "10-12"
-				rest := state.StepHunk{File: "api/a.go", Lines: "13-14"}
-				p.Steps[1].Hunks = append(p.Steps[1].Hunks, rest)
-			},
-			"",
-		},
-		{
-			"removed lines are covered where they were",
-			func(p *plan.Plan) { p.Steps[1].Hunks[0].Lines = "42-45" },
-			"not covered: api/a.go:40(del)",
-		},
-		{
-			"duplicate id",
-			func(p *plan.Plan) { p.Steps[1].ID = "s1"; p.Steps[1].DependsOn = nil },
-			"step s1: duplicate id",
-		},
-		{
-			"unknown file",
-			func(p *plan.Plan) { p.Steps[0].Hunks[0].File = "nope.go" },
-			"step s1: nope.go not in diff",
-		},
-		{"bad lines", func(p *plan.Plan) { p.Steps[0].Hunks[0].Lines = "20-1" }, `lines "20-1"`},
-		{
-			"unknown dep",
-			func(p *plan.Plan) { p.Steps[1].DependsOn = []string{"s9"} },
-			"step s2: depends_on s9: no such step",
-		},
-		{
-			"self dep",
-			func(p *plan.Plan) { p.Steps[0].DependsOn = []string{"s1"} },
-			"step s1: depends on itself",
-		},
-		{
-			"cycle",
-			func(p *plan.Plan) { p.Steps[0].DependsOn = []string{"s2"} },
-			"depends_on cycle: s1 → s2 → s1",
-		},
-		{
-			"hotspot without question",
-			func(p *plan.Plan) { p.Steps[1].Hotspots[0].Q = " " },
-			"step s2: hotspot money has no question",
-		},
-		{
-			"hotspot bad category",
-			func(p *plan.Plan) { p.Steps[1].Hotspots[0].Cat = "perf" },
-			`step s2: hotspot category "perf"`,
-		},
-		{
-			"boilerplate not in diff",
-			func(p *plan.Plan) { p.Boilerplate = append(p.Boilerplate, "x.go") },
-			"boilerplate x.go: not in diff",
-		},
-		{"annotation ok", func(p *plan.Plan) {
-			p.Steps[0].Annotations = []state.Annotation{
-				{File: "api/a.go", Line: 12, Kind: "note", Text: "reserves"},
-			}
-		}, ""},
-		{"annotation file", func(p *plan.Plan) {
-			p.Steps[0].Annotations = []state.Annotation{
-				{File: "x.go", Line: 1, Kind: "note", Text: "t"},
-			}
-		}, "step s1: annotation x.go:1: not in diff"},
-		{"annotation kind", func(p *plan.Plan) {
-			p.Steps[0].Annotations = []state.Annotation{
-				{File: "api/a.go", Line: 1, Kind: "todo", Text: "t"},
-			}
-		}, `step s1: annotation api/a.go:1: kind "todo"`},
-		{"annotation line", func(p *plan.Plan) {
-			p.Steps[0].Annotations = []state.Annotation{
-				{File: "api/a.go", Kind: "note", Text: "t"},
-			}
-		}, "step s1: annotation api/a.go:0: line must be >= 1"},
-		{"annotation text", func(p *plan.Plan) {
-			p.Steps[0].Annotations = []state.Annotation{{File: "api/a.go", Line: 1, Kind: "spec"}}
-		}, "step s1: annotation api/a.go:1: empty text"},
+		{"empty", func(p *plan.Plan) { *p = plan.Plan{} }, ""},
+		{"file not in diff", func(p *plan.Plan) { p.Files[0].Path = "nope.go" }, "file nope.go: not in diff"},
+		{"file twice", func(p *plan.Plan) { p.Files = append(p.Files, p.Files[0]) }, "file api/a.go: listed twice"},
+		{"bad order", func(p *plan.Plan) { p.Files[0].Order = -1 }, "order must be >= 0"},
+		{"hotspot without question", func(p *plan.Plan) { p.Hotspots[0].Q = " " }, "hotspot api/a.go:12 has no question"},
+		{"hotspot bad category", func(p *plan.Plan) { p.Hotspots[0].Cat = "perf" }, `category "perf"`},
+		{"hotspot file", func(p *plan.Plan) { p.Hotspots[0].File = "" }, "hotspot :12: not in diff"},
+		{"boilerplate not in diff", func(p *plan.Plan) { p.Boilerplate = []string{"x.go"} }, "boilerplate x.go: not in diff"},
+		{"annotation file", func(p *plan.Plan) { p.Annotations[0].File = "x.go" }, "annotation x.go:11: not in diff"},
+		{"annotation kind", func(p *plan.Plan) { p.Annotations[0].Kind = "todo" }, `kind "todo"`},
+		{"annotation line", func(p *plan.Plan) { p.Annotations[0].Line = 0 }, "line must be >= 1"},
+		{"annotation text", func(p *plan.Plan) { p.Annotations[0].Text = "" }, "empty text"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r, files := fixture()
+			_, files := fixture()
 			p := validPlan()
 			tt.mutate(&p)
-			errs := plan.Validate(p, r, files)
 			var msgs []string
-			for _, e := range errs {
+			for _, e := range plan.Validate(p, files) {
 				msgs = append(msgs, e.Error())
 			}
 			joined := strings.Join(msgs, "\n")
-			if tt.want == "" && len(errs) > 0 {
+			if tt.want == "" && joined != "" {
 				t.Fatalf("unexpected errors:\n%s", joined)
 			}
 			if tt.want != "" && !strings.Contains(joined, tt.want) {
@@ -180,147 +74,65 @@ func TestValidate(t *testing.T) {
 }
 
 func TestParseRejectsUnknownFields(t *testing.T) {
-	if _, err := plan.Parse([]byte("steps:\n  - id: s1\n    titel: typo\n")); err == nil {
-		t.Fatal("want error for unknown field")
-	}
-	for _, field := range []string{
-		"status: done", "announced: true", "skip_reason: x", "may_change: true",
-		"details: [{file: x.go, line: 0}]", "from_round: 1",
-	} {
-		if _, err := plan.Parse([]byte("steps:\n  - id: s1\n    " + field + "\n")); err == nil {
-			t.Errorf("%s: a runtime field must not pass in a plan", field)
+	for _, in := range []string{"files:\n  - path: a.go\n    titel: typo\n", "steps: []\n"} {
+		if _, err := plan.Parse([]byte(in)); err == nil {
+			t.Errorf("%q: want error for unknown field", in)
 		}
 	}
 }
 
-func TestApply(t *testing.T) {
+func TestMergeReplacesAndAppends(t *testing.T) {
 	r, _ := fixture()
 	r.Comments = []state.Comment{{ID: 1}}
-	p := validPlan()
-	plan.Apply(r, p)
-	if r.Current != "s1" || r.Summary != p.Summary || len(r.Steps) != 2 {
-		t.Fatalf("Apply: %+v", r)
+	plan.Merge(r, validPlan())
+	r.Hotspots[0].Checked = true
+	plan.Merge(r, plan.Plan{
+		Files:       []plan.File{{Path: "api/a.go", Why: "the guard, now with a limit"}, {Path: "wire.go"}},
+		Hotspots:    []state.Hotspot{{Cat: "money", Q: "rounding twice?", File: "api/a.go", Line: 12, Detail: "d"}, {Cat: "security", Q: "auth?", File: "wire.go", Line: 1}},
+		Annotations: []state.Annotation{{File: "api/a.go", Line: 11, Kind: "note", Text: "reserves, longer"}},
+	})
+	a, w := r.File("api/a.go"), r.File("wire.go")
+	if r.Briefing != "task → solution" || a.Order != 1 || a.Why != "the guard, now with a limit" || !a.Read || !w.Read || w.Why != "" {
+		t.Fatalf("files after merge: %+v %+v briefing %q", a, w, r.Briefing)
 	}
-	for _, s := range r.Steps {
-		if s.Status != state.StatusPending {
-			t.Fatalf("step %s status %q, want pending", s.ID, s.Status)
-		}
-	}
-	if r.File("wire.go").Tier != state.TierBoilerplate ||
-		r.File("a.pb.go").Tier != state.TierGenerated ||
-		r.File("api/a.go").Tier != state.TierCore {
+	if w.Tier != state.TierBoilerplate || r.File("a.pb.go").Tier != state.TierGenerated {
 		t.Fatalf("tiers: %+v", r.Files)
 	}
+	if len(r.Hotspots) != 2 || r.Hotspots[0].Q != "rounding twice?" || !r.Hotspots[0].Checked || r.Hotspots[0].Detail != "d" {
+		t.Fatalf("hotspots: %+v", r.Hotspots)
+	}
+	if len(r.Annotations) != 1 || r.Annotations[0].Text != "reserves, longer" {
+		t.Fatalf("annotations: %+v", r.Annotations)
+	}
 	if len(r.Comments) != 1 {
-		t.Fatal("Apply must keep comments")
+		t.Fatal("Merge must keep comments")
 	}
 }
 
-func TestStepSizeLimit(t *testing.T) {
-	big := diff.Hunk{NewStart: 1, NewLines: 400}
-	for range 400 {
-		big.Lines = append(big.Lines, diff.Line{Kind: '+', Text: "x"})
-	}
-	r := &state.Review{Files: []state.File{{Path: "big.go", Tier: state.TierCore}}}
-	files := []diff.File{{Path: "big.go", Hunks: []diff.Hunk{big}}}
-	step := func(lines, why string) plan.Step {
-		return plan.Step{ID: "s1", Title: "t", Hunks: []state.StepHunk{{File: "big.go", Lines: lines}},
-			WhyBig: why}
-	}
-	tests := []struct {
-		name    string
-		steps   []plan.Step
-		wantErr bool
-	}{
-		{"whole file", []plan.Step{step("", "")}, true},
-		{"why_big given", []plan.Step{step("", "one generated-like table")}, false},
-		{"split by range", []plan.Step{step("1-250", ""), {ID: "s2", Title: "t",
-			Hunks: []state.StepHunk{{File: "big.go", Lines: "251-400"}}}}, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			errs := plan.Validate(plan.Plan{Steps: tt.steps}, r, files)
-			got := slices.ContainsFunc(errs, func(e error) bool {
-				return strings.Contains(e.Error(), "over 300")
-			})
-			if got != tt.wantErr {
-				t.Fatalf("size error = %v, want %v (%v)", got, tt.wantErr, errs)
-			}
-		})
-	}
-}
-
-func TestChaptersStayTogether(t *testing.T) {
-	r, files := fixture()
-	p, err := plan.Parse([]byte(`steps:
-  - {id: s1, title: a, kind: logic, chapter: A, hunks: [{file: api/a.go}]}
-  - {id: s2, title: b, kind: logic, chapter: B, hunks: [{file: wire.go}]}
-  - {id: s3, title: c, kind: logic, chapter: A, hunks: [{file: gone.go}]}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	errs := plan.Validate(p, r, files)
-	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "is split") }) {
-		t.Fatalf("a split chapter must be rejected: %v", errs)
-	}
-}
-
-func TestDetailsFromPlan(t *testing.T) {
+func TestCommentChecksHotspot(t *testing.T) {
 	r, _ := fixture()
-	p, err := plan.Parse([]byte(`steps:
-  - id: s1
-    title: a
-    kind: logic
-    hunks: [{file: api/a.go}]
-    hotspots: [{cat: money, q: "rounding?", line: 7, detail: "float64 before the DB write"}]
-    annotations:
-      - {file: api/a.go, line: 3, to: 5, kind: note, text: t, detail: "reserve opens the tx"}
-`))
-	if err != nil {
-		t.Fatal(err)
+	plan.Merge(r, validPlan())
+	c, err := plan.AddComment(r, state.Comment{File: "api/a.go", Lines: "11-13", Severity: state.SeverityMinor, Body: "b"})
+	if err != nil || c.ID != 1 || c.Round != 1 {
+		t.Fatalf("AddComment: %+v %v", c, err)
 	}
-	plan.Apply(r, p)
-	st := r.Step("s1")
-	if d, ok := st.Detail("api/a.go", 5); !ok || d != "reserve opens the tx" {
-		t.Fatalf("annotation detail sits on the note's last line, got %q %v", d, ok)
+	if h := r.Hotspots[0]; !h.Checked || h.Comment != 1 {
+		t.Fatalf("a comment on the hotspot's line checks it off: %+v", h)
 	}
-	if d, ok := st.Detail("api/a.go", 7); !ok || d != "float64 before the DB write" {
-		t.Fatalf("hotspot detail on its line, got %q %v", d, ok)
+	if err := plan.CheckHotspot(r, 1, false); err != nil || r.Hotspots[0].Checked {
+		t.Fatalf("CheckHotspot undo: %v %+v", err, r.Hotspots[0])
 	}
-}
-
-func TestHotspotNeedsFileInMultiFileStep(t *testing.T) {
-	r, files := fixture()
-	p, err := plan.Parse([]byte(`steps:
-  - id: s1
-    title: a
-    kind: logic
-    hunks: [{file: api/a.go}, {file: wire.go}]
-    hotspots: [{cat: money, q: "rounding?", line: 3}]
-`))
-	if err != nil {
-		t.Fatal(err)
+	if err := plan.CheckHotspot(r, 2, true); err == nil {
+		t.Fatal("no hotspot #2")
 	}
-	errs := plan.Validate(p, r, files)
-	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "needs file") }) {
-		t.Fatalf("an ambiguous hotspot must be rejected: %v", errs)
-	}
-}
-
-func TestIntroOnFirstStepOnly(t *testing.T) {
-	r, files := fixture()
-	p, err := plan.Parse([]byte(`steps:
-  - {id: s1, title: a, kind: logic, chapter: A, intro: x, hunks: [{file: api/a.go}]}
-  - {id: s2, title: b, kind: logic, chapter: A, intro: y, hunks: [{file: wire.go}]}
-  - {id: s3, title: c, kind: logic, hunks: [{file: gone.go}]}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	errs := plan.Validate(p, r, files)
-	if !slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "step s2: intro") }) ||
-		slices.ContainsFunc(errs, func(e error) bool { return strings.Contains(e.Error(), "step s1: intro") }) {
-		t.Fatalf("only a later step's intro is wrong: %v", errs)
+	for _, bad := range []state.Comment{
+		{File: "api/a.go", Lines: "1", Severity: "huge", Body: "b"},
+		{File: "nope.go", Lines: "1", Severity: state.SeverityNit, Body: "b"},
+		{File: "api/a.go", Severity: state.SeverityNit, Body: "b"},
+		{File: "api/a.go", Lines: "1", Severity: state.SeverityNit, Body: " "},
+	} {
+		if _, err := plan.AddComment(r, bad); err == nil {
+			t.Errorf("AddComment(%+v) must fail", bad)
+		}
 	}
 }

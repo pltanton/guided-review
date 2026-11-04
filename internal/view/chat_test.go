@@ -22,8 +22,8 @@ func chatModel(t *testing.T) (*model, *string) {
 	m.width = 150
 	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
 	m.review.Messages = []state.Message{
-		{Time: t0, Step: "s1", Text: longAnswer},
-		{Time: t0.Add(time.Second), Step: "s1", Text: "short one"},
+		{Time: t0, Text: longAnswer},
+		{Time: t0.Add(time.Second), Text: "short one"},
 	}
 	var copied string
 	m.clip = func(s string) error { copied = s; return nil }
@@ -108,13 +108,13 @@ func TestChatMouseDragCopies(t *testing.T) {
 func TestChatReadsWithoutMarkup(t *testing.T) {
 	m, _ := chatModel(t)
 	t0 := time.Date(2026, 9, 30, 10, 0, 0, 0, time.UTC)
-	m.review.Messages = []state.Message{{Time: t0, Step: "s1",
+	m.review.Messages = []state.Message{{Time: t0,
 		Text: "❓ ⚑136 (`files.go`): **pending** stays in internal/app/usecase/files.go:136"}}
 	m.events = []inbox.Event{
-		{Time: t0.Add(time.Second), Step: "s1", Kind: inbox.KindMessage,
+		{Time: t0.Add(time.Second), Kind: inbox.KindMessage,
 			File: "internal/db/migrations/00012_scan.sql", Lines: "12",
 			Text: "about the risk «Adding CHECK constraints validates every row»: explain"},
-		{Time: t0.Add(2 * time.Second), Step: "s1", Kind: inbox.KindComment,
+		{Time: t0.Add(2 * time.Second), Kind: inbox.KindComment,
 			Text: "comment #2 minor internal/kafka/consumer.go:86-89"},
 	}
 	var got []string

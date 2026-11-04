@@ -32,7 +32,7 @@ type (
 	tickMsg       struct{}
 	editorDoneMsg struct{ err error }
 	rowsMsg       struct {
-		step string
+		gen  int
 		rows []Row
 		err  error
 	}
@@ -53,7 +53,6 @@ type model struct {
 	repo   gitx.Repo
 	src    *gitSource
 	review *state.Review
-	step   *state.Step
 	rows   []Row
 	lines  []line
 	events []inbox.Event
@@ -70,19 +69,15 @@ type model struct {
 	fileCursor int
 	fileTop    int
 	fileFollow string
-	viewStep   string
-
-	focusPlan  bool
-	planCursor int
-	planTop    int
-	planFollow string
-	planOpen   map[string]bool
+	tierOpen   map[state.Tier]bool
 
 	showRemoved   bool
 	unfolded      map[string]bool
 	folded        map[string]bool
 	algo          string
-	loading       string
+	loading       bool
+	loadGen       int
+	loadCmd       tea.Cmd
 	returnPane    string
 	interrupted   bool
 	tmux          func(args ...string) error
@@ -92,7 +87,6 @@ type model struct {
 	previewTop    int
 	previewSel    int
 	previewFollow bool
-	threadsShown  bool
 	composeThread string
 	runGr         func(args ...string) (string, error)
 
@@ -113,7 +107,6 @@ type model struct {
 	help         bool
 	helpAll      bool
 	modalY       int
-	introShown   map[string]bool
 	helpTop      int
 	baseCtx      int
 	popup        *popup
@@ -142,7 +135,6 @@ type model struct {
 	composeRef    int
 	raw           bool
 	deleteArmed   int
-	gateOpen      bool
 	newsOpen      bool
 	newsAll       bool
 	newsTop       int
@@ -153,13 +145,10 @@ type model struct {
 	threadCard    string
 	threadCardSel int
 	pub           *publishCard
-	staleSteps    []string
-	staleSel      int
 	finishCard    bool
 	finishSel     int
 	approvePick   int
 	autoVerdict   bool
-	gateSel       int
 	seen          map[seenKey]bool
 	rawSeverity   state.Severity
 	anchorFile    string
@@ -234,52 +223,47 @@ func (m *model) reload() {
 	r, err := m.store.LoadCurrent()
 	if err != nil {
 		m.closed = m.review != nil && errors.Is(err, state.ErrNoReview)
-		m.review, m.step, m.rows, m.lines, m.err = nil, nil, nil, nil, err
+		m.review, m.rows, m.lines, m.err = nil, nil, nil, err
 		m.closeCards()
 		return
 	}
+	first := m.review == nil || m.review.ID != r.ID || m.review.HeadSHA != r.HeadSHA
 	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
 		m.src = newGitSource(m.ctx, m.repo, m.algo, r.DiffBase(), r.HeadSHA)
 	}
 	m.events, _ = inbox.All(m.store.ReviewDir(r.ID))
 	m.lastWait, _ = inbox.LastWait(m.store.ReviewDir(r.ID))
-	prev := ""
-	if m.step != nil {
-		prev = m.step.ID
-	}
 	m.review, m.err = r, nil
-	if m.threadsDue() {
-		m.threadsShown, m.viewStep = true, extraThreads
-	}
-	target := r.Current
-	if m.viewStep != "" && m.viewStep != r.Current && m.stepByID(m.viewStep) != nil {
-		target = m.viewStep
-	} else {
-		m.viewStep = ""
-	}
-	m.step = m.stepByID(target)
-	if m.step == nil {
-		m.rows, m.lines = nil, nil
-		m.closeCards()
-		return
-	}
-	changed := m.step.ID != prev
-	if changed {
+	if first {
 		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseCtx, 0, 0, false, nil
+		m.hscroll = 0
 	}
-	m.introOnce()
-	m.rebuild(changed)
+	if first && len(r.Files) > asyncFiles {
+		m.loadGen++
+		m.loading, m.loadCmd = true, m.loadAsync(m.loadGen)
+	} else {
+		m.rebuild(first)
+	}
 	m.refreshDetail()
 	m.refreshPreview()
 }
 
+func (m *model) loadAsync(gen int) tea.Cmd {
+	src, files, hotspots, context, notes, open := m.src, m.review.Files, m.review.Hotspots,
+		m.context, m.notes(), m.tierOpen
+	return func() tea.Msg {
+		rows, err := buildRows(src, files, hotspots, context, notes, nil, open)
+		return rowsMsg{gen: gen, rows: rows, err: err}
+	}
+}
+
 func (m *model) closeCards() {
-	m.gateOpen, m.finishCard, m.pub, m.threadCard = false, false, nil, ""
-	m.focusPlan, m.focusFiles, m.staleSteps = false, false, nil
+	m.finishCard, m.pub, m.threadCard, m.focusFiles = false, nil, "", false
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	rows, err := buildRows(m.src, *m.step, m.context, m.notes(), m.reveal)
+	rows, err := buildRows(m.src, m.review.Files, m.review.Hotspots, m.context, m.notes(),
+		m.reveal, m.tierOpen)
 	if err != nil {
 		m.err = err
 		return
@@ -297,16 +281,20 @@ func (m *model) rebuild(jumpToHunk bool) {
 }
 
 func (m *model) notes() []Note {
+	r := m.review
 	var out []Note
-	for _, a := range m.step.Annotations {
+	if r.Briefing != "" {
+		out = append(out, Note{Top: true, Kind: "note", Label: "BRIEFING", Text: r.Briefing})
+	}
+	if r.Round > 1 && len(m.myThreads()) > 0 {
+		out = append(out, m.threadsIntro())
+	}
+	for _, a := range r.Annotations {
 		out = append(out, Note{
 			File: a.File, Line: a.Line, To: a.To, Kind: a.Kind, Text: a.Text, Focus: true,
 		})
 	}
-	if m.step.Note != "" {
-		out = append(out, Note{Top: true, Kind: "note", Text: m.step.Note})
-	}
-	for i, h := range m.step.Hotspots {
+	for i, h := range r.Hotspots {
 		label := ""
 		switch {
 		case h.Checked && h.Comment > 0:
@@ -314,20 +302,15 @@ func (m *model) notes() []Note {
 		case h.Checked:
 			label = "✓ DONE"
 		}
+		n := Note{File: h.File, Line: h.Line, Kind: "hotspot", Text: h.Q, Focus: true,
+			Label: label, Dim: h.Checked, Risk: i + 1}
 		if h.Line == 0 {
-			out = append(out, Note{
-				Top: true, Kind: "hotspot", Text: h.Q, Label: label, Dim: h.Checked, Risk: i + 1,
-			})
+			n.Top, n.Focus = true, false
 		}
-		if file, _ := m.step.HotspotFile(h); h.Line > 0 {
-			out = append(out, Note{
-				File: file, Line: h.Line, Kind: "hotspot", Text: h.Q,
-				Focus: true, Label: label, Dim: h.Checked, Risk: i + 1,
-			})
-		}
+		out = append(out, n)
 	}
-	round := max(m.review.Round, 1)
-	for _, c := range m.review.Comments {
+	round := max(r.Round, 1)
+	for _, c := range r.Comments {
 		start, end, err := state.ParseLines(c.Lines)
 		if err != nil || start == 0 || max(c.Round, 1) != round {
 			continue
@@ -349,11 +332,8 @@ func (m *model) notes() []Note {
 			})
 		}
 	}
-	if m.step.ID == extraThreads {
-		return append(out, m.threadNotes()...)
-	}
-	for _, d := range m.review.Discussions {
-		if d.File == "" || d.OldLine || d.Resolved {
+	for _, d := range r.Discussions {
+		if d.File == "" || d.OldLine || d.Resolved || m.mine(d) {
 			continue
 		}
 		body, _, _ := strings.Cut(d.Body, "\n")
@@ -363,13 +343,10 @@ func (m *model) notes() []Note {
 			Thread: d.ID,
 		})
 	}
-	return out
+	return append(out, m.threadNotes()...)
 }
 
 func (m *model) pending(e inbox.Event) bool {
-	if m.step == nil && e.Step != "" || m.step != nil && e.Step != m.step.ID {
-		return false
-	}
 	switch e.Kind {
 	case inbox.KindMessage, inbox.KindExplain, inbox.KindAsk:
 		return e.Time.After(m.lastWait)
@@ -396,41 +373,19 @@ func (m *model) relist() {
 		}
 		m.lines = unifiedLines(expandNotes(rows, width, m.folded))
 	}
-	if m.step != nil && len(m.rows) > 0 {
-		m.lines = append(m.lines, line{Row: Row{Kind: RowEnd, Text: m.endText()}})
-	}
 	if keep.File != "" {
 		m.focus(keep)
 	}
 	m.clamp()
 }
 
-func (m *model) endText() string {
-	if m.viewStep == extraThreads {
-		if m.review.Step(m.review.Current) == nil {
-			return "end of your threads · the agent is still planning the round"
-		}
-		return "end of your threads · enter → on to the review, " + m.review.Current
-	}
-	if m.viewStep != "" {
-		name := m.step.ID
-		if isExtra(name) {
-			name = m.step.Title
-		}
-		return fmt.Sprintf("end of %s · enter → back to %s", name, m.review.Current)
-	}
-	return fmt.Sprintf("end of %s · enter → next step", m.step.ID)
-}
-
 func (m *model) act() tea.Cmd {
 	cur := m.current()
 	switch {
-	case m.step == nil || len(m.lines) == 0 || m.visual:
+	case m.review == nil || len(m.lines) == 0 || m.visual:
 		m.startComment()
-	case cur.Kind == RowEnd && m.viewStep != "":
-		return m.back()
-	case cur.Kind == RowEnd:
-		m.next()
+	case cur.Kind == RowFile && cur.FoldKey != "":
+		m.toggleTier(state.Tier(cur.FoldKey))
 	case cur.Kind == RowGap || cur.Kind == RowFold:
 		m.toggleFold()
 	case cur.Kind == RowNote && cur.Thread != "":
@@ -473,7 +428,11 @@ func firstFocus(list []line) int {
 	return max(slices.IndexFunc(list, func(l line) bool { return l.Line > 0 }), 0)
 }
 
-func (m *model) Init() tea.Cmd { return tick() }
+func (m *model) Init() tea.Cmd {
+	cmd := m.loadCmd
+	m.loadCmd = nil
+	return tea.Batch(tick(), cmd)
+}
 
 func (m *model) applyConfig(c config.Config) error {
 	var err error
@@ -508,7 +467,7 @@ func (m *model) refreshAgent() {
 	}
 	if lw, ok := inbox.LastWait(m.store.ReviewDir(m.review.ID)); ok && !lw.Equal(m.lastWait) {
 		m.lastWait = lw
-		if m.step != nil && m.src != nil {
+		if m.src != nil {
 			m.rebuild(false)
 		}
 	}
@@ -523,12 +482,7 @@ func (m *model) refreshAgent() {
 		}
 		m.agentWaiting = false
 	}
-	switch {
-	case m.threadsDue():
-		m.threadsShown = true
-		m.showStep(extraThreads)
-	case stopped != (m.agentWaiting || m.agentIdle) && m.src != nil && m.step != nil &&
-		m.step.ID == extraThreads:
+	if stopped != (m.agentWaiting || m.agentIdle) && m.src != nil && len(m.myThreads()) > 0 {
 		m.rebuild(false)
 	}
 }
@@ -556,13 +510,17 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.closed {
 			return m, tea.Quit
 		}
+		if cmd := m.loadCmd; cmd != nil {
+			m.loadCmd = nil
+			return m, cmd
+		}
 	case lspMsg:
 		m.handleLSP(msg)
 	case rowsMsg:
-		if m.step == nil || msg.step != m.step.ID || msg.step != m.loading {
+		if m.review == nil || msg.gen != m.loadGen {
 			return m, nil
 		}
-		m.loading, m.err = "", msg.err
+		m.loading, m.err = false, msg.err
 		m.rows = msg.rows
 		m.relist()
 		m.cursor = firstFocus(m.lines)
@@ -613,7 +571,7 @@ func (m *model) handleKeys(msg tea.KeyMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-func (m *model) stepFiles() []string {
+func (m *model) shownFiles() []string {
 	var out []string
 	for i := range m.lines {
 		if it := &m.lines[i]; it.Kind == RowFile && (len(out) == 0 || out[len(out)-1] != it.File) {
@@ -674,180 +632,18 @@ func (m *model) toggleFold() {
 	m.clamp()
 }
 
-const (
-	extraBoilerplate = "~boilerplate"
-	extraGenerated   = "~generated"
-	extraAll         = "~all"
-	extraThreads     = "~threads"
-)
-
-func isExtra(id string) bool {
-	return strings.HasPrefix(id, "~")
-}
-
-func (m *model) extraSteps() []state.Step {
-	if m.review == nil {
-		return nil
-	}
-	var boilerplate, generated, all []state.StepHunk
-	for _, f := range m.review.Files {
-		h := state.StepHunk{File: f.Path}
-		all = append(all, h)
-		switch f.Tier {
-		case state.TierBoilerplate:
-			boilerplate = append(boilerplate, h)
-		case state.TierGenerated:
-			generated = append(generated, h)
-		}
-	}
-	var out []state.Step
-	if ds := m.myThreads(); len(ds) > 0 {
-		var hunks []state.StepHunk
-		for _, d := range ds {
-			if d.File != "" && !d.OldLine {
-				hunks = append(hunks, state.StepHunk{File: d.File, Lines: fmt.Sprint(d.Line)})
-			}
-		}
-		title := fmt.Sprintf("your threads · %d", len(ds))
-		if n := m.pendingThreads(); n > 0 {
-			title = fmt.Sprintf("your threads · %d to decide", n)
-		}
-		out = append(out, state.Step{ID: extraThreads, Title: title,
-			Kind: "extra", Hunks: hunks, Status: state.StatusPending})
-	}
-	add := func(id, title string, hunks []state.StepHunk) {
-		if len(hunks) > 0 {
-			out = append(out, state.Step{
-				ID: id, Title: title, Kind: "extra", Hunks: hunks, Status: state.StatusPending,
-			})
-		}
-	}
-	add(extraBoilerplate, "boilerplate", boilerplate)
-	add(extraGenerated, "generated", generated)
-	add(extraAll, "all changes", all)
-	return out
-}
-
-func (m *model) stepByID(id string) *state.Step {
-	if m.review == nil {
-		return nil
-	}
-	if st := m.review.Step(id); st != nil {
-		return st
-	}
-	for _, st := range m.extraSteps() {
-		if st.ID == id {
-			return &st
-		}
-	}
-	return nil
-}
-
-func (m *model) stepIDs() []string {
-	var ids, extras []string
-	for _, st := range m.review.Steps {
-		ids = append(ids, st.ID)
-	}
-	for _, st := range m.extraSteps() {
-		extras = append(extras, st.ID)
-	}
-	if len(extras) > 0 && extras[0] == extraThreads {
-		return append(append([]string{extraThreads}, ids...), extras[1:]...)
-	}
-	return append(ids, extras...)
-}
-
-func (m *model) showStep(id string) tea.Cmd {
-	st := m.stepByID(id)
-	if st == nil {
-		return nil
-	}
-	m.viewStep = id
-	if id == m.review.Current {
-		m.viewStep = ""
-	}
-	m.step = st
-	m.visual, m.cursor, m.offset, m.context, m.reveal = false, 0, 0, m.baseCtx, nil
-	m.hscroll = 0
-	m.introOnce()
-	if m.src == nil {
-		return nil
-	}
-	if len(st.Hunks) <= asyncFiles {
-		m.loading = ""
-		m.rebuild(true)
-		return nil
-	}
-	m.loading, m.rows = st.ID, nil
-	m.relist()
-	src, step, context, notes := m.src, *st, m.context, m.notes()
-	return func() tea.Msg {
-		rows, err := buildRows(src, step, context, notes, nil)
-		return rowsMsg{step: step.ID, rows: rows, err: err}
-	}
-}
-
-func (m *model) shiftStep(d int) tea.Cmd {
-	if m.step == nil {
-		return nil
-	}
-	ids := m.stepIDs()
-	if i := slices.Index(ids, m.step.ID) + d; i >= 0 && i < len(ids) {
-		return m.showStep(ids[i])
-	}
-	return nil
-}
-
-func (m *model) next() {
-	if m.viewStep == extraThreads {
-		m.leaveThreads()
-		return
-	}
-	if m.viewStep != "" {
-		m.status = "viewing an earlier step: esc to return, then >"
-		return
-	}
-	if !m.gateOpen && (len(m.openRisks()) > 0 || m.unseen() > 0) {
-		m.gateOpen, m.gateSel = true, m.firstOpenRisk()
-		return
-	}
-	m.gateOpen = false
-	m.moveStep("next")
-}
-
-func (m *model) openRisks() []int {
-	var out []int
-	if m.step == nil {
-		return nil
-	}
-	for i, h := range m.step.Hotspots {
-		if !h.Checked {
-			out = append(out, i)
-		}
-	}
-	return out
-}
-
-// firstOpenRisk is the gate card's default choice: the first open risk, else "move on".
-func (m *model) firstOpenRisk() int {
-	if open := m.openRisks(); len(open) > 0 {
-		return open[0]
-	}
-	return len(m.step.Hotspots)
-}
-
 func (m *model) toggleRisk(n int) {
-	if m.step == nil || n < 1 || n > len(m.step.Hotspots) {
+	if m.review == nil || n < 1 || n > len(m.review.Hotspots) {
 		m.status = "put the cursor on a risk (RISK) to check it off"
 		return
 	}
-	h := &m.step.Hotspots[n-1]
-	args := []string{"step", "check"}
+	h := &m.review.Hotspots[n-1]
+	args := []string{"check"}
 	if h.Checked {
 		args = append(args, "--undo")
 	}
 	if m.runGr != nil {
-		out, err := m.runGr(append(args, m.step.ID, fmt.Sprint(n))...)
+		out, err := m.runGr(append(args, fmt.Sprint(n))...)
 		if err != nil {
 			m.err = fmt.Errorf("%v: %s", err, strings.TrimSpace(out))
 			return
@@ -863,68 +659,25 @@ func (m *model) toggleRisk(n int) {
 	}
 }
 
-func (m *model) handleGateKey(msg tea.KeyMsg) tea.Cmd {
-	risks := len(m.step.Hotspots)
-	switch k := msg.String(); {
-	case k == "x":
-		m.toggleRisk(m.gateSel + 1)
-	case k == m.keys().key("replies"):
-		m.gateOpen = false
-		m.openThreads()
-	default:
-		switch cardNav(k, risks+1, &m.gateSel) {
-		case "esc":
-			m.gateOpen = false
-		case "enter":
-			if m.gateSel >= risks {
-				m.next()
-				return nil
-			}
-			m.toggleRisk(m.gateSel + 1)
-			m.gateSel = m.firstOpenRisk()
-		}
-	}
-	return nil
-}
-
-func (m *model) moveStep(args ...string) {
-	if m.runGr == nil {
-		m.err = errors.New("no gr to move the step with")
-		return
-	}
-	out, err := m.runGr(append([]string{"step"}, args...)...)
-	out = strings.TrimSpace(out)
-	switch {
-	case err != nil:
-		m.err = fmt.Errorf("%v: %s", err, out)
-	case strings.HasPrefix(out, "all steps reviewed"):
-		m.openFinish()
-	}
-}
-
 func (m *model) handleFilesKey(msg tea.KeyMsg) tea.Cmd {
-	files := m.stepFiles()
+	items := m.treeItems()
 	switch m.keys().name(msg.String()) {
 	case "quit":
 		return tea.Quit
 	case "down":
-		m.fileCursor = max(0, min(m.fileCursor+1, len(files)-1))
+		m.fileCursor = max(0, min(m.fileCursor+1, len(items)-1))
 	case "up":
 		m.fileCursor = max(m.fileCursor-1, 0)
 	case "top":
 		m.fileCursor = 0
 	case "bottom":
-		m.fileCursor = max(len(files)-1, 0)
+		m.fileCursor = max(len(items)-1, 0)
 	case "act", "message", "open":
-		if m.fileCursor >= 0 && m.fileCursor < len(files) {
-			m.jumpToFile(files[m.fileCursor])
+		if m.fileCursor >= 0 && m.fileCursor < len(items) {
+			m.openTreeItem(items[m.fileCursor])
 		}
-		m.focusFiles = false
 	case "back", "files":
 		m.focusFiles = false
-	case "steps":
-		m.focusFiles = false
-		m.focusPlanPanel()
 	}
 	return nil
 }
@@ -977,7 +730,7 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		m.deleteArmed = 0
 	}
 	filtering := m.popup != nil && m.popup.filtering
-	overlay := m.step != nil && m.preview == ""
+	overlay := m.review != nil && m.preview == ""
 	if k := msg.String(); overlay && !m.help && !filtering && (k == "?" || k == "f1") {
 		m.help, m.helpAll, m.helpTop = true, false, 0
 		return nil
@@ -985,8 +738,6 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	switch {
 	case m.help:
 		return m.handleHelpKey(msg)
-	case m.gateOpen:
-		return m.handleGateKey(msg)
 	case m.finishCard:
 		return m.handleFinishCardKey(msg)
 	case m.pub != nil:
@@ -997,16 +748,12 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleThemeKey(msg)
 	case m.newsOpen:
 		return m.handleNewsKey(msg)
-	case len(m.staleSteps) > 0:
-		return m.handleStaleKey(msg)
 	case m.preview != "":
 		return m.handlePreviewKey(msg)
 	case m.popup != nil:
 		return m.handlePopupKey(msg)
 	case m.focusFiles:
 		return m.handleFilesKey(msg)
-	case m.focusPlan:
-		return m.handlePlanKey(msg)
 	case m.chatFocus:
 		return m.handleChatKey(msg)
 	}
@@ -1131,8 +878,9 @@ func (m *model) markSeen(l *line) {
 	}
 }
 
-// changeCounts counts the changed lines of the step and how many were not on screen yet.
-func (m *model) changeCounts() (total, unseen int) {
+// changeCounts counts the changed lines of each file and how many were not on screen yet.
+func (m *model) changeCounts() (total, unseen map[string]int) {
+	total, unseen = map[string]int{}, map[string]int{}
 	for i := range m.rows {
 		r := &m.rows[i]
 		var k seenKey
@@ -1144,17 +892,48 @@ func (m *model) changeCounts() (total, unseen int) {
 		default:
 			continue
 		}
-		total++
+		total[r.File]++
 		if !m.seen[k] {
-			unseen++
+			unseen[r.File]++
 		}
 	}
 	return total, unseen
 }
 
-func (m *model) unseen() int {
+// persistSeen records in the review the files whose changed lines were all on screen.
+func (m *model) persistSeen() {
+	if m.review == nil || m.loading || len(m.rows) == 0 {
+		return
+	}
 	_, unseen := m.changeCounts()
-	return unseen
+	shown := map[string]bool{}
+	for _, r := range m.rows {
+		if r.Kind == RowFile {
+			shown[r.File] = true
+		}
+	}
+	var done []string
+	for i := range m.review.Files {
+		f := &m.review.Files[i]
+		if f.Tier == state.TierCore && !f.Seen && shown[f.Path] && unseen[f.Path] == 0 {
+			f.Seen = true
+			done = append(done, f.Path)
+		}
+	}
+	if len(done) == 0 || m.store.Dir == "" {
+		return
+	}
+	err := m.store.UpdateCurrent(func(r *state.Review) error {
+		for _, path := range done {
+			if f := r.File(path); f != nil {
+				f.Seen = true
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		m.err = err
+	}
 }
 
 func resolvedLabel(label string, resolved bool) string {
@@ -1162,4 +941,13 @@ func resolvedLabel(label string, resolved bool) string {
 		return "✓ " + label
 	}
 	return label
+}
+
+func (m *model) unseen() int {
+	_, unseen := m.changeCounts()
+	n := 0
+	for _, v := range unseen {
+		n += v
+	}
+	return n
 }

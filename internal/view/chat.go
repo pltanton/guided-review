@@ -91,11 +91,6 @@ func (m *model) chatBox() (rows []chatRow, x, y, h int, ok bool) {
 	switch {
 	case m.review == nil || m.preview != "":
 		return nil, 0, 0, 0, false
-	case m.step == nil:
-		x, w, inner := m.cardFrame(intakeWidth)
-		top := m.intakeTop(w)
-		h = max(inner-len(top)-len(m.intakePrompt(w))-1, 1)
-		return m.chatRows(w, false), x, 1 + len(top) + 1, h, true
 	case m.chatWidth() > 0:
 		bodyH := m.height - len(m.bottomLines())
 		c := m.sideChatLayout(bodyH, m.chatWidth()-2)

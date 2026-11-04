@@ -71,7 +71,7 @@ func TestReformatHunk(t *testing.T) {
 		}}},
 		lines: map[string][]string{"a.go": {"x", "call(a,", "  b)", "y"}},
 	}
-	rows, err := buildRows(src, state.Step{Hunks: []state.StepHunk{{File: "a.go"}}}, 0, nil, nil)
+	rows, err := buildRows(src, []state.File{{Path: "a.go"}}, nil, 0, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

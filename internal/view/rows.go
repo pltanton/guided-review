@@ -23,7 +23,6 @@ const (
 	RowNote
 	RowFold
 	RowSpacer
-	RowEnd
 )
 
 type Row struct {
@@ -56,6 +55,7 @@ type Row struct {
 	RenameHide  bool
 	Risk        int
 	Thread      string
+	Tier        state.Tier
 }
 
 type Note struct {
@@ -80,42 +80,48 @@ type Source interface {
 
 func buildRows(
 	src Source,
-	st state.Step,
+	files []state.File,
+	hotspots []state.Hotspot,
 	context int,
 	notes []Note,
 	reveal map[string][][2]int,
+	open map[state.Tier]bool,
 ) ([]Row, error) {
-	var files []string
-	ranges := map[string][][2]int{}
-	whole := map[string]bool{}
-	for _, sh := range st.Hunks {
-		start, end, err := state.ParseLines(sh.Lines)
-		if err != nil {
-			return nil, err
-		}
-		if _, seen := ranges[sh.File]; !seen && !whole[sh.File] {
-			files = append(files, sh.File)
-		}
-		if start == 0 {
-			whole[sh.File] = true
-			continue
-		}
-		ranges[sh.File] = append(ranges[sh.File], [2]int{start, end})
-	}
 	var rows []Row
 	first := ""
 	if len(files) > 0 {
-		first = files[0]
+		first = files[0].Path
 	}
 	for _, n := range notes {
 		if n.Top {
 			rows = append(rows, Row{
-				Kind: RowNote, File: first, Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label, Dim: n.Dim, Risk: n.Risk,
-				Thread: n.Thread,
+				Kind: RowNote, File: first, Text: n.Text, NoteKind: n.Kind, NoteLabel: n.Label,
+				Dim: n.Dim, Risk: n.Risk, Thread: n.Thread,
 			})
 		}
 	}
-	for _, file := range files {
+	isFolded := func(f state.File) bool {
+		return f.Tier != "" && f.Tier != state.TierCore && !open[f.Tier]
+	}
+	folded := map[state.Tier]int{}
+	for _, f := range files {
+		if isFolded(f) {
+			folded[f.Tier]++
+		}
+	}
+	shown := map[state.Tier]bool{}
+	for _, f := range files {
+		file := f.Path
+		if isFolded(f) {
+			if !shown[f.Tier] {
+				shown[f.Tier] = true
+				rows = append(rows, Row{Kind: RowSpacer}, Row{
+					Kind: RowFile, Text: fmt.Sprintf("%s · %d files", f.Tier, folded[f.Tier]),
+					FileInfo: "folded · enter opens", FoldKey: string(f.Tier),
+				})
+			}
+			continue
+		}
 		fd, err := src.FileDiff(file)
 		if err != nil {
 			return nil, err
@@ -133,12 +139,8 @@ func buildRows(
 		if len(rows) > 0 {
 			rows = append(rows, Row{Kind: RowSpacer, File: file})
 		}
-		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: fileInfo(fd)})
-		wanted := ranges[file]
-		if whole[file] {
-			wanted = nil
-		}
-		rows = append(rows, fileRows(fd, lines, wanted, context, hotspotLines(st, file),
+		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: fileInfo(fd), Tier: f.Tier})
+		rows = append(rows, fileRows(fd, lines, nil, context, hotspotLines(hotspots, file),
 			fileNotes, reveal[file])...)
 	}
 	markIntraline(rows)
@@ -159,10 +161,10 @@ func fileInfo(fd diff.File) string {
 	return fmt.Sprintf("+%d −%d · %s", added, deleted, status)
 }
 
-func hotspotLines(st state.Step, file string) map[int]bool {
+func hotspotLines(hotspots []state.Hotspot, file string) map[int]bool {
 	out := map[int]bool{}
-	for _, h := range st.Hotspots {
-		if f, _ := st.HotspotFile(h); h.Line > 0 && f == file {
+	for _, h := range hotspots {
+		if h.Line > 0 && h.File == file {
 			out[h.Line] = true
 		}
 	}
