@@ -627,6 +627,18 @@ func TestIdleCommand(t *testing.T) {
 	if _, ok := inbox.IdleSince(s.store.ReviewDir(r.ID)); !ok {
 		t.Fatal("idle marker not written")
 	}
+	for _, cmd := range [][]string{{"progress", "reading"}, {"say", "hi"}, {"init"}} {
+		h.mustRun("", "idle")
+		h.mustRun("", cmd...)
+		if _, ok := inbox.IdleSince(s.store.ReviewDir(r.ID)); ok {
+			t.Fatalf("gr %s is the agent at work: the idle mark must go", cmd[0])
+		}
+	}
+	h.mustRun("", "idle")
+	h.mustRun(goodPlan, "plan", "set")
+	if _, ok := inbox.IdleSince(s.store.ReviewDir(r.ID)); ok {
+		t.Fatal("gr plan set is the agent at work: the idle mark must go")
+	}
 }
 
 func TestCommentEdit(t *testing.T) {

@@ -88,9 +88,11 @@ func cmdProgress(ctx context.Context, e env, args []string) error {
 	})
 }
 
+// update is for the agent's own writes (say, progress): they also clear the Stop hook's idle mark.
 func update(ctx context.Context, e env, apply func(*state.Review)) error {
-	_, _, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+	_, _, err := updateReview(ctx, e.dir, func(s session, r *state.Review) error {
 		apply(r)
+		inbox.ClearIdle(s.store.ReviewDir(r.ID))
 		return nil
 	})
 	return err

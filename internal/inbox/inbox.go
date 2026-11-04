@@ -197,6 +197,11 @@ func MarkIdle(dir string) error {
 	return writeStamp(filepath.Join(dir, idleFile), time.Now())
 }
 
+// ClearIdle is for the agent's own commands: an agent that writes is not stopped.
+func ClearIdle(dir string) {
+	_ = os.Remove(filepath.Join(dir, idleFile))
+}
+
 func IdleSince(dir string) (time.Time, bool) {
 	return readStamp(filepath.Join(dir, idleFile))
 }

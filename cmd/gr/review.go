@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/plan"
 	"github.com/pltanton/guided-review/internal/state"
 )
@@ -153,6 +154,7 @@ func cmdPlan(ctx context.Context, e env, args []string) error {
 		}
 		plan.Merge(r, p)
 		r.Progress = nil
+		inbox.ClearIdle(s.store.ReviewDir(r.ID))
 		return nil
 	})
 	if err != nil {

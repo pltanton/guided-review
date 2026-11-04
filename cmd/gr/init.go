@@ -19,6 +19,7 @@ import (
 	"github.com/pltanton/guided-review/internal/github"
 	"github.com/pltanton/guided-review/internal/gitlab"
 	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -128,6 +129,7 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 	if err := s.store.Save(r); err != nil {
 		return err
 	}
+	inbox.ClearIdle(s.store.ReviewDir(r.ID))
 	if err := s.store.SetCurrent(r.ID); err != nil {
 		return err
 	}
