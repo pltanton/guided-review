@@ -1,21 +1,21 @@
 ---
 name: guided-review
-description: Use when the user wants to review a merge request, branch or change set step by step — "проведи по ревью", "давай поревьюим MR", "guided review", "review this MR with me", "review this PR", a GitLab MR or GitHub PR URL together with a request to review it. Plans the route through the change, walks the reviewer through small ordered pieces with the gr CLI and a tmux viewer pane, records their comments.
+description: Use when the user wants to review a merge request, branch or change set with an agent at their side — "проведи по ревью", "давай поревьюим MR", "guided review", "review this MR with me", "review this PR", a GitLab MR or GitHub PR URL together with a request to review it. Opens the whole change in a tmux viewer pane, reads it in parallel with the reviewer, marks the risky lines and a reading order with the gr CLI, records their comments.
 ---
 
 # Guided review
 
-You lead a human through a code review. They judge the code. You plan the route,
-explain each piece in a few lines, catch spec mismatches and risky spots, and record
-their remarks.
+You review a change together with a human. They judge the code. You read it next to
+them, suggest a reading order, flag where a mistake is expensive, explain the
+non-obvious lines, catch spec mismatches, and record their remarks.
 
 Speak the human's language: the one they write to you in (in self mode, the one the
 prompt names). Every quoted phrase in this skill is an English example — translate it.
 
-The viewer pane (`gr view`) is the main interface: the human sees the plan, the code
-with your annotations, your messages, and types replies there. You talk to them with
-`gr say` and listen with `gr wait`. Keep terminal chat output to a line or two per
-turn: the human glances at it, so it has to stay readable at a glance.
+The viewer pane (`gr view`) is the main interface: the human sees the whole diff with a
+file tree, your flags and notes on the lines, your messages, and types replies there.
+You talk to them with `gr say` and listen with `gr wait`. Keep terminal chat output to a
+line or two per turn: the human glances at it, so it has to stay readable at a glance.
 
 When you ask a question with a few likely answers, offer them:
 `gr say --option "yes" --option "no, let me fix" "…"`. They become buttons in the viewer
@@ -27,8 +27,9 @@ then `gr wait`. If you end it anyway, the viewer shows "agent stopped" and their
 sit unread. Once the human finishes in the viewer (`[finished]`, see Wrap-up) it closes,
 and the rest happens in the terminal chat.
 
-`gr` holds all review state: when unsure where you are, run `gr step show` or
-`gr status` instead of relying on memory.
+`gr` holds all review state: when unsure where you are, run `gr status` instead of
+relying on memory. It lists the files in reading order with what you have read (`·`
+marks the rest), what the human has seen (`●` marks the rest) and the flags.
 
 ## Setup — no questions
 
@@ -44,78 +45,76 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
      is a full review of the MR's code. Tell the human in one line that without glab/gh
      there are no MR discussions and the result is a local review.md to post by hand, and
      that installing glab/gh and logging in gives the full flow — do not install it unasked.
-   - "already exists, resuming": `gr step show`, then continue the step loop.
+   - "already exists, resuming": `gr status`, then go on reading the files marked `·`.
    - "round N": this is a re-review, see below.
-   - Never pass `--force` on your own: it throws away the plan and progress. Only the
-     user may ask to start over.
+   - Never pass `--force` on your own: it throws away your notes and the progress. Only
+     the user may ask to start over.
    - "state of review … is unreadable": show the human the error as gr printed it (here
      in the terminal, the viewer is not open yet) and offer «start over (--force)» or
      «I'll sort it out». Run `gr init --force` only after they chose it.
-2. `gr open` — opens the viewer full screen in a tmux window `review-<id>` next to you,
-   restarting it if it is already there. It finds your tmux pane by itself, also when
-   `$TMUX` is not set in your shell. If it prints "not in tmux", give the human the
-   command it printed to run the viewer in another terminal and go on.
-   `A` in the viewer brings the user back to you, and closing it (or `gr done`) returns
-   them to your pane automatically.
+2. `gr open` at once, before you read anything — the viewer needs nothing from you: the
+   human starts reading the diff while you work. It opens the viewer full screen in a
+   tmux window `review-<id>` next to you, restarting it if it is already there. It finds
+   your tmux pane by itself, also when `$TMUX` is not set in your shell. If it prints
+   "not in tmux", give the human the command it printed to run the viewer in another
+   terminal and go on. `A` in the viewer brings the user back to you, and closing it (or
+   `gr done`) returns them to your pane automatically.
 
-Before anything that takes more than a few seconds — reading the diff, building the
-plan, reading a step's code, answering an explain — run
-`gr progress "<what you are doing>"` (e.g. `planning: reading the diff, 58 files`). The
-viewer shows it with a spinner and a timer; without it the human stares at a frozen
-screen. `gr say` and `gr plan set` clear it.
+Before anything that takes more than a few seconds — reading the diff, reading a file,
+answering an explain — run `gr progress "<what you are doing>"` (e.g. `reading
+transfer.go, 3 of 12`). The viewer shows it with a spinner and a timer; without it the
+human stares at a frozen screen. `gr say` and `gr plan set` clear it.
 
-## Intake — one message, no waiting
+`glab` and `gh` are read-only for you until the wrap-up: the only writes to the MR are
+the ones in "Publish" below, after the human said yes.
 
-Use only what is cheap: the description (`glab mr view <iid>` for GitLab,
-`gh pr view <n> --repo <owner/repo>` for GitHub), a linked spec,
-the unresolved MR discussions (`gr discussions` prints them in full), and
-`git diff --stat <base> <head>`. Do not read code yet.
+## Reading — in small writes, while the human reads
 
-`gr say` at most two lines: the task in one line, how the change solves it in one line.
-When `gr init` listed generated files, add one line naming them — the ⚠ ones first, they
-are generated only by a comment in the file — they stay out of the plan. No question and
-no `gr wait` here: go straight to the plan. The human corrects you from the viewer while
-you plan; the `gr wait --timeout 1s` between fills picks it up. Everything else you
-noticed — failing checks, open discussions, spec mismatches, stale examples in the
-description — is not intake: keep it for the step it belongs to and put it there as a
-`spec` annotation or the step's question.
+Everything you learn goes to the viewer through `gr plan set` as soon as it is ready,
+in parts: a part is a YAML document with any of `briefing`, `boilerplate`, `files`,
+`hotspots`, `annotations`. Parts merge: a file named again gets its new `why` and
+`order`, a hotspot at the same file and line replaces the earlier one (checked stays
+checked), an annotation at the same file, line and kind replaces the earlier one,
+`briefing` replaces the earlier briefing. gr rejects a part with a path or a line that is
+not in the diff; fix exactly what it lists and send it again.
 
-`glab` and `gh` are read-only for you until the wrap-up: the only writes to the MR are the ones in
-"Publish" below, after the human said yes.
+Pick the depth from the stats `gr init` printed:
 
-## Plan
+- **Tiny** (a few hunks in one or two files): read the diff once, send the hotspots if
+  there are any, and `gr say` one line: «3 lines, nothing to flag» or «one flag,
+  transfer.go:57». No briefing, no order, no `why`. Name every file in `files` anyway,
+  so the tree shows you read it.
+- **Normal**: steps 1–4 below.
+- **Large** (over ~600 changed lines or more than ~15 core files): steps 1–2 yourself,
+  then "Parallel reading" for step 3.
 
-The human sees the plan only when it is whole: every step arrives with its notes, so
-they never walk code the notes have not reached yet.
+The human can change the depth in words at any time («go deep on the migration», «skip
+the reading, I'll ask»): do what they said.
 
-1. Read the diff (`git diff <base> <head>` in the code path) and `gr hunks`.
-   Generated files are excluded; one the human wants to see goes into a step like any
-   other file. Decide which remaining files are boilerplate.
-2. Group into chapters and steps per references/ordering.md: intent first, one chapter
-   per behaviour, mechanics last; step titles are the claims to check.
-   A large MR (three or more chapters, or over ~600 changed lines) goes faster in
-   parallel when you can start subagents (Claude Code's Agent tool); see "Parallel
-   planning" below. Otherwise continue here.
-3. Read every step's code now, with enough surrounding code to be sure of what it does,
-   look for problems per references/checklist.md, and write its explanations (below):
-   the viewer moves between steps without you, so all per-step work happens here.
-   Between chapters run `gr wait --timeout 1s` to answer the human if they wrote.
-4. Pipe the whole plan — route and explanations — to `gr plan set`. If gr rejects it,
-   fix exactly what it lists. It posts s1's message itself.
-5. `gr say` the plan: one line per chapter with its steps (`Transfers: s1 s2`) plus a
-   line for boilerplate and generated files.
+1. Intake, cheap only: the description (`glab mr view <iid>` for GitLab,
+   `gh pr view <n> --repo <owner/repo>` for GitHub), a linked spec, the unresolved MR
+   discussions (`gr discussions` prints them in full), `git diff --stat <base> <head>`.
+   Do not read code yet.
+2. Send the first part: `briefing` (two to four lines: the task, how the change solves
+   it, what to watch; generated files `gr init` listed with ⚠ named, they are generated
+   only by a comment in the file), `boilerplate`, and every core file with `order` per
+   references/ordering.md and a `why` of about ten words. This part should reach the
+   viewer within a minute of `gr open`.
+3. Read the files in that order, each with enough surrounding code to be sure of what it
+   does, looking for problems per references/checklist.md. After each file (or two or
+   three small ones) send a part with its `hotspots` and `annotations`, and the file in
+   `files` again if its `why` changed. Between files run `gr wait --timeout 1s` and
+   handle what the human wrote (see Events).
+4. When the last file is sent, `gr say` one line: «read everything: N flags», then go
+   to Events.
 
-Explanations of a step, in its entry of the plan:
-- `intro` on the first step of each chapter: two to four lines on how the behaviour was
-  before and how it is after, and, when it helps, the path the request takes
-  (`Handler → reserve() → ledger.Put → outbox`).
-- `message` (references/style.md): at most three lines — what the code does, a spec
-  mismatch, the one question.
-- `hotspots` per references/hotspots.md, with `line` so the viewer marks them (and `file`
-  when the step has several files).
+What goes into a part:
+
+- `hotspots` per references/hotspots.md: `cat`, `file`, `line` (0 for the whole file),
+  a concrete question `q`, and a `detail`.
 - `annotations` where an explanation saves the reader real effort: what a non-obvious
   call does and why, where the spec disagrees (`kind: spec`). Full sentences, not
-  fragments. One to three per step; none is fine.
+  fragments. One to three per file; none is fine.
 - A `detail` on every annotation and hotspot in three short paragraphs, one or two
   sentences each — `**Problem.** …`, `**When it bites.** …` (the scenario),
   `**What to do.** …` — plus a short code excerpt in a fenced block when it helps. Name
@@ -123,158 +122,129 @@ Explanations of a step, in its entry of the plan:
   shows a snippet of each under the detail and opens it on 1–9. `i` in the viewer shows
   it at once instead of asking you again.
 
-The full shape, route and explanations together:
+The full shape of a part:
 
 ```yaml
-summary: "task → how it is solved"
+briefing: |-
+  Before: a retried POST /transfers debited twice.
+  After: the idempotency key returns the first result.
+  Watch the key check around the reserve transaction.
 boilerplate: [internal/di/wire.go]
-steps:
-  - id: s1
-    chapter: "Transfers between accounts"
-    intro: |- # first step of a chapter only: before → after, and the path the request takes
-      Before: a retried POST /transfers debited twice.
-      After: the idempotency key returns the first result.
-      Handler → reserve() → ledger.Put → outbox
-    kind: contract # contract|model|entry|logic|persistence|migration|test|config
-    hunks:
-      - { file: api/openapi.yaml, lines: 120-168 } # omit lines for the whole file
-  - id: s2
-    chapter: "Transfers between accounts"
-    title: "A repeated key returns the first result"
-    kind: entry
-    message: |-
-      s2/5 · POST /transfers — handler
-      Validates, reserves the amount, writes an event to the outbox. ⚠ spec: 409 on a duplicate, here 200.
-      ❓ line 57: retry with the same key after a timeout — second debit?
-    hunks: [{ file: api/transfer.go, lines: 40-92 }]
-    hotspots:
-      - cat: consistency
-        line: 57
-        q: "Retry after a timeout — second debit?"
-        detail: >-
-          The key is checked in Redis before the transaction and written after it, so a
-          retry that lands between the debit and the write passes the check and debits
-          again. Checking and writing the key inside the reserve transaction closes it.
-    annotations:
-      - file: api/transfer.go
-        line: 61
-        to: 64 # the lines the note is about; they get its colour in the viewer
-        kind: note
-        text: >-
-          reserve() opens the transaction and Put writes the ledger row inside it, so a
-          failed debit rolls the reservation back too.
-        detail: >-
-          Put takes tx rather than the pool on purpose: called outside reserve() it would
-          commit on its own and a failed debit would leave the reservation behind.
-    depends_on: [s1]
+files:
+  - {
+      path: api/openapi.yaml,
+      order: 1,
+      why: "the contract: 409 on a duplicate key",
+    }
+  - {
+      path: api/transfer.go,
+      order: 2,
+      why: "handler: reserves, writes the outbox event",
+    }
+  - { path: api/transfer_test.go, order: 3, why: "pins the duplicate-key case" }
+hotspots:
+  - cat: consistency
+    file: api/transfer.go
+    line: 57
+    q: "Retry after a timeout — second debit?"
+    detail: >-
+      **Problem.** The key is checked in Redis before the transaction and written after it.
+      **When it bites.** A retry that lands between the debit and the write passes the check and debits again.
+      **What to do.** Check and write the key inside the reserve transaction (`api/transfer.go:61`).
+annotations:
+  - file: api/transfer.go
+    line: 61
+    to: 64 # the lines the note is about; they get its colour in the viewer
+    kind: note
+    text: >-
+      reserve() opens the transaction and Put writes the ledger row inside it, so a
+      failed debit rolls the reservation back too.
+    detail: >-
+      Put takes tx rather than the pool on purpose: called outside reserve() it would
+      commit on its own and a failed debit would leave the reservation behind.
 ```
 
-## Parallel planning
+## Parallel reading
 
-1. Write the route yourself: `summary` and `boilerplate` to
-   `/tmp/gr-plan/<id>/route.yaml`, and each chapter's steps — `id`, `title`, `kind`,
-   `chapter`, `hunks`, `depends_on`, nothing else — to `/tmp/gr-plan/<id>/chapter-N.yaml`
-   as a top-level `steps:` list. These are scratch files for you and the subagents.
-2. In one message start one general-purpose subagent per chapter, so they run at once.
-   Give each: the code path, base and head, the task in two lines, its chapter file, and
-   the path of this skill's `references/` directory. Its job: read `style.md`,
-   `hotspots.md` and `checklist.md` there, read its steps' code, rewrite its chapter file
-   with the same steps (ids, titles, hunks and depends_on unchanged) plus the
-   explanations (see Plan), never run `gr` itself, and reply with one line when done.
-3. Wait for all of them (`gr wait --timeout 1s` meanwhile, to answer the human), then
-   `gr plan set -f route.yaml -f chapter-1.yaml -f chapter-2.yaml …` in chapter order. If
-   gr rejects something, fix it in that chapter's file yourself, then go on with step 5
-   of Plan. A chapter whose subagent failed you write yourself before that.
+1. Send the first part yourself (briefing, boilerplate, files with order and why).
+2. Split the core files into groups of related files, three to six groups. In one
+   message start one general-purpose subagent per group, so they run at once. Give
+   each: the code path, base and head, the task in two lines, its file list, and the
+   path of this skill's `references/` directory. Its job: read `style.md`, `hotspots.md`
+   and `checklist.md` there, read its files' code, write a part with `hotspots` and
+   `annotations` for them (and `files` with a better `why` where it has one) to
+   `/tmp/gr-plan/<id>/group-N.yaml`, never run `gr` itself, and reply with one line when
+   done.
+3. As each subagent finishes, `gr plan set -f /tmp/gr-plan/<id>/group-N.yaml` right
+   away; `gr wait --timeout 1s` meanwhile, to answer the human. If gr rejects something,
+   fix it in that file yourself. A group whose subagent failed you read yourself.
 
-## Step loop
+## Events
 
-The viewer moves through the steps itself: `>`, skips and jumps run `gr step …` and
-show the step's `message` from the plan, and before leaving a step it asks the human to
-check off each open hotspot (`x`); `gr step show` marks the checked ones. You only hear about what needs you.
-
-1. If something worth explaining turns up only now, add it with
-   `gr note add --file F --lines N-M [--kind spec] TEXT` (`--line N` for one line) and
-   its detail right away with `gr note detail --file F --line <last line> - <<'EOF' … EOF`.
-2. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
+1. `gr wait` — run it with the Bash tool timeout at 600000 ms. "no input yet" means
    nothing happened: run it again. If your turn was interrupted and the human's next
    prompt is "Continue the guided review: run gr wait.", the viewer did that with `ctrl+c`:
    just run `gr wait`, their message is waiting there. Each printed line is one event from
    the viewer:
 
-   - `[message] sN file:lines: text` — a remark: pick severity (blocker changes the
+   - `[message] file:lines: text` — a remark: pick severity (blocker changes the
      approach, major is local rework, minor, nit),
      `gr comment add --file F --lines L --severity S [--suggestion TEXT] BODY` (BODY per
      references/style.md: readable for an author who was not here), then
      `gr say` one line: `noted: nit, transfer.go:57–58`. A question: `gr say` a short
      answer. Unsure which: ask one short question.
-   - `[message] sN: text` — the same without a line anchor; ask for the lines if a
+   - `[message]: text` — the same without a line anchor; ask for the lines if a
      remark needs them.
-   - `[explain] sN file:lines` — read that code,
-     `gr note add --file F --lines <those lines> TEXT`: two to four sentences on its role
-     in the feature, not its syntax (references/style.md).
-   - `[ask] sN file:lines: text` — a question about that code, never a remark: read it,
+   - `[explain] file:lines` — read that code and send an annotation on those lines:
+     two to four sentences on its role in the feature, not its syntax
+     (references/style.md).
+   - `[ask] file:lines: text` — a question about that code, never a remark: read it,
      answer with `gr say` in a few lines. Do not create comments or notes for it.
-   - `[detail] sN file:line: <note text>` — a note without a `detail` (add one with every
-     note from now on). Read
-     the code again and write it in the same three short paragraphs — `**Problem.**`,
-     `**When it bites.**`, `**What to do.**` — with a code excerpt when it helps, other code named
-     as `path:line`. Save it with
-     `gr note detail --file F --line N [--step sN] - <<'EOF' … EOF`; the viewer shows it
-     in the popup that is already open. No `gr say` needed.
-   - `[comment] sN file:lines: comment #N …` — the human saved that comment themselves,
+   - `[detail] file:line: <note text>` — a note without a `detail` (add one with every
+     note from now on). Read the code again and write it in the same three short
+     paragraphs — `**Problem.**`, `**When it bites.**`, `**What to do.**` — with a code
+     excerpt when it helps, other code named as `path:line`. Send the note again with
+     the `detail` filled in; the viewer shows it in the popup that is already open. No
+     `gr say` needed.
+   - `[comment] file:lines: comment #N …` — the human saved that comment themselves,
      word for word (the viewer's default for a comment; an ai comment reaches you as a
-     message instead). Do not add, edit or rephrase it and do not reply; if the
-     text lists stale steps, the viewer has already asked whether to go on or finish. `[comment] sN: comment #N
-     updated` / `comment #N deleted` is the human editing or deleting their own comment:
-     nothing to do.
+     message instead). Do not add, edit or rephrase it and do not reply. `[comment]:
+comment #N updated` / `comment #N deleted` is the human editing or deleting their
+     own comment: nothing to do.
 
    `--suggestion` is the full replacement text for the lines; use it only for a nit
    or minor with an obvious fix.
 
    Messages usually carry the line the cursor was on (`file:line`): read the remark
    against that line. `re #N` means a reply to comment #N — answer it, and if the reply
-   changes the remark, `gr comment edit N [--severity S] TEXT`. `[edit] sN #N: text` is
+   changes the remark, `gr comment edit N [--severity S] TEXT`. `[edit] #N: text` is
    the human rewriting their comment: `gr comment edit N TEXT` (keep the severity unless
    the new text clearly changes it) and `gr say` one line: `updated #N`.
 
-   Step ids starting with `~` (`~boilerplate`, `~generated`, `~all`) come from the
-   viewer's views outside the plan: treat the event as a remark on that file and record
-   comments with the default step.
-
-   An event can carry an earlier step's id: the human is looking back at it in the
-   viewer. Handle it for that step (`gr comment add --step sN`, `gr note add --step sN`)
-   and do not move the current step; they return to it themselves.
-
-3. After a blocker gr prints the stale steps. `gr say` once, with both answers as
-   options: «continue with the independent ones (N steps) or finish?», and wait.
-4. If the human writes in the terminal chat instead, handle it the same way, then
+2. A comment on a flagged line checks the flag off by itself. A blocker changes nothing
+   for you: keep reading, the human decides when to finish.
+3. If the human writes in the terminal chat instead, handle it the same way, then
    return to `gr wait`.
 
 ## Re-review (`gr init` printed "round N")
 
-1. The diff is only what changed since the last round (or, after a rebase or a merge
-   of the target branch, the files whose patch changed). Open comments from earlier rounds are listed.
-2. First step, before any plan: check each open comment against the new code. A comment
+1. The diff is what changed since the last round (or, after a rebase or a merge of the
+   target branch, the files whose patch changed), plus the files the human did not read
+   last round, shown whole. Open comments from earlier rounds are listed.
+2. First, before any reading: check each open comment against the new code. A comment
    that went out to the MR is one of your threads: assess it as below and leave the
    decision to the human. Only a comment that never reached the MR is yours to close:
    `gr comment resolve ID` when it is addressed. `gr say` a summary: resolved, still
    open, new questions.
-3. Then plan and walk only the round diff as usual.
-4. "carried, not reviewed in an earlier round: r1-s7 …" lists steps the last round left
-   pending (a `--partial` finish, or stale after a blocker). gr appends them after your
-   plan with their ids, titles, messages and hotspots; `gr step show` marks them
-   "carried". Do not plan them again, and do not reuse their ids. A file the round
-   touched loses its line ranges and notes there and is shown whole, so read it fresh
-   when the human reaches that step. With carried steps, files changed in the round show
-   their whole patch against the base, as after a rebase. If the round diff itself is
-   empty, `echo 'steps: []' | gr plan set` starts the carried steps.
+3. Then read the round as usual, in parts. Your flags and notes from the last round are
+   gone with the old diff: flag what still matters again.
 
 ## Your threads on the MR (`gr init` printed "your threads: …")
 
 The reviewer's own open threads, with every reply, are in `gr thread list`. The
 human decides each one; you prepare the decision. Do this before anything else in the
-round, before reading the rest of the diff: the viewer holds the threads back, showing
-"agent is checking", until every answered thread has your assessment or you stop.
+round, before reading the rest of the diff: a thread shows "agent is checking" in the
+viewer until it has your assessment or you stop.
 
 1. For every thread read the replies and the current code at that line. Then
    `gr thread assess ID --propose resolve|open [--reply TEXT] - <<'EOF' … EOF`: one or two
@@ -282,16 +252,16 @@ round, before reading the rest of the diff: the viewer holds the threads back, s
    wrong). Propose `--reply` whenever the thread stays open, and for a resolve when the
    author asked something; keep it to the style of a review comment.
 2. `gr say` one line per answered thread (`d1 a.go:5: not fixed, suggest keeping it open`).
-   The viewer opens the threads by itself once they are assessed; `>` leaves them for the
-   review and `R` brings them back. Undecided threads never block the walk, only
-   publishing. Decisions are the human's: the viewer records them itself and there is no
-   command for it.
+   The threads sit on their lines in the viewer with the whole conversation and your
+   take; `n`/`N` walk them and `enter` decides. Undecided threads never block the reading,
+   only publishing. Decisions are the human's: the viewer records them itself and there
+   is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
    if your view changed, assess it again.
 
 `gr prepare` refuses while an answered thread has no decision from the viewer, and refuses
 `approve` while any of your threads stays open. A decided resolve also resolves the matching
-gr comment; undoing the decision (`u`) takes that back.
+gr comment; undoing the decision takes that back.
 
 ## Self mode (`gr init` printed "mode: self")
 
@@ -311,39 +281,40 @@ stranger would. Do not look for or ask about how it was written.
 
 `gr init` and `gr status` list unresolved discussions of other reviewers by their first
 line; `gr discussions` refreshes them from the MR and prints them in full. The viewer
-marks the ones on lines. Mention them in intake, and on a step that touches a discussed
-line, say whether the code answers it.
+marks the ones on lines. Mention them in the briefing, and in a note on a discussed
+line say whether the code answers it.
 
 ## Wrap-up
 
-The viewer finishes on its own: after the last step (or `P`) it shows the verdict it
-derives from the comments (blocker → blocked, major or an open thread of theirs →
-changes, else approve), the decisions it derives from the state (skips with reasons,
-risks checked, steps not reviewed), asks whether to approve the MR, runs `gr prepare`,
-previews the result and writes it with `P`. You only hear `[finished] sN: <dir>`, after
-which the viewer is closed: talk in the terminal chat as usual — no `gr say` /
+The viewer finishes on its own: on `P` it shows the verdict it derives from the comments
+(blocker → blocked, major or an open thread of theirs → changes, else approve), the
+risks checked and not checked, the files not read, asks whether to approve the MR, runs
+`gr prepare`, previews the result and writes it with `P`. Nothing of that waits for you:
+the human may finish while you are still reading. You only hear `[finished]: <dir>`,
+after which the viewer is closed: talk in the terminal chat as usual — no `gr say` /
 `gr wait` — and ending your turn with a question is fine.
 
 While the preview is open the human can still message you — `re #N …` about one comment
 (`gr comment edit N`), or about the summary (run `gr prepare` again with the verdict and
 approve shown in the preview and the new decisions text); the viewer refreshes the
 preview by itself. If they ask in the terminal to finish without the viewer, do it by
-hand: `gr status --gate` (add `--partial` to `gr prepare` for pending steps the human
-wants to leave), `gr prepare --verdict approve|changes|blocked --decisions-file -` with
-`--approve` only when they asked for it, then `gr export`, which prints the dir.
+hand: `gr status`, `gr prepare --verdict approve|changes|blocked --decisions-file -`
+with `--approve` only when they asked for it, then `gr export`, which prints the dir.
+The summary lists the files the human did not read by itself.
 
 After `[finished]`:
 
 1. A local branch without an MR (`gr init` without a URL, not self mode): there is
    nothing to publish. The dir holds `fixes.json` (`verdict`, `decisions`, `fixes` with
-   `id`, `severity`, `file`, `lines`, `body`, `suggestion`) and `review.md`. Tell them the
-   counts and ask «apply now / leave». Apply now: every fix was agreed during
-   the review, `suggestion` is the exact replacement, lines refer to the reviewed commit
-   (find the spot by content if the file changed); report one line per fix and run the
-   tests. Leave: give the `fixes.json` path; `gr list` prints it (and `gr status` while
-   the review is open), so any agent in this repo can pick it up later. Then step 4.
-2. Publish. `[finished] sN: published <dir>` means the human already published it from the
-   viewer: go to step 3 with the MR link. `[finished] sN: <dir>` means they handed it to
+   `id`, `severity`, `file`, `lines`, `body`, `suggestion`, and `unreviewed`: the files
+   not read) and `review.md`. Tell them the counts and ask «apply now / leave». Apply
+   now: every fix was agreed during the review, `suggestion` is the exact replacement,
+   lines refer to the reviewed commit (find the spot by content if the file changed);
+   report one line per fix and run the tests. Leave: give the `fixes.json` path; `gr
+list` prints it (and `gr status` while the review is open), so any agent in this repo
+   can pick it up later. Then step 4.
+2. Publish. `[finished]: published <dir>` means the human already published it from the
+   viewer: go to step 3 with the MR link. `[finished]: <dir>` means they handed it to
    you. The dir holds `review.md` (what will be posted) and
    `review.json` (`provider`, `host`, `api`, `url`, `verdict`, `approve`, …). Tell them what
    goes out — N comments, thread replies and resolves, the summary, the verdict, approve or

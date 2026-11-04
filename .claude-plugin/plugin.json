@@ -1,6 +1,6 @@
 {
   "name": "guided-review",
-  "description": "Walks a reviewer through a merge request step by step with the gr CLI and a tmux viewer",
+  "description": "Reviews a merge request next to the reviewer: the whole change in a tmux viewer, with the agent's reading order, flags and notes, through the gr CLI",
   "version": "0.1.1",
   "author": { "name": "Anton Plotnikov" }
 }

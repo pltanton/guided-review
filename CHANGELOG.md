@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The step walk is gone. The viewer shows the whole change as one diff with a file tree
+  on the right and opens right after `gr init`, before the agent has read anything. The
+  agent reads next to you and sends what it finds in parts (`gr plan set` merges them):
+  a briefing on top, an order number and a line per file in the tree, ⚑ flags and notes
+  on the lines. Files the agent has not read yet are dim, files with changes you have not
+  seen carry a dot, boilerplate and generated files sit folded at the end of the tree and
+  the diff. Nothing waits for the agent and nothing blocks publishing except your own
+  undecided MR threads: the finish card and the posted summary list the files you did
+  not read and the flags you did not check. The next round brings unread files back.
+  Gone with the steps: chapters, the plan modal, `>`/skip, stale steps after a blocker,
+  carried steps, `gr prepare --partial`, `gr step`, `gr note`; `gr check N` checks a flag
+  off. Your MR threads sit on their lines; `n`/`N` walk every note.
 - Re-review threads no longer trap you. The viewer waits for the agent's take on every
   answered thread («agent is checking» until then) instead of asking you to decide
   blind; a ROUND N note on top says what the step is for; deciding moves to the next

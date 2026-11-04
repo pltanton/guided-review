@@ -1,7 +1,7 @@
 # Hotspots
 
-A hotspot is a place where a mistake is expensive. Mark it on the step with a
-category, a concrete question, and the line when there is one.
+A hotspot is a place where a mistake is expensive. Mark it with a category, a concrete
+question, the file and the line (0 for the whole file).
 
 | cat         | look for                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------- |
@@ -20,5 +20,5 @@ Ask, do not assert. The question must be answerable by reading the code:
 - bad: «There may be a race here» (no scenario)
 - bad: «Check the security» (no question)
 
-A hotspot is never boilerplate and never goes stale automatically; only the human
-drops it.
+A hotspot is never boilerplate. Only the human checks it off, or a comment of theirs on
+its line does.

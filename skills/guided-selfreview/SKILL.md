@@ -1,13 +1,13 @@
 ---
 name: guided-selfreview
-description: Use when the author wants to review their own change before sending it — "давай сами поревьюим перед отправкой", "проверь мой MR свежим взглядом", "self-review", "guided self-review" — in the session where the code was written. Starts a fresh-context reviewer that walks the author through the branch in the guided-review viewer, then applies the fixes it returns.
+description: Use when the author wants to review their own change before sending it — "давай сами поревьюим перед отправкой", "проверь мой MR свежим взглядом", "self-review", "guided self-review" — in the session where the code was written. Starts a fresh-context reviewer that reads the branch next to the author in the guided-review viewer, then applies the fixes it returns.
 ---
 
 # Guided self-review
 
 You wrote this change, so you are the wrong one to review it: you know what the code was
-meant to do and read that into it. Hand the review to a fresh agent, let the human walk
-through it in the viewer, and take back a list of fixes. Needs tmux and `gr`.
+meant to do and read that into it. Hand the review to a fresh agent, let the human read
+it in the viewer with the agent's flags, and take back a list of fixes. Needs tmux and `gr`.
 
 ## Start
 
@@ -55,8 +55,8 @@ reading.
   not defend the original code.
 - Lines refer to the reviewed commit; if the file changed since, find the spot by content.
 - Report one line per fix: done, or not done and why. Run the tests.
-- `unreviewed` in `fixes.json` lists steps the human left for later (a partial finish).
-  Then, after the fixes, offer «review the rest»: commit, `gr init --self` (the new
-  round starts with these fixes and carries the unreviewed steps), same flow from step 3.
+- `unreviewed` in `fixes.json` lists the files the human did not read. Then, after the
+  fixes, offer «review the rest»: commit, `gr init --self` (the new round starts with
+  these fixes and brings the unread files back), same flow from step 3.
 - Otherwise offer another round: after a commit, `gr init --self` shows only what changed
   and starts by checking these fixes. Same flow from step 3.

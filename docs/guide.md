@@ -5,12 +5,14 @@ What happens during a review, and how to configure it. Installation is in
 
 ## How it works
 
-1. **The agent plans.** It reads the whole change and splits it into small steps,
-   grouped by behaviour, in reading order.
-2. **You walk the steps.** Each step is a piece of code with a two-line explanation,
-   notes on tricky lines and ⚑ on risky ones.
+1. **You start reading at once.** `gr init` takes the diff and the viewer opens on it:
+   the whole change as one diff, a file tree on the right.
+2. **The agent reads next to you.** As it goes, the tree fills in: a number per file in
+   the order it suggests, a line on why the file changed, ⚑ on risky lines, notes on
+   tricky ones. A briefing on top says what the change is about.
 3. **You say what is wrong.** In your own words; the agent turns it into review comments.
-4. **Nothing is skipped silently.** Every step needs your "next" or a skip with a reason.
+4. **Nothing is hidden.** The tree marks the files you have not seen and the ones the
+   agent has not read; the summary lists both.
 5. **You approve what gets posted.** `gr` writes the result locally; the agent posts it
    only after your yes.
 6. **Next round shows only what changed**, starting with the replies to your threads.
@@ -18,41 +20,45 @@ What happens during a review, and how to configure it. Installation is in
 <details>
 <summary>Getting around</summary>
 
-The screen is the step's code on the left and, on the right, the step's files with a
-small chat block at the bottom (`c` opens it wide, `esc` folds it). `j`/`k` (or the mouse) move, `enter` acts on the line under the
-cursor, `esc` or `q` backs out (`Q` or `:q` quits the viewer):
+The screen is the diff on the left and, on the right, the file tree with a small chat
+block at the bottom (`c` opens it wide, `esc` folds it). `j`/`k` (or the mouse) move,
+`enter` acts on the line under the cursor, `esc` or `q` backs out (`Q` or `:q` quits the
+viewer):
 
 - on code it opens an input right under the line for a comment, saved as you write it
   (`shift+tab` sets its severity); `tab` makes it an ai comment, which the agent writes
   from your words, and `tab` again a question (an empty one asks the agent to explain the
   line);
 - on your own comment it edits it, on an agent's note it shows the longer explanation,
-  on `⋯` or `▸` it opens the hidden lines;
-- on the last line of a step, `✓ end of s3`, it moves to the next step.
+  on `⋯` or `▸` it opens the hidden lines, on a folded group (boilerplate, generated) it
+  opens the group.
 
-A risk (`RISK`) stays open until you check it off with `x`, on its line or in its
-details. Moving on with a risk still open, or with changed lines you have not seen, asks
-first and lets you check the risks off right there. The summary counts only the risks
-you checked. The footer shows `NORMAL`, or `VISUAL` with the number of selected lines.
+`]`/`[` jump between changes, `}`/`{` between files in the tree's order, `n`/`N` between
+notes: flags, threads, comments. `f` focuses the tree; `enter` there jumps to the file.
 
-`p` opens the plan: chapters with their steps, and under an unfolded chapter its intro.
-It opens by itself when a chapter starts, on that chapter; `I` brings it back there.
+A tree row shows the file, its order number once the agent set one, `⚑N` for its flags
+and `●` while it has changes you have not seen; a file the agent has not read yet is dim.
+Boilerplate and generated files are two folded groups at the end of the tree and of the
+diff. A risk (`RISK`) stays open until you check it off with `x`, on its line or in its
+details, or until you comment on its line. The footer shows `NORMAL`, or `VISUAL` with
+the number of selected lines.
+
 `?` shows the main keys and `?` again all of them, and `:` finds any action by name.
 Every other key is a shortcut for something these already reach.
 
 </details>
 
 <details>
-<summary>Plan and steps</summary>
+<summary>The agent's notes</summary>
 
-Chapters follow behaviour ("transfers", "limits", "migration"), not files. Inside a
-chapter: spec, contracts, each entry point with the code it calls, tests right after
-the code they test. A step is up to about 300 changed lines. Boilerplate and generated
-files stay out of the steps but are one keypress away.
+The order follows behaviour, not files: spec first, then the contract, each entry point
+with the code it calls, tests right after the code they test, mechanics last. The agent
+sends what it has as it reads, so the tree fills in file by file; on a tiny change it
+only looks for flags and says so in the chat.
 
 Notes explain non-obvious calls; ⚑ hotspots mark where a mistake is expensive: money,
 security, consistency, migrations. Each has a longer explanation with the code it
-mentions, written during planning, so it opens instantly.
+mentions, so it opens instantly.
 
 </details>
 
@@ -76,9 +82,10 @@ and `y` copies them; dragging the mouse over chat lines copies them too.
 <details>
 <summary>No rubber stamp</summary>
 
-The viewer tracks which changed lines you scrolled past and, before you move on, lists
-the rest and every risk you have not checked off. Nothing can be published until every step is
-reviewed or skipped; steps a blocker made stale are listed in the summary as not reviewed.
+The viewer tracks which changed lines you scrolled past: the tree marks the files with
+some left, the finish card lists them with every risk you have not checked off, and the
+posted summary says which files were not read. Nothing blocks publishing except your own
+undecided MR threads.
 
 </details>
 
@@ -90,9 +97,9 @@ marked as moved, whitespace-only changes and renames are marked instead of highl
 and only the changed words inside a line are coloured. Long lines wrap under the code
 column; `W`, `:set nowrap` or `no_wrap: true` under `view:` in the config cuts them at `›`
 instead, and `h`/`l` scroll sideways. With a language server you get
-definitions, references, implementations, callers (`g` lists them). A target the step
-shows moves the cursor there (`C-o` back, `S-enter` peeks anyway); others open over the
-code, where `/` searches and `esc` closes. The line under the step title follows the
+definitions, references, implementations, callers (`g` lists them). A target inside the
+change moves the cursor there (`C-o` back, `S-enter` peeks anyway); others open over the
+code, where `/` searches and `esc` closes. The line under the title follows the
 cursor: the class and function you are in and who calls that function; HERE under the
 files shows the type and docs of the word under the cursor.
 
@@ -101,9 +108,9 @@ files shows the type and docs of the word under the cursor.
 <details>
 <summary>Publishing</summary>
 
-After the last step the viewer derives the verdict from your comments (blocker →
-blocked, major or an open thread → changes, else approve), lists what was skipped and
-which risks you checked, and asks whether to approve the MR. It writes inline comments
+`P` derives the verdict from your comments (blocker → blocked, major or an open thread
+→ changes, else approve), lists the files you did not read and the risks you did not
+check, and asks whether to approve the MR. It writes inline comments
 and the summary to `<git common dir>/guided-review/exports/<id>/` (`gr export --dir`
 prints it). You review and edit it (in the preview `v` changes the verdict, `a` approve,
 `s` a comment's severity, and the verdict follows severity until you change it), then
@@ -121,17 +128,15 @@ agent applies right away or leaves for later (`gr list` shows where it is).
 Run the same command after the author pushes: you see only what changed. Your open
 threads come first with the author's replies. The agent checks each reply against the
 new code and suggests resolve or keep open with a reply; until it has, a thread says
-«agent is checking». Once every answered thread has its take, the viewer opens on a «your
-threads» step: each thread sits in the current code with the whole conversation, the
-agent's take and your decision under it. `n`/`N` walk the threads, `enter` decides
+«agent is checking». Each thread sits in the code with the whole conversation, the
+agent's take and your decision under it. `n`/`N` walk the notes, `enter` decides
 (resolve, keep open and reply to the author, as the agent proposes) and moves to the
-next one, `c` asks the agent about it, `>` goes on to the review, `R` brings the step
-back later. Undecided threads do not hold up the walk, only publishing. Only you decide:
-the agent has no command for it. Approve is refused while any of your threads stays open.
+next undecided thread, `c` asks the agent about it. Undecided threads do not hold up the
+reading, only publishing. Only you decide: the agent has no command for it. Approve is
+refused while any of your threads stays open.
 
-On a large change you can finish early: `gr prepare --partial` sends what you reviewed
-so far and lists the rest as not reviewed yet; the next round brings those steps back
-after the round's own changes.
+You can finish before reading everything: the summary lists what you did not read, and
+the next round brings those files back after the round's own changes.
 
 </details>
 
@@ -139,7 +144,7 @@ after the round's own changes.
 <summary>Self-review</summary>
 
 In the session where you wrote the code, run `/guided-selfreview`. A fresh reviewer
-that knows only the task walks you through the branch. The fixes you agree on go back to
+that knows only the task reads the branch next to you. The fixes you agree on go back to
 your session, which applies them and offers another round.
 
 </details>

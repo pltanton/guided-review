@@ -10,16 +10,17 @@ Agents write code faster than people can read it. Merge requests got longer, rea
 properly takes an hour nobody has, and review turns into "LGTM". guided-review keeps you
 as the reviewer and gives you an agent that does the tedious part.
 
-- **A big MR becomes a dozen short steps**, grouped by behaviour and ordered the way you
-  would want to read it: contract first, then the code that uses it, then its tests.
-- **Every step comes explained.** Two lines on what the code does, a note on the tricky
-  call, a ⚑ on the line where a bug costs money — with the reasoning one key away.
+- **The whole change in one diff, with a file tree.** You start reading at once; the
+  agent reads next to you and numbers the files in the order you would want: contract
+  first, then the code that uses it, then its tests.
+- **The tree fills in while you read.** A line per file on why it changed, a note on the
+  tricky call, a ⚑ on the line where a bug costs money — with the reasoning one key away.
 - **Say what is wrong in plain words.** "This should return an error" becomes a proper
   review comment with a severity and a ready suggestion.
 - **Round two shows only what changed**, plus the author's replies to your threads with
   a suggested resolve or keep open.
-- **You stay in charge.** Nothing is skipped without a reason, nothing is posted without
-  your yes.
+- **You stay in charge.** The summary says what you did not read, nothing is posted
+  without your yes.
 
 A terminal viewer in tmux next to Claude Code or Codex. GitLab and GitHub.
 

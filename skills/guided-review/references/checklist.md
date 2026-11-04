@@ -1,6 +1,6 @@
 # What to look for while planning
 
-You read every step's code before the human does. Find the problems now and put them
+You read the code while the human does, a file at a time. Find the problems now and put them
 where the human will see them: a hotspot for a question they must settle, an annotation
 for what they should understand, a `detail` behind each for the full story.
 
@@ -48,8 +48,8 @@ callee when a call does something non-obvious. Verify by reading instead of gues
 ## Pace
 
 People find most defects in 200–400 lines per sitting, reading slower than about 500 lines
-an hour; past that the defect rate found drops sharply. That is why steps stay under 300
-changed lines, and why the step message should say where to look.
+an hour; past that the defect rate found drops sharply. That is why the `why` on each
+file and the flags on the lines matter: they tell the reviewer where to slow down.
 
 The rules behind each item, distilled from the sources, are in `sources.md`; read the
-section for an item when a step touches it.
+section for an item when a file touches it.

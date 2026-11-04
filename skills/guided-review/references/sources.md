@@ -38,7 +38,7 @@ Source: <https://google.github.io/eng-practices/review/reviewer/looking-for.html
 - Read slower than about 500 lines an hour.
 - Do not review for more than about 60–90 minutes in one sitting.
 - Authors annotating their change before review find many defects themselves; the
-  explanation in a step message plays that role here.
+  `why` on each file and the notes on the lines play that role here.
 - A checklist catches omissions — the hardest defects to see are the code that is
   missing.
 
