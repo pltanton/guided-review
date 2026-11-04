@@ -222,7 +222,7 @@ func (m *model) sideChatLayout(h, w int) sideChat {
 		label, hint = cursorStyle.Render("CHAT"), "esc closes"
 	}
 	c.header = plain(row(label, dimStyle.Render(hint)))
-	if m.reading() {
+	if m.reading() && !m.chatOpen() {
 		c.reading = m.readingBlock(w)
 	}
 	c.prompt = m.sidePrompt(w)

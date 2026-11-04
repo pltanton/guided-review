@@ -9,10 +9,9 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-// reading is true during the agent's first pass over the change: files are still unread and
-// the agent is at work.
+// reading is true while the agent works: the block shows what it has read so far.
 func (m *model) reading() bool {
-	return m.review != nil && m.unreadByAgent() > 0 && !m.agentWaiting && !m.agentIdle
+	return m.review != nil && !m.agentWaiting && !m.agentIdle
 }
 
 // flagArt is the logo flag in half-block pixels: a red banner with a notched tail on a wooden pole.
@@ -85,7 +84,7 @@ func (m *model) readingBlock(w int) []string {
 		squares = squares[n:]
 	}
 	art := flagArt()
-	label := hotStyle.Render("reading") + dimStyle.Render(fmt.Sprintf(" %d/%d", read, core))
+	label := hotStyle.Render("agent at work") + dimStyle.Render(fmt.Sprintf(" · read %d/%d", read, core))
 	lines := []string{" " + art[0] + "  " + label}
 	for i := 1; i < len(art); i++ {
 		right := ""
