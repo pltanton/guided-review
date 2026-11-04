@@ -368,6 +368,11 @@ func startRound(ctx context.Context, s session, r *state.Review, t target) ([]di
 			unseen = append(unseen, f.Path)
 		}
 	}
+	for _, d := range r.MyThreads() {
+		if d.File != "" && !slices.Contains(unseen, d.File) {
+			unseen = append(unseen, d.File)
+		}
+	}
 	r.Round = max(r.Round, 1) + 1
 	r.PrevHeadSHA = old
 	r.RoundBaseSHA, r.RoundRebased, r.RoundFiles = "", false, nil

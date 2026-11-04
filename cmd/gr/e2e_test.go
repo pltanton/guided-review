@@ -1436,3 +1436,21 @@ func TestTestsAndPlumbingGetTheirGroups(t *testing.T) {
 	h.mustRun("files: [{path: tools/gen.go, tier: core}]\n", "plan", "set")
 	assertContains(t, h.mustRun("", "status"), "tests 1 files, other 1 files")
 }
+
+func TestRoundKeepsFilesWithYourThreads(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.seeAll()
+	_, _, err := updateReview(context.Background(), h.repo.Dir, func(_ session, r *state.Review) error {
+		r.MR.Me = "me"
+		r.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true, File: "api/transfer.go", Line: 4}}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
+	h.repo.Commit("fixup")
+	h.stubGitLab()
+	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
+	assertContains(t, out, "round 2", "\n  api/transfer.go  [modified]")
+}

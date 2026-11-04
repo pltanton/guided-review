@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- When the agent's reading order arrives, a reader still at the start of the diff moves to
+  the new first file instead of staying on the one that was first only by path.
+- The next round brings back the files your open MR threads sit on, so a thread on an
+  unchanged file is still there to decide.
 - A second session on the same review no longer opens with «agent stopped»: the Stop
   hook's idle mark from the last session goes as soon as the agent runs `gr init`,
   `gr plan set`, `gr say` or `gr progress`.

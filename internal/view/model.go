@@ -238,11 +238,14 @@ func (m *model) reload() {
 		m.context, m.cursor, m.offset, m.visual, m.reveal = m.baseCtx, 0, 0, false, nil
 		m.hscroll = 0
 	}
+	// A reader still at the start follows the agent's order when it arrives instead of
+	// staying on the file that was first only by path.
+	atStart := !first && len(m.lines) > 0 && m.offset == 0 && m.cursor == firstFocus(m.lines)
 	if first && len(r.Files) > asyncFiles {
 		m.loadGen++
 		m.loading, m.loadCmd = true, m.loadAsync(m.loadGen)
 	} else {
-		m.rebuild(first)
+		m.rebuild(first || atStart)
 	}
 	m.refreshDetail()
 	m.refreshPreview()

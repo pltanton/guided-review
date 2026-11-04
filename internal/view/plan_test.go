@@ -167,3 +167,56 @@ func TestReadingBlockWhileTheAgentReads(t *testing.T) {
 		t.Fatal("your turn shows no block")
 	}
 }
+
+func TestOrderArrivalMovesAReaderStillAtTheStart(t *testing.T) {
+	m, _ := twoFileModel(t)
+	store := state.Store{Dir: t.TempDir()}
+	tr := testrepo.New(t)
+	tr.Write("a.go", "package a\n")
+	tr.Write("api/b.go", "package api\n")
+	tr.Write("api/c.go", "package api\n")
+	base := tr.Commit("base")
+	tr.Write("a.go", "package a\n\nvar A = 1\n")
+	tr.Write("api/b.go", "package api\n\nvar B = 1\n")
+	tr.Write("api/c.go", "package api\n\nvar C = 1\n")
+	head := tr.Commit("head")
+	m.review.BaseSHA, m.review.HeadSHA = base, head
+	m.repo = gitx.Repo{Dir: tr.Dir}
+	if err := store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.store, m.review, m.src, m.algo, m.ctx = store, nil, nil, gitx.DefaultDiffAlgorithm, context.Background()
+	m.reload()
+	if m.err != nil || m.current().File != "a.go" {
+		t.Fatalf("path order first: %+v", m.current())
+	}
+	err := store.UpdateCurrent(func(r *state.Review) error {
+		r.File("api/c.go").Order = 1
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.reload()
+	if m.current().File != "api/c.go" || m.offset != 0 {
+		t.Fatalf("a reader still at the start follows the order: %+v offset %d", m.current(), m.offset)
+	}
+	m.Update(key("j"))
+	m.Update(key("j"))
+	was := m.current()
+	err = store.UpdateCurrent(func(r *state.Review) error {
+		r.File("a.go").Order = 1
+		r.File("api/c.go").Order = 2
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.reload()
+	if m.current().File != was.File || m.current().Line != was.Line {
+		t.Fatalf("a reader who moved keeps the place: %+v, was %+v", m.current(), was)
+	}
+}
