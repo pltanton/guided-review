@@ -706,7 +706,7 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 		return nil
 	}
 	row, plain, selected := sideRows(w)
-	files, at := m.fileEntries(row, plain, selected)
+	files, at := m.fileEntries(w, row, plain, selected)
 	if len(files) == 0 {
 		return nil
 	}

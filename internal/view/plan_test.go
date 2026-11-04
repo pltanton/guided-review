@@ -16,7 +16,7 @@ import (
 
 func treeText(m *model) string {
 	row, plain, selected := sideRows(40)
-	entries, _ := m.fileEntries(row, plain, selected)
+	entries, _ := m.fileEntries(40, row, plain, selected)
 	var out []string
 	for _, e := range entries {
 		out = append(out, ansi.Strip(e.text))

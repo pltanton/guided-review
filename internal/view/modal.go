@@ -178,7 +178,7 @@ func (m *model) cursorY() int {
 
 func (m *model) filesModal(w, h int) modalContent {
 	row, plain, selected := sideRows(w + 2)
-	entries, at := m.fileEntries(row, plain, selected)
+	entries, at := m.fileEntries(w, row, plain, selected)
 	key := fmt.Sprint(h, " ", at)
 	top := scrollWindow(&m.fileTop, &m.fileFollow, key, true, at, h, len(entries))
 	var body []string
@@ -197,7 +197,7 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 		m.fileCursor = max(0, min(m.fileCursor+wheel[msg.Button], len(m.treeItems())-1))
 	case m.focusFiles && press && r >= 0:
 		row, plain, selected := sideRows(m.width)
-		entries, _ := m.fileEntries(row, plain, selected)
+		entries, _ := m.fileEntries(m.width-4, row, plain, selected)
 		if i := m.fileTop + r; i < len(entries) && entries[i].file != "" {
 			m.jumpToFile(entries[i].file)
 			m.focusFiles = false

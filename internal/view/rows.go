@@ -139,7 +139,11 @@ func buildRows(
 		if len(rows) > 0 {
 			rows = append(rows, Row{Kind: RowSpacer, File: file})
 		}
-		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: fileInfo(fd), Tier: f.Tier})
+		info := fileInfo(fd)
+		if f.Why != "" {
+			info += " — " + f.Why
+		}
+		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: info, Tier: f.Tier})
 		rows = append(rows, fileRows(fd, lines, nil, context, hotspotLines(hotspots, file),
 			fileNotes, reveal[file])...)
 	}

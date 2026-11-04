@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pltanton/guided-review/internal/state"
 )
 
@@ -80,7 +81,7 @@ func (m *model) focusFilesPanel() {
 	}
 }
 
-func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([]sideEntry, int) {
+func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) string) ([]sideEntry, int) {
 	items := m.treeItems()
 	if m.focusFiles {
 		m.fileCursor = max(0, min(m.fileCursor, len(items)-1))
@@ -114,7 +115,7 @@ func (m *model) fileEntries(row rowFunc, plain, selected func(string) string) ([
 			indent := ""
 			if dir != "." {
 				if dir != prevDir {
-					out = append(out, sideEntry{text: plain(row(dimStyle.Render(dir+"/"), "")), files: true})
+					out = append(out, sideEntry{text: plain(row(dimStyle.Render(ansi.TruncateLeft(dir+"/", max(ansi.StringWidth(dir)-w+6, 0), "…")), "")), files: true})
 				}
 				indent = "  "
 			}
