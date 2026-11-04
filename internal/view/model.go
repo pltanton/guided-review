@@ -788,6 +788,10 @@ func (m *model) clamp() {
 	if m.cursor < m.offset {
 		m.offset = m.cursor
 	}
+	if m.height == 0 {
+		m.offset = 0
+		return
+	}
 	m.offset = max(0, m.offset, m.topFor(m.cursor, m.bodyHeight()))
 }
 

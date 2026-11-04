@@ -93,6 +93,9 @@ func cmdInit(ctx context.Context, e env, args []string) error {
 		r = old
 	case exists && !*force:
 		r = old
+		if err := syncDiscussions(ctx, e, r); err != nil {
+			return err
+		}
 		if files, err = startRound(ctx, s, r, t); err != nil {
 			return err
 		}

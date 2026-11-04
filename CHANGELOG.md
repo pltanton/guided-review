@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The viewer no longer opens scrolled a few lines down: it waited for the terminal size
+  with a one-row screen and kept that scroll.
 - When the agent's reading order arrives, a reader still at the start of the diff moves to
   the new first file instead of staying on the one that was first only by path.
 - The next round brings back the files your open MR threads sit on, so a thread on an

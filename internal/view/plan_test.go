@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/gitx"
@@ -218,5 +219,19 @@ func TestOrderArrivalMovesAReaderStillAtTheStart(t *testing.T) {
 	m.reload()
 	if m.current().File != was.File || m.current().Line != was.Line {
 		t.Fatalf("a reader who moved keeps the place: %+v, was %+v", m.current(), was)
+	}
+}
+
+func TestNoScrollBeforeTheSizeIsKnown(t *testing.T) {
+	m, _ := twoFileModel(t)
+	m.width, m.height = 0, 0
+	m.cursor = 6
+	m.relist()
+	if m.offset != 0 {
+		t.Fatalf("without a size the view stays at the top, offset %d", m.offset)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if m.offset != 0 || m.cursor != 6 {
+		t.Fatalf("the first size keeps the top in view: offset %d cursor %d", m.offset, m.cursor)
 	}
 }

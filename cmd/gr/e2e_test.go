@@ -1440,17 +1440,17 @@ func TestTestsAndPlumbingGetTheirGroups(t *testing.T) {
 func TestRoundKeepsFilesWithYourThreads(t *testing.T) {
 	h, _ := mrHarness(t)
 	h.seeAll()
-	_, _, err := updateReview(context.Background(), h.repo.Dir, func(_ session, r *state.Review) error {
-		r.MR.Me = "me"
-		r.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true, File: "api/transfer.go", Line: 4}}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	h.repo.Write("wire.go", "package api\n\nvar _ = Transfer\nvar _ = 1\n")
 	h.repo.Commit("fixup")
 	h.stubGitLab()
+	plain := h.glab
+	h.glab = func(ctx context.Context, args ...string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), "/discussions") {
+			return []byte(`[{"id":"d1","notes":[{"author":{"username":"me"},"resolvable":true,
+				"body":"guard?","position":{"new_path":"api/transfer.go","new_line":4}}]}]`), nil
+		}
+		return plain(ctx, args...)
+	}
 	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
 	assertContains(t, out, "round 2", "\n  api/transfer.go  [modified]")
 }
