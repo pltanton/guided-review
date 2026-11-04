@@ -18,7 +18,6 @@ import (
 const finishWidth = 110
 
 var (
-	boldMarkdown = regexp.MustCompile(`\*\*([^*]+)\*\*`)
 	// A **Label.** mid-line starts a new paragraph: YAML's >- folds the agent's paragraphs into one line.
 	labelMarkdown = regexp.MustCompile(`\s+(\*\*[A-Z][^*]*\.\*\*)`)
 	severityHead  = regexp.MustCompile("^(?:`[^`]+` )?\\*\\*(\\w+)\\*\\* ?")
