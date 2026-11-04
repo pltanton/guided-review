@@ -147,9 +147,11 @@ hotspots:
     file: api/transfer.go
     line: 57
     q: "Retry after a timeout — second debit?"
-    detail: >-
+    detail: |- # |- keeps the blank lines between the paragraphs; >- would fold them into one
       **Problem.** The key is checked in Redis before the transaction and written after it.
+
       **When it bites.** A retry that lands between the debit and the write passes the check and debits again.
+
       **What to do.** Check and write the key inside the reserve transaction (`api/transfer.go:61`).
 annotations:
   - file: api/transfer.go

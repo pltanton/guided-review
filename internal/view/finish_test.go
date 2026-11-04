@@ -144,3 +144,21 @@ func TestPreviewHidesCommentMarkers(t *testing.T) {
 		t.Fatalf("preview shows the marker or lost the body:\n%s", text)
 	}
 }
+
+func TestMarkdownLinesSplitLabelsAndStyleCode(t *testing.T) {
+	folded := "**Problem.** `pick` reads `legacy_id`. **When it bites.** A 404 where it showed nothing. " +
+		"**What to do.** Return `transfer_id` only when set."
+	got := markdownLines(folded, 60)
+	var plain []string
+	for _, l := range got {
+		plain = append(plain, ansi.Strip(l))
+	}
+	want := []string{
+		"Problem. pick reads legacy_id.", "",
+		"When it bites. A 404 where it showed nothing.", "",
+		"What to do. Return transfer_id only when set.",
+	}
+	if !slices.Equal(plain, want) {
+		t.Fatalf("markdownLines =\n%q\nwant\n%q", plain, want)
+	}
+}

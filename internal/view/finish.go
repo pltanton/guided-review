@@ -18,7 +18,9 @@ import (
 const finishWidth = 110
 
 var (
-	boldMarkdown  = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	boldMarkdown = regexp.MustCompile(`\*\*([^*]+)\*\*`)
+	// A **Label.** mid-line starts a new paragraph: YAML's >- folds the agent's paragraphs into one line.
+	labelMarkdown = regexp.MustCompile(`\s+(\*\*[A-Z][^*]*\.\*\*)`)
 	severityHead  = regexp.MustCompile("^(?:`[^`]+` )?\\*\\*(\\w+)\\*\\* ?")
 	severityTones map[string]tone
 )
@@ -111,7 +113,16 @@ func markdownLines(text string, w int) []string {
 		case strings.HasPrefix(l, "<sub>"):
 			l = dimStyle.Render(strings.NewReplacer("<sub>", "", "</sub>", "").Replace(l))
 		default:
-			l = boldMarkdown.ReplaceAllString(l, boldStyle.Render("$1"))
+			if l = labelMarkdown.ReplaceAllString(l, "\n\n$1"); strings.Contains(l, "\n") {
+				out = append(out, markdownLines(l, w)...)
+				continue
+			}
+			l = chatSpan.ReplaceAllStringFunc(l, func(m string) string {
+				if strings.HasPrefix(m, "`") {
+					return codeStyle.Render(m[1 : len(m)-1])
+				}
+				return boldStyle.Render(m[2 : len(m)-2])
+			})
 		}
 		out = append(out, strings.Split(ansi.Wrap(l, max(w, 10), ""), "\n")...)
 	}
