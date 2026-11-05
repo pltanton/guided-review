@@ -200,12 +200,11 @@ func (m *model) sidePrompt(w int) []string {
 }
 
 type sideChat struct {
-	files   []string
-	reading []string
-	header  string
-	rows    []chatRow
-	chatH   int
-	prompt  []string
+	files  []string
+	header string
+	rows   []chatRow
+	chatH  int
+	prompt []string
 }
 
 func (m *model) sideChatLayout(h, w int) sideChat {
@@ -222,12 +221,9 @@ func (m *model) sideChatLayout(h, w int) sideChat {
 		label, hint = cursorStyle.Render("CHAT"), "esc closes"
 	}
 	c.header = plain(row(label, dimStyle.Render(hint)))
-	if m.reading() && !m.chatOpen() {
-		c.reading = m.readingBlock(w)
-	}
 	c.prompt = m.sidePrompt(w)
 	c.rows = m.chatRows(w, true)
-	c.chatH = max(h-len(c.files)-len(c.reading)-1-len(c.prompt), 0)
+	c.chatH = max(h-len(c.files)-1-len(c.prompt), 0)
 	if !m.chatOpen() {
 		c.chatH = min(c.chatH, collapsedChatRows)
 	}
@@ -237,7 +233,7 @@ func (m *model) sideChatLayout(h, w int) sideChat {
 func (m *model) sideChatLines(h, w int) []string {
 	c := m.sideChatLayout(h, w)
 	chat := m.chatWindow(c.rows, c.chatH, w)
-	block := append(append(append(c.reading, c.header), chat...), c.prompt...)
+	block := append(append([]string{c.header}, chat...), c.prompt...)
 	lines := c.files
 	for len(lines)+len(block) < h {
 		lines = append(lines, "")
@@ -912,7 +908,18 @@ func (m *model) animate(r Row) Row {
 	if r.Kind == RowNote && r.NoteKind == "pending" && r.NoteHead {
 		r.NoteLabel = m.spin()
 	}
+	if r.Kind == RowFile && r.Unread {
+		r.FileInfo += "   " + m.unreadMark()
+	}
 	return r
+}
+
+// unreadMark says why a file shows no flags or notes yet.
+func (m *model) unreadMark() string {
+	if m.agentWaiting || m.agentIdle {
+		return hotStyle.Render("○ not read by the agent")
+	}
+	return hotStyle.Render(m.spin() + " the agent has not read this yet · flags and notes may still come")
 }
 
 func withCursor(rs []rune, pos int) string {

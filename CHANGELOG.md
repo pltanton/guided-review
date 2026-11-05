@@ -13,9 +13,9 @@
 - A second session on the same review no longer opens with «agent stopped»: the Stop
   hook's idle mark from the last session goes as soon as the agent runs `gr init`,
   `gr plan set`, `gr say` or `gr progress`.
-- While the agent reads the change for the first time, a small pixel flag sits above the
-  chat with a square per file, lit as the agent reads it, the next one blinking, and the
-  agent's progress line under it. It goes once every file is read or the agent stops.
+- A file the agent has not read yet says so on its header in the diff, with a spinner while
+  the agent works and «○ not read by the agent» once it stopped, so a screen without flags
+  or notes is not mistaken for a clean one. The tree carries the same mark.
 - Tests, CI and repository plumbing get their own folded groups (`tests`, `other`) by
   path at `gr init`; `tests:` and `other:` in `.review.yaml` add patterns. The agent names
   boilerplate with `tier: boilerplate` on a file and moves a file back with `tier: core`;

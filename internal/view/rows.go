@@ -56,6 +56,7 @@ type Row struct {
 	Risk        int
 	Thread      string
 	Tier        state.Tier
+	Unread      bool
 }
 
 type Note struct {
@@ -143,7 +144,8 @@ func buildRows(
 		if f.Why != "" {
 			info += " — " + f.Why
 		}
-		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: info, Tier: f.Tier})
+		rows = append(rows, Row{Kind: RowFile, File: file, Text: file, FileInfo: info, Tier: f.Tier,
+			Unread: f.Tier == state.TierCore && !f.Read})
 		rows = append(rows, fileRows(fd, lines, nil, context, hotspotLines(hotspots, file),
 			fileNotes, reveal[file])...)
 	}

@@ -124,6 +124,10 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 			style := textTone.fg()
 			if f != nil && !f.Read && f.Tier == state.TierCore {
 				style = dimStyle
+				right = hotStyle.Render(m.spin())
+				if m.agentWaiting || m.agentIdle {
+					right = dimStyle.Render("○")
+				}
 			}
 			if f != nil && f.Order > 0 {
 				right = dimStyle.Render(fmt.Sprintf("%d", f.Order))

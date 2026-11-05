@@ -146,26 +146,22 @@ func TestWholeFilePeek(t *testing.T) {
 	}
 }
 
-func TestReadingBlockWhileTheAgentReads(t *testing.T) {
+func TestUnreadFilesSaySoOnTheirHeader(t *testing.T) {
 	m, _ := twoFileModel(t)
 	m.width = 160
-	m.review.Files[1].Read, m.review.Files[2].Read = false, false
-	m.review.Progress = &state.Progress{Text: "reading b.go"}
+	m.rows[0].Unread = true
+	m.relist()
 	v := ansi.Strip(m.View())
-	if !strings.Contains(v, "read 1/3") || !strings.Contains(v, "■■■") || !strings.Contains(v, "reading b.go") {
-		t.Fatalf("the block shows the flag, a square per file and the progress:\n%s", v)
-	}
-	m.review.Files[1].Read, m.review.Files[2].Read = true, true
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "read 3/3") {
-		t.Fatalf("the block stays while the agent works:\n%s", v)
+	if !strings.Contains(v, "the agent has not read this yet") || strings.Count(v, "not read") != 1 {
+		t.Fatalf("an unread file's header says the agent has not read it, the others say nothing:\n%s", v)
 	}
 	m.agentIdle = true
-	if v := ansi.Strip(m.View()); strings.Contains(v, "agent at work") {
-		t.Fatal("a stopped agent shows no block")
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "○ not read by the agent") {
+		t.Fatalf("with the agent stopped the header says so without a spinner:\n%s", v)
 	}
-	m.agentIdle, m.agentWaiting = false, true
-	if v := ansi.Strip(m.View()); strings.Contains(v, "agent at work") {
-		t.Fatal("your turn shows no block")
+	m.review.Files[1].Read = false
+	if side := treeText(m); !strings.Contains(side, "b.go") || strings.Count(side, "○") < 1 {
+		t.Fatalf("the tree marks an unread file too:\n%s", side)
 	}
 }
 
