@@ -276,7 +276,7 @@ func (m *model) rebuild(jumpToHunk bool) {
 	m.relist()
 	switch {
 	case jumpToHunk:
-		m.cursor = firstFocus(m.lines)
+		m.cursor, m.offset = firstFocus(m.lines), 0
 	case keep.File != "":
 		m.focus(keep)
 	}
