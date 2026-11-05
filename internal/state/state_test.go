@@ -122,3 +122,14 @@ func TestDetail(t *testing.T) {
 		t.Fatalf("hotspot detail = %q", d)
 	}
 }
+
+func TestMyThreadsSkipTheSummary(t *testing.T) {
+	r := state.Review{MR: &state.MR{Me: "me"}, Discussions: []state.Discussion{
+		{ID: "sum", Author: "me", Resolvable: true, Body: "**Guided review: changes requested**\n\nComments: 1 minor."},
+		{ID: "d1", Author: "me", Resolvable: true, File: "a.go", Line: 3, Body: "why?"},
+	}}
+	got := r.MyThreads()
+	if len(got) != 1 || got[0].ID != "d1" {
+		t.Fatalf("the posted summary is not a thread to decide: %+v", got)
+	}
+}

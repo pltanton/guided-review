@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- No gate on your MR threads any more: `gr prepare` and the viewer no longer refuse to
+  publish with an answered thread undecided, nor approve with your threads open; an
+  undecided thread stays as it is on the MR.
+- A thread card scrolls (`j`/`k`, the wheel) instead of pushing its choices off screen, and
+  the review's own posted summary is no longer offered as a thread to decide.
 - `n`/`N` step over a whole thread: from inside one they land on the next note outside it,
   not on its next reply.
 - The last N commits only: `L` lists the change's commits, `enter` shows the change from

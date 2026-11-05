@@ -73,14 +73,6 @@ func cmdPrepare(ctx context.Context, e env, args []string) error {
 	if err := checkNothingUnmarked(s.exportDir(r.ID)); err != nil {
 		return err
 	}
-	if ids := undecidedThreads(r); len(ids) > 0 {
-		return fmt.Errorf("answered threads without the reviewer's decision: %s "+
-			"(decide them in the viewer)", strings.Join(ids, " "))
-	}
-	if ids := r.OpenThreads(); *verdict == "approve" && len(ids) > 0 {
-		return fmt.Errorf("approve with your threads still open: %s "+
-			"(resolve them or use --verdict changes)", strings.Join(ids, " "))
-	}
 	err = s.store.Update(r.ID, func(r *state.Review) error {
 		p := &state.PublishPlan{Verdict: *verdict, Decisions: *decisions, Approve: *approve}
 		if old := r.Publish; old != nil {

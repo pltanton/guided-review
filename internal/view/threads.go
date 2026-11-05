@@ -205,7 +205,7 @@ func (m *model) threadCardItems(d state.Discussion) []string {
 	return items
 }
 
-func (m *model) threadCardModal(w int) modalContent {
+func (m *model) threadCardModal(w, h int) modalContent {
 	dp := m.review.Discussion(m.threadCard)
 	if dp == nil {
 		m.threadCard = ""
@@ -241,12 +241,29 @@ func (m *model) threadCardModal(w int) modalContent {
 		label, _ := threadDecision(m.review, d, t)
 		body = append(body, "", "now: "+label)
 	}
+	items := m.threadCardItems(d)
+	// the conversation scrolls (j/k) in the room the choices leave
+	hint := "enter · esc back"
+	if room := h - len(items) - 2; len(body) > room && room > 3 {
+		m.threadCardTop = max(0, min(m.threadCardTop, len(body)-room))
+		above, below := m.threadCardTop, len(body)-room-m.threadCardTop
+		body = body[m.threadCardTop : m.threadCardTop+room]
+		if above > 0 {
+			body[0] = dimStyle.Render(fmt.Sprintf("↑ %d more", above))
+		}
+		if below > 0 {
+			body[len(body)-1] = dimStyle.Render(fmt.Sprintf("↓ %d more", below))
+		}
+		hint = "j/k scroll · 1-9 or ↑↓ enter pick · esc back"
+	} else {
+		m.threadCardTop = 0
+	}
 	body = append(body, "")
-	for i, it := range m.threadCardItems(d) {
+	for i, it := range items {
 		body = append(body, cardItem(i, m.threadCardSel, it, w))
 	}
 	title := fmt.Sprintf("thread · %s:%d · @%s", d.File, d.Line, d.Author)
-	return modalContent{title, "enter · esc back", body}
+	return modalContent{title, hint, body}
 }
 
 func (m *model) handleThreadCardKey(msg tea.KeyMsg) tea.Cmd {
@@ -258,6 +275,14 @@ func (m *model) handleThreadCardKey(msg tea.KeyMsg) tea.Cmd {
 	d := *dp
 	items := m.threadCardItems(d)
 	m.threadCardSel = max(0, min(m.threadCardSel, len(items)-1))
+	switch k := msg.String(); k {
+	case "j", "ctrl+e":
+		m.threadCardTop++
+		return nil
+	case "k", "ctrl+y":
+		m.threadCardTop = max(m.threadCardTop-1, 0)
+		return nil
+	}
 	switch cardNav(msg.String(), len(items), &m.threadCardSel) {
 	case "esc":
 		m.threadCard = ""

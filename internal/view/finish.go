@@ -286,9 +286,6 @@ func (m *model) cycleVerdict() {
 		m.autoVerdict = false
 		i := slices.Index(plan.Verdicts, p.Verdict)
 		next := plan.Verdicts[(i+1)%len(plan.Verdicts)]
-		if next == plan.VerdictApprove && len(m.review.OpenThreads()) > 0 {
-			next = plan.Verdicts[(i+2)%len(plan.Verdicts)]
-		}
 		m.prepare(next, p.Approve && next == plan.VerdictApprove)
 	}
 }
@@ -301,9 +298,6 @@ func (m *model) toggleApprove() {
 		m.status = "approve needs a merge request"
 	case p.Approve:
 		m.prepare(p.Verdict, false)
-	case len(m.review.OpenThreads()) > 0:
-		m.status = "approve waits for your open threads: " +
-			strings.Join(m.review.OpenThreads(), " ")
 	default:
 		m.prepare(plan.VerdictApprove, true)
 	}

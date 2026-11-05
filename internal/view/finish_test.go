@@ -69,14 +69,9 @@ func TestPreviewOpenThreads(t *testing.T) {
 	m.Update(key("v"))
 	m.review.MR.Me = "me"
 	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true}}
-	n := len(*ran)
 	m.Update(key("a"))
-	if len(*ran) != n || !strings.Contains(m.status, "approve waits for your open threads: d1") {
-		t.Fatalf("a with open threads explains and runs nothing: %q", m.status)
-	}
-	m.Update(key("v"))
-	if got := lastPrepare(*ran); got[2] != "changes" {
-		t.Fatalf("v skips approve while threads are open: %q", got)
+	if got := lastPrepare(*ran); !slices.Contains(got, "--approve") {
+		t.Fatalf("open threads do not stand in the way of approve: %q", got)
 	}
 }
 

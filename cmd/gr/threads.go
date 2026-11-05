@@ -108,13 +108,3 @@ func printThreads(e env, r *state.Review) {
 		e.println()
 	}
 }
-
-func undecidedThreads(r *state.Review) []string {
-	var ids []string
-	for _, d := range r.MyThreads() {
-		if r.Answered(d) && !r.ThreadState(d).Decided() {
-			ids = append(ids, d.ID)
-		}
-	}
-	return ids
-}

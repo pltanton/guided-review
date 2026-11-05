@@ -90,8 +90,7 @@ and `y` copies them; dragging the mouse over chat lines copies them too.
 
 The viewer tracks which changed lines you scrolled past: the tree marks the files with
 some left, the finish card lists them with every risk you have not checked off, and the
-posted summary says which files were not read. Nothing blocks publishing except your own
-undecided MR threads.
+posted summary says which files were not read. Nothing blocks publishing.
 
 </details>
 
@@ -140,9 +139,9 @@ new code and suggests resolve or keep open with a reply; until it has, a thread 
 agent's take and your decision under it. `n`/`N` walk the notes, `enter` decides
 (resolve, keep open and reply to the author, as the agent proposes), `c` asks the agent
 about it. Another reviewer's thread opens the same way: reply yourself, or give the
-agent directions and send the reply it drafts. Replies go out with the review. Undecided threads do not hold up the
-reading, only publishing. Only you decide: the agent has no command for it. Approve is
-refused while any of your threads stays open.
+agent directions and send the reply it drafts. Replies go out with the review. A long
+thread scrolls with `j`/`k` in its card. Undecided threads block nothing: an undecided one
+stays as it is on the MR. Only you decide: the agent has no command for it.
 
 You can finish before reading everything: the summary lists what you did not read, and
 the next round brings those files back after the round's own changes.

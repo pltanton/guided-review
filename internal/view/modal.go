@@ -67,7 +67,7 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 	case m.pub != nil:
 		return m.publishModal(w), true
 	case m.threadCard != "":
-		return m.threadCardModal(w), true
+		return m.threadCardModal(w, h), true
 	case m.newsOpen:
 		return m.newsModal(w, h), true
 	case m.focusFiles && m.chatWidth() == 0:

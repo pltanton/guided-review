@@ -264,17 +264,15 @@ viewer until it has your assessment or you stop.
    author asked something; keep it to the style of a review comment.
 2. `gr say` one line per answered thread (`d1 a.go:5: not fixed, suggest keeping it open`).
    The threads sit on their lines in the viewer with the whole conversation and your
-   take; `n`/`N` walk them and `enter` decides. Undecided threads never block the reading,
-   only publishing. Decisions are the human's: the viewer records them itself and there
+   take; `n`/`N` walk them and `enter` decides. Undecided threads block nothing. Decisions are the human's: the viewer records them itself and there
    is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
    if your view changed, assess it again. Threads of other reviewers get replies too: the
    human replies from the viewer or asks you for a draft (`[reply]` above); both are
    posted with the review.
 
-`gr prepare` refuses while an answered thread has no decision from the viewer, and refuses
-`approve` while any of your threads stays open. A decided resolve also resolves the matching
-gr comment; undoing the decision takes that back.
+Nothing waits for the decisions: an undecided thread stays as it is on the MR. A decided
+resolve also resolves the matching gr comment; undoing the decision takes that back.
 
 ## Self mode (`gr init` printed "mode: self")
 

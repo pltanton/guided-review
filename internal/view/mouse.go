@@ -18,6 +18,12 @@ func (m *model) handleMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	case m.newsOpen:
 		return nil
+	case m.threadCard != "" && msg.Button == tea.MouseButtonWheelUp:
+		m.threadCardTop = max(m.threadCardTop-wheelStep, 0)
+		return nil
+	case m.threadCard != "" && msg.Button == tea.MouseButtonWheelDown:
+		m.threadCardTop += wheelStep
+		return nil
 	case m.finishCard || m.commitCard || m.pub != nil || m.threadCard != "" || m.themeWas != "":
 		return nil
 	case m.focusFiles && m.chatWidth() == 0:

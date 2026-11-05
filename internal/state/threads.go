@@ -15,7 +15,7 @@ func (r *Review) MyThreads() []Discussion {
 	}
 	var answered, silent []Discussion
 	for _, d := range r.Discussions {
-		if d.Author != r.MR.Me || d.Resolved || !d.Resolvable {
+		if d.Author != r.MR.Me || d.Resolved || !d.Resolvable || IsSummary(d) {
 			continue
 		}
 		if t, ok := r.thread(d); ok && t.Published {
@@ -28,6 +28,11 @@ func (r *Review) MyThreads() []Discussion {
 		}
 	}
 	return append(answered, silent...)
+}
+
+// IsSummary tells the review's own posted summary from a thread to decide.
+func IsSummary(d Discussion) bool {
+	return d.File == "" && strings.HasPrefix(d.Body, "**Guided review: ")
 }
 
 // OpenThreads lists the reviewer's unresolved threads that no viewer decision resolves,

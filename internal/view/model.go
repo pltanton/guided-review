@@ -151,6 +151,7 @@ type model struct {
 	themeWas      string
 	threadCard    string
 	threadCardSel int
+	threadCardTop int
 	pub           *publishCard
 	finishCard    bool
 	finishSel     int
@@ -401,7 +402,7 @@ func (m *model) act() tea.Cmd {
 	case cur.Kind == RowGap || cur.Kind == RowFold:
 		m.toggleFold()
 	case cur.Kind == RowNote && cur.Thread != "":
-		m.threadCard, m.threadCardSel = cur.Thread, 0
+		m.threadCard, m.threadCardSel, m.threadCardTop = cur.Thread, 0, 0
 	case cur.Kind == RowNote && cur.Ref > 0:
 		m.startEdit()
 	case cur.Kind == RowNote && agentKinds[cur.NoteKind]:

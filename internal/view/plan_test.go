@@ -479,3 +479,28 @@ func TestNextNoteLeavesTheWholeThread(t *testing.T) {
 		t.Fatalf("N goes back to the previous thread's last note: %+v", m.current().Row)
 	}
 }
+
+func TestThreadCardKeepsItsChoicesOnScreen(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.MR = &state.MR{Me: "me"}
+	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true, File: "a.go", Line: 2,
+		Body: strings.Repeat("a long line of the thread\n", 80)}}
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: "long", NoteKind: "comment", Thread: "d1"})
+	m.relist()
+	m.seek(func(l line) bool { return l.Thread == "d1" })
+	m.Update(key("enter"))
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, " 1  resolve") || !strings.Contains(v, "↓ ") || !strings.Contains(v, "j/k scroll") {
+		t.Fatalf("a long thread scrolls and its choices show:\n%s", v)
+	}
+	for range 5 {
+		m.Update(key("j"))
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "↑ 5 more") || !strings.Contains(v, " 1  resolve") {
+		t.Fatalf("j scrolls the conversation, the choices stay:\n%s", v)
+	}
+	m.Update(key("1"))
+	if m.threadCard != "" {
+		t.Fatal("a digit still picks")
+	}
+}

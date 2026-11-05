@@ -1106,9 +1106,7 @@ func TestThreads(t *testing.T) {
 		t.Fatalf("only your resolvable threads are listed:\n%s", out)
 	}
 	changes := []string{"prepare", "--verdict", "changes"}
-	if _, err := h.run("", changes...); err == nil || !strings.Contains(err.Error(), "d1") {
-		t.Fatalf("prepare must wait for a decision on d1, got %v", err)
-	}
+	h.mustRun("", changes...)
 	h.mustRun("", "thread", "assess", "d1", "--propose", "open", "--reply", "callers can't tell",
 		"the", "reply", "does", "not", "address", "it")
 	assertContains(t, h.mustRun("", "thread", "list"), "agent (open): the reply does not address it")
@@ -1118,14 +1116,11 @@ func TestThreads(t *testing.T) {
 	h.edit(func(r *state.Review) {
 		r.SetThread(state.Thread{ID: "d1", Notes: 2, Verdict: state.VerdictResolve})
 	})
-	if _, err := h.run("", changes...); err == nil || !strings.Contains(err.Error(), "d1") {
-		t.Fatalf("a verdict the viewer did not write is no decision, got %v", err)
+	if out := h.mustRun("", "export", "--dry-run"); strings.Contains(out, "--- thread") {
+		t.Fatalf("a verdict the viewer did not write is no decision:\n%s", out)
 	}
 	h.decide("d1", state.VerdictOpen, "callers can't tell")
-	approve := []string{"prepare", "--verdict", "approve"}
-	if _, err := h.run("", approve...); err == nil || !strings.Contains(err.Error(), "still open") {
-		t.Fatalf("approve with open threads must fail, got %v", err)
-	}
+	h.mustRun("", "prepare", "--verdict", "approve")
 	h.mustRun("", changes...)
 	assertContains(t, h.mustRun("", "export", "--dry-run"),
 		"--- thread keep open api/transfer.go:5 d1\ncallers can't tell")
