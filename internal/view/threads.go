@@ -59,7 +59,7 @@ func (m *model) threadNotes() []Note {
 		add := func(kind, label, text string, dim bool) {
 			n := Note{File: d.File, Line: d.Line, Kind: kind, Label: label, Text: text, Dim: dim,
 				Thread: d.ID, Focus: true}
-			if d.File == "" || d.OldLine {
+			if d.File == "" || d.OldLine || r.File(d.File) == nil {
 				n.File, n.Line, n.Top = "", 0, true
 			}
 			out = append(out, n)
@@ -70,10 +70,13 @@ func (m *model) threadNotes() []Note {
 		}
 		for i, n := range notes {
 			text := chatSpan.ReplaceAllString(strings.TrimSpace(n.Body), "$1$2")
-			if i == 0 && d.OldLine {
+			switch {
+			case i == 0 && d.OldLine:
 				text = fmt.Sprintf("%s:%d (line removed) · %s", d.File, d.Line, text)
-			} else if i == 0 && d.File == "" {
+			case i == 0 && d.File == "":
 				text = "general · " + text
+			case i == 0 && r.File(d.File) == nil:
+				text = fmt.Sprintf("%s:%d (not in this round) · %s", d.File, d.Line, text)
 			}
 			if n.Author == r.MR.Me {
 				add("comment", "YOU", text, false)

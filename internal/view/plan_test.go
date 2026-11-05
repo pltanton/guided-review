@@ -235,3 +235,30 @@ func TestNoScrollBeforeTheSizeIsKnown(t *testing.T) {
 		t.Fatalf("the first size keeps the top in view: offset %d cursor %d", m.offset, m.cursor)
 	}
 }
+
+func TestThreadOnAFileOutsideTheRoundSitsOnTop(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.review.MR = &state.MR{Me: "me"}
+	m.review.Round = 2
+	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "me", Resolvable: true,
+		File: "gone/elsewhere.go", Line: 7, Body: "is this safe?",
+		Notes: []state.Note{{Author: "me", Body: "is this safe?"}, {Author: "kai", Body: "yes, fixed"}}}}
+	notes := m.notes()
+	var top []Note
+	for _, n := range notes {
+		if n.Thread == "d1" {
+			top = append(top, n)
+		}
+	}
+	if len(top) == 0 {
+		t.Fatal("the thread is shown")
+	}
+	for _, n := range top {
+		if !n.Top || n.File != "" {
+			t.Fatalf("a thread on a file outside the round is a top note: %+v", n)
+		}
+	}
+	if !strings.Contains(top[0].Text, "elsewhere.go:7 (not in this round)") {
+		t.Fatalf("the first note says where the thread is: %q", top[0].Text)
+	}
+}

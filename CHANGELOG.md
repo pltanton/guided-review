@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A thread of yours on a file outside the round's diff no longer hides: it sits on top of the
+  diff with where it is, and `enter` decides it.
 - The viewer no longer opens scrolled a few lines down: it waited for the terminal size
   with a one-row screen and kept that scroll.
 - When the agent's reading order arrives, a reader still at the start of the diff moves to
