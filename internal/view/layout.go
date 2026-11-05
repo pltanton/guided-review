@@ -725,17 +725,15 @@ func (m *model) sideFiles(h, w int) []sideEntry {
 	if m.focusFiles {
 		label = cursorStyle.Render("FILES")
 	}
-	read, core := 0, 0
+	read := 0
 	for _, f := range m.review.Files {
-		if f.Tier == state.TierCore {
-			core++
-			if f.Read {
-				read++
-			}
+		if f.Tier == state.TierCore && f.Read {
+			read++
 		}
 	}
-	count := fmt.Sprintf("agent read %d/%d", read, core)
-	title := plain(row(label, dimStyle.Render(scrollMarks(top, shown, len(files))+count)))
+	core, added, deleted := m.tierStat(state.TierCore)
+	count := stat(added, deleted) + dimStyle.Render(fmt.Sprintf(" · read %d/%d", read, core))
+	title := plain(row(label, dimStyle.Render(scrollMarks(top, shown, len(files)))+count))
 	out := append([]sideEntry{{text: title, files: true}}, files[top:top+shown]...)
 	if len(out)+len(flow)+1 <= limit {
 		out = append(out, flow...)

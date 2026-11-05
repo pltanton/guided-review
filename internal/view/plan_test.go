@@ -46,8 +46,9 @@ func TestTreeOrderAndMarks(t *testing.T) {
 			t.Fatalf("tree row %d lacks %q:\n%s", i, w, got)
 		}
 	}
-	if !strings.Contains(lines[1], "● ⚑1 1") || !strings.Contains(lines[2], "● 2") {
-		t.Fatalf("order, flags and the unseen dot:\n%s", got)
+	if !strings.Contains(lines[1], "+0 −0  ● ⚑1 1") || !strings.Contains(lines[2], "● 2") ||
+		!strings.Contains(lines[4], "▸ boilerplate 1") {
+		t.Fatalf("stats, order, flags and the unseen dot:\n%s", got)
 	}
 	m.View()
 	if strings.Contains(treeText(m), "●") {

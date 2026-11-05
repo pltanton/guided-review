@@ -19,6 +19,20 @@ func tierTitle(t state.Tier) string {
 	return string(t)
 }
 
+func stat(added, deleted int) string {
+	return addStyle.Render(fmt.Sprintf("+%d", added)) + " " + delStyle.Render(fmt.Sprintf("−%d", deleted))
+}
+
+// tierStat sums the changes of a tier's files.
+func (m *model) tierStat(t state.Tier) (n, added, deleted int) {
+	for _, f := range m.review.Files {
+		if f.Tier == t {
+			n, added, deleted = n+1, added+f.Added, deleted+f.Deleted
+		}
+	}
+	return n, added, deleted
+}
+
 // treeItems lists the tree in reading order: core files, then a row per folded tier with its
 // files under it while the tier is open.
 func (m *model) treeItems() []treeItem {
@@ -102,13 +116,9 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 			if m.tierOpen[it.tier] {
 				glyph = "▾"
 			}
-			n := 0
-			for _, f := range m.review.Files {
-				if f.Tier == it.tier {
-					n++
-				}
-			}
-			left, right = dimStyle.Render(glyph+" "+tierTitle(it.tier)), dimStyle.Render(fmt.Sprint(n))
+			n, added, deleted := m.tierStat(it.tier)
+			left = dimStyle.Render(glyph + " " + tierTitle(it.tier) + " " + fmt.Sprint(n))
+			right = stat(added, deleted)
 			prevDir = ""
 		default:
 			dir, base := path.Dir(it.file), path.Base(it.file)
@@ -137,6 +147,9 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 			}
 			if unseen[it.file] > 0 {
 				right = accentTone.fg().Render("●") + " " + right
+			}
+			if f != nil {
+				right = stat(f.Added, f.Deleted) + "  " + right
 			}
 			left = style.Render(indent + base)
 			if m.focusFiles && i == m.fileCursor || !m.focusFiles && it.file == current {
