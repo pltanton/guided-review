@@ -3,6 +3,7 @@ package view
 import (
 	"fmt"
 	"path"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/pltanton/guided-review/internal/state"
@@ -19,8 +20,25 @@ func tierTitle(t state.Tier) string {
 	return string(t)
 }
 
+// stat is a fixed 10-column "+added −deleted", so the numbers line up down the tree.
 func stat(added, deleted int) string {
-	return addStyle.Render(fmt.Sprintf("+%d", added)) + " " + delStyle.Render(fmt.Sprintf("−%d", deleted))
+	return addStyle.Render(fmt.Sprintf("%5s", fmt.Sprintf("+%d", added))) + " " +
+		delStyle.Render(fmt.Sprintf("%4s", fmt.Sprintf("−%d", deleted)))
+}
+
+// treeMarks is the fixed tail of a tree row: unseen dot, flag count, order number.
+func treeMarks(unseen bool, flags, order int) string {
+	dot, flag, num := " ", "   ", "   "
+	if unseen {
+		dot = accentTone.fg().Render("●")
+	}
+	if flags > 0 {
+		flag = hotStyle.Render(fmt.Sprintf("%3s", fmt.Sprintf("⚑%d", flags)))
+	}
+	if order > 0 {
+		num = dimStyle.Render(fmt.Sprintf("%3d", order))
+	}
+	return dot + flag + num
 }
 
 // tierStat sums the changes of a tier's files.
@@ -119,7 +137,7 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 			}
 			n, added, deleted := m.tierStat(it.tier)
 			left = dimStyle.Render(glyph + " " + tierTitle(it.tier) + " " + fmt.Sprint(n))
-			right = stat(added, deleted)
+			right = stat(added, deleted) + strings.Repeat(" ", 8)
 			prevDir = ""
 		default:
 			dir, base := path.Dir(it.file), path.Base(it.file)
@@ -138,25 +156,17 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 				f = &c
 			}
 			style := textTone.fg()
-			if f != nil && !f.Read && f.Tier == state.TierCore {
-				style = dimStyle
-				right = hotStyle.Render(m.spin())
-				if m.agentWaiting || m.agentIdle {
-					right = dimStyle.Render("○")
-				}
-			}
-			if f != nil && f.Order > 0 {
-				right = dimStyle.Render(fmt.Sprintf("%d", f.Order))
-			}
-			if n := flags[it.file]; n > 0 {
-				right = hotStyle.Render(fmt.Sprintf("⚑%d", n)) + " " + right
-			}
-			if unseen[it.file] > 0 {
-				right = accentTone.fg().Render("●") + " " + right
-			}
 			if f != nil {
 				a, d := m.fileStat(*f)
-				right = stat(a, d) + "  " + right
+				right = stat(a, d) + " " + treeMarks(unseen[it.file] > 0, flags[it.file], f.Order)
+			}
+			if f != nil && !f.Read && f.Tier == state.TierCore {
+				style = dimStyle
+				mark := hotStyle.Render(m.spin())
+				if m.agentWaiting || m.agentIdle {
+					mark = dimStyle.Render("○")
+				}
+				right = ansi.Truncate(right, ansi.StringWidth(right)-2, "") + " " + mark
 			}
 			left = style.Render(indent + base)
 			if m.focusFiles && i == m.fileCursor || !m.focusFiles && it.file == current {
