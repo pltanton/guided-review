@@ -396,6 +396,11 @@ func (m *model) peek(path string) []string {
 
 func (m *model) jumpTo(loc lspLoc, what string) bool {
 	from := m.current()
+	word := ""
+	if plain, ok := m.currentCode(); ok {
+		a, b := wordBounds(plain, m.col)
+		word = plain[a:b]
+	}
 	if !m.seek(func(x line) bool {
 		return x.File == loc.Path && x.Line == loc.Line && x.Kind != RowNote && x.Kind != RowRemoved
 	}) {
@@ -403,6 +408,12 @@ func (m *model) jumpTo(loc lspLoc, what string) bool {
 	}
 	m.jumpFrom, m.lspTarget = &from, &loc
 	m.popup, m.popupStack, m.popupForward = nil, nil, nil
+	// the column follows the symbol, so the next LSP key asks about it and not whatever sat there
+	if plain, ok := m.currentCode(); ok && word != "" {
+		if i := strings.Index(plain, word); i >= 0 {
+			m.col = i
+		}
+	}
 	m.clamp()
 	km := m.keys()
 	m.status = fmt.Sprintf("%s here, %s:%d · %s back · S-enter peek", what, loc.Path, loc.Line,

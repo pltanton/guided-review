@@ -1864,11 +1864,16 @@ func (shiftEnterMsg) String() string { return "?CSI[50 55 59 50 59 49 51 126]?" 
 func TestLSPJumpsWithinStep(t *testing.T) {
 	m, _ := newTestModel(t)
 	m.peekFile = func(string) []string { return numbered(20) }
-	m.cursor = 1
+	m.rows[1].Plain, m.rows[5].Plain = "package z", "z := 3"
+	m.relist()
+	m.cursor, m.col = 1, 8
 	m.Update(lspMsg{kind: "definition", locs: []lspLoc{{Path: "a.go", Line: 9}}})
 	if m.popup != nil || m.current().Line != 9 || !strings.Contains(m.status, "C-o back · S-enter peek") {
 		t.Fatalf("a definition in this step moves the cursor there: popup %v line %d %q",
 			m.popup, m.current().Line, m.status)
+	}
+	if m.col != 0 {
+		t.Fatalf("the column lands on the symbol jumped to, got %d", m.col)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlO})
 	if m.current().Line != 1 {
