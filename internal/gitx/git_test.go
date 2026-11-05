@@ -164,3 +164,23 @@ func TestChangesRename(t *testing.T) {
 		t.Fatalf("Changes = %+v, %v; want %+v", got, err, want)
 	}
 }
+
+func TestLog(t *testing.T) {
+	tr := testrepo.New(t)
+	tr.Write("a.go", "package a\n")
+	base := tr.Commit("base")
+	tr.Write("a.go", "package a\n\nvar A = 1\n")
+	tr.Commit("first: add A")
+	tr.Write("b.go", "package a\n")
+	tr.Write("a.go", "package a\n\nvar A = 2\n")
+	head := tr.Commit("second: add b, change A")
+	entries, err := gitx.Repo{Dir: tr.Dir}.Log(context.Background(), base, head)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("Log = %+v, %v", entries, err)
+	}
+	if entries[0].Subject != "second: add b, change A" || entries[0].Added != 2 || entries[0].Deleted != 1 ||
+		entries[1].Subject != "first: add A" || entries[1].Added != 2 || entries[1].Deleted != 0 ||
+		len(entries[0].SHA) != 40 {
+		t.Fatalf("Log = %+v", entries)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pltanton/guided-review/internal/diff"
@@ -206,4 +207,32 @@ func (r Repo) WorktreeRemove(ctx context.Context, path string) error {
 func (r Repo) IsAncestor(ctx context.Context, ancestor, rev string) bool {
 	_, err := r.Run(ctx, "merge-base", "--is-ancestor", ancestor, rev)
 	return err == nil
+}
+
+type LogEntry struct {
+	SHA, Subject   string
+	Added, Deleted int
+}
+
+// Log lists the commits in base..head, newest first, with their line counts.
+func (r Repo) Log(ctx context.Context, base, head string) ([]LogEntry, error) {
+	out, err := r.Run(ctx, "log", "--no-color", "--numstat", "--format=%x01%H%x1f%s", base+".."+head)
+	if err != nil {
+		return nil, err
+	}
+	var entries []LogEntry
+	for l := range strings.SplitSeq(out, "\n") {
+		switch {
+		case strings.HasPrefix(l, "\x01"):
+			sha, subject, _ := strings.Cut(l[1:], "\x1f")
+			entries = append(entries, LogEntry{SHA: sha, Subject: subject})
+		case len(entries) > 0 && strings.Contains(l, "\t"):
+			parts := strings.SplitN(l, "\t", 3)
+			a, _ := strconv.Atoi(parts[0])
+			d, _ := strconv.Atoi(parts[1])
+			entries[len(entries)-1].Added += a
+			entries[len(entries)-1].Deleted += d
+		}
+	}
+	return entries, nil
 }

@@ -25,9 +25,10 @@ func stat(added, deleted int) string {
 
 // tierStat sums the changes of a tier's files.
 func (m *model) tierStat(t state.Tier) (n, added, deleted int) {
-	for _, f := range m.review.Files {
+	for _, f := range m.files() {
 		if f.Tier == t {
-			n, added, deleted = n+1, added+f.Added, deleted+f.Deleted
+			a, d := m.fileStat(f)
+			n, added, deleted = n+1, added+a, deleted+d
 		}
 	}
 	return n, added, deleted
@@ -41,14 +42,14 @@ func (m *model) treeItems() []treeItem {
 	}
 	var out []treeItem
 	byTier := map[state.Tier][]treeItem{}
-	for _, f := range m.review.FileOrder() {
+	for _, f := range m.files() {
 		if f.Tier == state.TierCore {
 			out = append(out, treeItem{file: f.Path, tier: f.Tier})
 		} else {
 			byTier[f.Tier] = append(byTier[f.Tier], treeItem{file: f.Path, tier: f.Tier})
 		}
 	}
-	for _, t := range state.Tiers[1:] {
+	for _, t := range append([]state.Tier{tierUnchanged}, state.Tiers[1:]...) {
 		if len(byTier[t]) == 0 {
 			continue
 		}
@@ -131,6 +132,11 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 			}
 			prevDir = dir
 			f := m.review.File(it.file)
+			if f != nil && it.tier == tierUnchanged {
+				c := *f
+				c.Tier = tierUnchanged
+				f = &c
+			}
 			style := textTone.fg()
 			if f != nil && !f.Read && f.Tier == state.TierCore {
 				style = dimStyle
@@ -149,7 +155,8 @@ func (m *model) fileEntries(w int, row rowFunc, plain, selected func(string) str
 				right = accentTone.fg().Render("●") + " " + right
 			}
 			if f != nil {
-				right = stat(f.Added, f.Deleted) + "  " + right
+				a, d := m.fileStat(*f)
+				right = stat(a, d) + "  " + right
 			}
 			left = style.Render(indent + base)
 			if m.focusFiles && i == m.fileCursor || !m.focusFiles && it.file == current {

@@ -163,6 +163,8 @@ func DefaultActions() []Action {
 			run: do((*model).openChangelog)},
 		{Name: "theme", Group: vw, Desc: "pick a colour theme (saved to your config)", Keys: k(),
 			run: do((*model).openThemes)},
+		{Name: "commits", Group: vw, Desc: "the change's commits: pick one to see only what came after it",
+			Keys: k("L"), run: do((*model).openCommits)},
 		{Name: "mouse", Group: vw, Desc: "mouse capture on / off", Keys: k("m"),
 			run: (*model).toggleMouse},
 		{Name: "agent", Group: vw, Desc: "switch to the agent's pane", Keys: k("A"),

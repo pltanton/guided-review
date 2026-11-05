@@ -62,6 +62,8 @@ func (m *model) modal(w, h int) (modalContent, bool) {
 	switch {
 	case m.finishCard:
 		return m.finishCardModal(w), true
+	case m.commitCard:
+		return m.commitsModal(w), true
 	case m.pub != nil:
 		return m.publishModal(w), true
 	case m.threadCard != "":
@@ -83,7 +85,7 @@ const (
 
 func (m *model) fullModal() bool {
 	return !m.help && m.popup != nil && m.popup.kind != "hover" && m.popup.kind != "detail" &&
-		!m.finishCard && m.pub == nil && m.threadCard == "" && !m.newsOpen
+		!m.finishCard && !m.commitCard && m.pub == nil && m.threadCard == "" && !m.newsOpen
 }
 
 func (m *model) drawModal(out []string) {
@@ -207,7 +209,7 @@ func (m *model) modalMouse(msg tea.MouseMsg) tea.Cmd {
 }
 
 func (m *model) blocked() bool {
-	return m.help || m.finishCard || m.pub != nil ||
+	return m.help || m.finishCard || m.commitCard || m.pub != nil ||
 		m.threadCard != "" || m.themeWas != "" || m.newsOpen ||
 		m.popup != nil && m.popup.kind != "hover"
 }

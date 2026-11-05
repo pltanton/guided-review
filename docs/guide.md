@@ -35,9 +35,14 @@ viewer):
 
 `]`/`[` jump between changes, `}`/`{` between files in the tree's order, `n`/`N` between
 notes: flags, threads, comments. `f` focuses the tree; `enter` there jumps to the file.
+`L` lists the change's commits, newest first: `enter` on one shows the change from that
+commit on, files with nothing in that range fold into an `unchanged` group, and the
+header says `since N commits`. `:since 3` does the same for the last three; `:since`
+alone brings the whole change back. Flags, notes and comments stay where they are.
 
-A tree row shows the file, its order number once the agent set one, `⚑N` for its flags
-and `●` while it has changes you have not seen; a file the agent has not read yet is dim.
+A tree row shows the file, `+added −deleted`, its order number once the agent set one,
+`⚑N` for its flags and `●` while it has changes you have not seen; a file the agent has
+not read yet is dim. The groups and the FILES title carry their totals.
 Tests, CI and repository plumbing (`other`) and generated files land in folded groups at
 the end of the tree and of the diff by their paths; the agent adds boilerplate to a group
 of its own and can move a file back. A risk (`RISK`) stays open until you check it off with `x`, on its line or in its

@@ -372,3 +372,84 @@ func TestThreadPastTheEndOfTheFileSitsOnTop(t *testing.T) {
 		t.Fatalf("a thread past the file's end sits on top, one inside stays on its line: %v", top)
 	}
 }
+
+func sinceModel(t *testing.T) *model {
+	t.Helper()
+	m, _ := twoFileModel(t)
+	m.review.Files = []state.File{
+		{Path: "a.go", Tier: state.TierCore, Added: 2, Deleted: 0, Read: true},
+		{Path: "api/b.go", Tier: state.TierCore, Added: 1, Deleted: 0, Read: true},
+	}
+	tr := testrepo.New(t)
+	tr.Write("a.go", "package a\n")
+	base := tr.Commit("base")
+	tr.Write("a.go", "package a\n\nvar A = 1\n")
+	tr.Write("api/b.go", "package api\n")
+	tr.Commit("first: A and b")
+	tr.Write("a.go", "package a\n\nvar A = 2\n")
+	head := tr.Commit("second: A again")
+	m.review.BaseSHA, m.review.HeadSHA = base, head
+	m.repo, m.ctx, m.algo = gitx.Repo{Dir: tr.Dir}, context.Background(), gitx.DefaultDiffAlgorithm
+	store := state.Store{Dir: t.TempDir()}
+	if err := store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.store, m.review, m.src, m.width = store, nil, nil, 160
+	m.reload()
+	return m
+}
+
+func TestSinceShowsTheLastCommitsOnly(t *testing.T) {
+	m := sinceModel(t)
+	if !slices.Equal(m.shownFiles(), []string{"a.go", "api/b.go"}) {
+		t.Fatalf("the whole change first: %v", m.shownFiles())
+	}
+	m.Update(key(":"))
+	typeText(m, "since 1")
+	m.Update(key("enter"))
+	if m.since == "" || m.sinceN != 1 || !slices.Equal(m.shownFiles(), []string{"a.go", ""}) {
+		t.Fatalf(":since 1 keeps only the files of the last commit: %v, since %q", m.shownFiles(), m.since)
+	}
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "since 1 commit (") || !strings.Contains(v, "▸ unchanged 1") ||
+		!strings.Contains(v, "+1 −1") {
+		t.Fatalf("the header names the scope, the tree folds the unchanged file and counts the scope:\n%s", v)
+	}
+	m.Update(key(":"))
+	typeText(m, "since")
+	m.Update(key("enter"))
+	if m.since != "" || !slices.Equal(m.shownFiles(), []string{"a.go", "api/b.go"}) {
+		t.Fatalf(":since alone shows the whole change again: %v", m.shownFiles())
+	}
+}
+
+func TestCommitCardPicksAScope(t *testing.T) {
+	m := sinceModel(t)
+	m.Update(key("L"))
+	v := ansi.Strip(m.View())
+	for _, want := range []string{"┌ commits", " 1  whole change", " 2  ", "second: A again", " 3  ", "first: A and b"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("the card lists the commits newest first:\n%s", v)
+		}
+	}
+	m.Update(key("3"))
+	if m.commitCard || m.since != "" || !slices.Equal(m.shownFiles(), []string{"a.go", "api/b.go"}) {
+		t.Fatalf("picking the oldest commit is the whole change: %q files %v", m.since, m.shownFiles())
+	}
+	m.Update(key("L"))
+	m.Update(key("2"))
+	if m.sinceN != 1 || !slices.Equal(m.shownFiles(), []string{"a.go", ""}) {
+		t.Fatalf("picking the newest commit shows it alone, the rest folded: n %d files %v", m.sinceN, m.shownFiles())
+	}
+	m.Update(key("L"))
+	if m.commitSel != 1 {
+		t.Fatalf("the card marks the current pick: %d", m.commitSel)
+	}
+	m.Update(key("1"))
+	if m.since != "" {
+		t.Fatal("whole change resets the scope")
+	}
+}

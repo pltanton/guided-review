@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The last N commits only: `L` lists the change's commits, `enter` shows the change from
+  the picked commit on, `:since 3` does it by count, `:since` alone brings the whole change
+  back. Files with nothing in the range fold into an `unchanged` group; flags, notes and
+  comments stay where they are.
+- The tree shows `+added −deleted` per file, per group and for the core total; within a
+  commit range the counts follow the range.
 - Replies on any MR thread from the viewer: `enter` on another reviewer's thread offers a
   reply, or directions for the agent, whose draft comes back as «send the reply the agent
   suggests»; your own threads get the same «ask the agent for a reply». Replies are

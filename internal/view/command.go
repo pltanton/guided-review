@@ -15,7 +15,7 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-var commandNames = []string{"q", "f", "set", "msg"}
+var commandNames = []string{"q", "f", "set", "msg", "since", "commits"}
 
 var setOptions = []string{"context=", "diff=", "wrap", "nowrap"}
 
@@ -86,6 +86,12 @@ func (m *model) execCommand(line string) tea.Cmd {
 		return nil
 	case "set":
 		m.setOption(arg)
+		return nil
+	case "since":
+		m.sinceCommand(arg)
+		return nil
+	case "commits":
+		m.openCommits()
 		return nil
 	case "msg":
 		if arg == "" {

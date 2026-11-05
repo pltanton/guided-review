@@ -270,6 +270,9 @@ func (m *model) header() []string {
 	if r.Round > 1 {
 		left += dimStyle.Render(fmt.Sprintf(" · round %d", r.Round))
 	}
+	if m.since != "" {
+		left += hotStyle.Render(" · " + m.scopeLabel())
+	}
 	total, unseen := m.changeCounts()
 	t, u := 0, 0
 	for f, n := range total {

@@ -71,6 +71,13 @@ type model struct {
 	fileFollow string
 	tierOpen   map[state.Tier]bool
 
+	since      string
+	sinceN     int
+	scoped     map[string]bool
+	commits    []gitx.LogEntry
+	commitCard bool
+	commitSel  int
+
 	showRemoved   bool
 	unfolded      map[string]bool
 	folded        map[string]bool
@@ -228,8 +235,10 @@ func (m *model) reload() {
 		return
 	}
 	first := m.review == nil || m.review.ID != r.ID || m.review.HeadSHA != r.HeadSHA
-	if m.src == nil || m.src.base != r.DiffBase() || m.src.head != r.HeadSHA {
-		m.src = newGitSource(m.ctx, m.repo, m.algo, r.DiffBase(), r.HeadSHA)
+	m.review = r
+	if m.src == nil || m.src.base != m.scopeBase() || m.src.head != r.HeadSHA {
+		m.src = newGitSource(m.ctx, m.repo, m.algo, m.scopeBase(), r.HeadSHA)
+		m.rescope()
 	}
 	m.events, _ = inbox.All(m.store.ReviewDir(r.ID))
 	m.lastWait, _ = inbox.LastWait(m.store.ReviewDir(r.ID))
@@ -252,7 +261,7 @@ func (m *model) reload() {
 }
 
 func (m *model) loadAsync(gen int) tea.Cmd {
-	src, files, hotspots, context, notes, open := m.src, m.review.FileOrder(), m.review.Hotspots,
+	src, files, hotspots, context, notes, open := m.src, m.files(), m.review.Hotspots,
 		m.context, m.notes(), m.tierOpen
 	return func() tea.Msg {
 		rows, err := buildRows(src, files, hotspots, context, notes, nil, open)
@@ -261,11 +270,11 @@ func (m *model) loadAsync(gen int) tea.Cmd {
 }
 
 func (m *model) closeCards() {
-	m.finishCard, m.pub, m.threadCard, m.focusFiles = false, nil, "", false
+	m.finishCard, m.pub, m.threadCard, m.focusFiles, m.commitCard = false, nil, "", false, false
 }
 
 func (m *model) rebuild(jumpToHunk bool) {
-	rows, err := buildRows(m.src, m.review.FileOrder(), m.review.Hotspots, m.context, m.notes(),
+	rows, err := buildRows(m.src, m.files(), m.review.Hotspots, m.context, m.notes(),
 		m.reveal, m.tierOpen)
 	if err != nil {
 		m.err = err
@@ -753,6 +762,8 @@ func (m *model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		return m.handleHelpKey(msg)
 	case m.finishCard:
 		return m.handleFinishCardKey(msg)
+	case m.commitCard:
+		return m.handleCommitsKey(msg)
 	case m.pub != nil:
 		return m.handlePublishKey(msg)
 	case m.threadCard != "":
@@ -919,7 +930,7 @@ func (m *model) changeCounts() (total, unseen map[string]int) {
 
 // persistSeen records in the review the files whose changed lines were all on screen.
 func (m *model) persistSeen() {
-	if m.review == nil || m.loading || len(m.rows) == 0 {
+	if m.review == nil || m.loading || len(m.rows) == 0 || m.since != "" {
 		return
 	}
 	_, unseen := m.changeCounts()
