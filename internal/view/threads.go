@@ -58,15 +58,25 @@ func (m *model) threadsIntro() Note {
 	return Note{Top: true, Kind: "note", Label: fmt.Sprintf("ROUND %d", m.review.Round), Text: text}
 }
 
+// lineGone is true when the thread's line is past the end of the file as it is now.
+func (m *model) lineGone(d state.Discussion) bool {
+	if m.src == nil || d.File == "" {
+		return false
+	}
+	lines, err := m.src.Lines(d.File)
+	return err == nil && d.Line > len(lines)
+}
+
 func (m *model) threadNotes() []Note {
 	r := m.review
 	var out []Note
 	for _, d := range m.myThreads() {
 		t := r.ThreadState(d)
+		gone := m.lineGone(d)
 		add := func(kind, label, text string, dim bool) {
 			n := Note{File: d.File, Line: d.Line, Kind: kind, Label: label, Text: text, Dim: dim,
 				Thread: d.ID, Focus: true}
-			if d.File == "" || d.OldLine || r.File(d.File) == nil {
+			if d.File == "" || d.OldLine || r.File(d.File) == nil || gone {
 				n.File, n.Line, n.Top = "", 0, true
 			}
 			out = append(out, n)
@@ -84,6 +94,8 @@ func (m *model) threadNotes() []Note {
 				text = "general · " + text
 			case i == 0 && r.File(d.File) == nil:
 				text = fmt.Sprintf("%s:%d (not in this round) · %s", d.File, d.Line, text)
+			case i == 0 && gone:
+				text = fmt.Sprintf("%s:%d (the line is gone) · %s", d.File, d.Line, text)
 			}
 			if n.Author == r.MR.Me {
 				add("comment", "YOU", text, false)

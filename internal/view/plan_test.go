@@ -343,3 +343,31 @@ func TestReplyOnAnotherReviewersThread(t *testing.T) {
 		t.Fatalf("the row shows the reply: %q", label)
 	}
 }
+
+func TestThreadPastTheEndOfTheFileSitsOnTop(t *testing.T) {
+	m, _ := newTestModel(t)
+	tr := testrepo.New(t)
+	tr.Write("a.go", "package a\n")
+	base := tr.Commit("base")
+	tr.Write("a.go", strings.Repeat("x\n", 30))
+	head := tr.Commit("head")
+	m.src = newGitSource(context.Background(), gitx.Repo{Dir: tr.Dir}, gitx.DefaultDiffAlgorithm, base, head)
+	m.review.MR = &state.MR{Me: "me"}
+	m.review.Discussions = []state.Discussion{
+		{ID: "gone", Author: "me", Resolvable: true, File: "a.go", Line: 47, Body: "still needed?"},
+		{ID: "here", Author: "me", Resolvable: true, File: "a.go", Line: 10, Body: "and this?"},
+	}
+	top := map[string]bool{}
+	for _, n := range m.notes() {
+		if n.Thread != "" {
+			top[n.Thread] = top[n.Thread] || n.Top
+			if n.Thread == "gone" && n.Top && !strings.Contains(n.Text, "a.go:47 (the line is gone)") &&
+				!strings.HasPrefix(n.Text, "agent") && n.Kind == "comment" {
+				t.Fatalf("the first note says the line is gone: %q", n.Text)
+			}
+		}
+	}
+	if !top["gone"] || top["here"] {
+		t.Fatalf("a thread past the file's end sits on top, one inside stays on its line: %v", top)
+	}
+}
