@@ -133,8 +133,9 @@ threads come first with the author's replies. The agent checks each reply agains
 new code and suggests resolve or keep open with a reply; until it has, a thread says
 «agent is checking». Each thread sits in the code with the whole conversation, the
 agent's take and your decision under it. `n`/`N` walk the notes, `enter` decides
-(resolve, keep open and reply to the author, as the agent proposes) and moves to the
-next undecided thread, `c` asks the agent about it. Undecided threads do not hold up the
+(resolve, keep open and reply to the author, as the agent proposes), `c` asks the agent
+about it. Another reviewer's thread opens the same way: reply yourself, or give the
+agent directions and send the reply it drafts. Replies go out with the review. Undecided threads do not hold up the
 reading, only publishing. Only you decide: the agent has no command for it. Approve is
 refused while any of your threads stays open.
 

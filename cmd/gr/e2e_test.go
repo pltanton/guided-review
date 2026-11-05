@@ -1454,3 +1454,19 @@ func TestRoundKeepsFilesWithYourThreads(t *testing.T) {
 	out := h.mustRun("", "init", "https://h/g/p/-/merge_requests/7")
 	assertContains(t, out, "round 2", "\n  api/transfer.go  [modified]")
 }
+
+func TestExportRepliesOnAnyThread(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.seeAll()
+	_, _, err := updateReview(context.Background(), h.repo.Dir, func(_ session, r *state.Review) error {
+		r.MR.Me = "me"
+		r.Discussions = []state.Discussion{{ID: "d9", Author: "bob", Resolvable: true, File: "api/transfer.go", Line: 4, Body: "why?"}}
+		return r.Decide("d9", state.VerdictOpen, "Because the guard runs first.", time.Now())
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.mustRun("", "prepare", "--verdict", "approve", "--decisions", "-")
+	out := h.mustRun("", "export", "--dry-run")
+	assertContains(t, out, "--- thread keep open api/transfer.go:4 d9\nBecause the guard runs first.")
+}

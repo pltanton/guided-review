@@ -410,9 +410,19 @@ func (m *model) current() line {
 	return line{}
 }
 
+// focus puts the cursor back on the same row after the rows were rebuilt.
 func (m *model) focus(it line) {
 	m.seek(func(x line) bool {
-		return x.File == it.File && x.Line == it.Line && x.NoteHead == it.NoteHead
+		if x.File != it.File || x.Kind != it.Kind || x.Pair != it.Pair {
+			return false
+		}
+		switch x.Kind {
+		case RowNote:
+			return noteKey(x.Row) == noteKey(it.Row) && x.NoteHead == it.NoteHead
+		case RowRemoved:
+			return x.OldLine == it.OldLine
+		}
+		return x.Line == it.Line
 	})
 }
 

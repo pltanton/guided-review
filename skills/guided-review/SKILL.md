@@ -210,6 +210,13 @@ annotations:
      excerpt when it helps, other code named as `path:line`. Send the note again with
      the `detail` filled in; the viewer shows it in the popup that is already open. No
      `gr say` needed.
+   - `[reply] thread ID: directions` — the human wants a reply on that MR thread, yours
+     or another reviewer's, written along those directions. Read the thread (`gr thread
+     list`) and the code it is about, write the reply in the style of a review comment,
+     and send it with `gr thread assess ID --propose open --reply TEXT "<one line on why>"`
+     (keep `--propose resolve` if that was your take on your own thread). The viewer shows
+     the draft in the thread card, where the human sends it or edits it; `gr say` one line:
+     `reply drafted for thread ID`.
    - `[comment] file:lines: comment #N …` — the human saved that comment themselves,
      word for word (the viewer's default for a comment; an ai comment reaches you as a
      message instead). Do not add, edit or rephrase it and do not reply. `[comment]:
@@ -261,7 +268,9 @@ viewer until it has your assessment or you stop.
    only publishing. Decisions are the human's: the viewer records them itself and there
    is no command for it.
 3. `[message] … re thread ID: …` is a question about that thread: answer with `gr say`;
-   if your view changed, assess it again.
+   if your view changed, assess it again. Threads of other reviewers get replies too: the
+   human replies from the viewer or asks you for a draft (`[reply]` above); both are
+   posted with the review.
 
 `gr prepare` refuses while an answered thread has no decision from the viewer, and refuses
 `approve` while any of your threads stays open. A decided resolve also resolves the matching

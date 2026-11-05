@@ -140,9 +140,9 @@ type threadAction struct {
 
 func threadActions(r *state.Review, md *strings.Builder) []threadAction {
 	var out []threadAction
-	for _, d := range r.MyThreads() {
+	for _, d := range r.Discussions {
 		t := r.ThreadState(d)
-		if !t.Decided() {
+		if !t.Decided() || d.Resolved {
 			continue
 		}
 		a := threadAction{ID: d.ID, Reply: t.Reply, Resolve: t.Verdict == state.VerdictResolve}

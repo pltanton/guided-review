@@ -463,6 +463,8 @@ func (m *model) composeMode() (
 	switch {
 	case m.composeKind == kindThreadReply:
 		badge, anchor, hints[0].desc = "REPLY TO AUTHOR", m.threadLabel(), "keep open, send on publishing"
+	case m.composeKind == kindReplyAsk:
+		badge, anchor, hints[0].desc = "DIRECTIONS FOR THE AGENT'S REPLY", m.threadLabel(), "ask"
 	case m.composeThread != "":
 		badge, anchor = "THREAD", m.threadLabel()
 	case m.composeKind == inbox.KindAsk:

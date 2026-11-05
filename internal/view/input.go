@@ -126,11 +126,11 @@ func (m *model) placeInline() {
 
 func (m *model) inlineCompose() bool {
 	if !m.composing || m.chatting || m.cmdMode != 0 || m.review == nil || m.preview != "" ||
-		m.composeThread != "" && m.composeKind != kindThreadReply {
+		m.composeThread != "" && m.composeKind != kindThreadReply && m.composeKind != kindReplyAsk {
 		return false
 	}
 	switch m.composeKind {
-	case kindThreadReply:
+	case kindThreadReply, kindReplyAsk:
 		return true
 	case inbox.KindMessage, inbox.KindAsk:
 		return m.anchorFile != ""
@@ -272,6 +272,8 @@ func (m *model) handleCompose(msg tea.KeyMsg) tea.Cmd {
 		switch {
 		case m.composeKind == kindThreadReply:
 			m.decideThread(thread, state.VerdictOpen, text)
+		case m.composeKind == kindReplyAsk && text != "":
+			m.emit(inbox.Event{Kind: inbox.KindReply, Thread: thread, Text: text})
 		case thread != "" && text != "":
 			m.emit(inbox.Event{Kind: inbox.KindMessage, Text: "re thread " + thread + ": " + text})
 		case text == "" && m.composeKind == inbox.KindAsk && m.anchorFile != "":

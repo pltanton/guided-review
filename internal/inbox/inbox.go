@@ -22,6 +22,7 @@ const (
 	KindComment  = "comment"
 	KindAsk      = "ask"
 	KindDetail   = "detail"
+	KindReply    = "reply"
 
 	FileName     = "inbox.jsonl"
 	offsetFile   = "inbox.offset"
@@ -33,6 +34,7 @@ const (
 type Event struct {
 	Time    time.Time `json:"time"`
 	Kind    string    `json:"kind"`
+	Thread  string    `json:"thread,omitempty"`
 	File    string    `json:"file,omitempty"`
 	Lines   string    `json:"lines,omitempty"`
 	Comment int       `json:"comment,omitempty"`
@@ -42,6 +44,9 @@ type Event struct {
 func (e Event) String() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "[%s]", e.Kind)
+	if e.Thread != "" {
+		fmt.Fprintf(&b, " thread %s", e.Thread)
+	}
 	if e.File != "" {
 		fmt.Fprintf(&b, " %s:%s", e.File, e.Lines)
 	}

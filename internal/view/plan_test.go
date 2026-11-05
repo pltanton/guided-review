@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pltanton/guided-review/internal/gitx"
+	"github.com/pltanton/guided-review/internal/inbox"
 	"github.com/pltanton/guided-review/internal/state"
 	"github.com/pltanton/guided-review/internal/testrepo"
 )
@@ -201,8 +202,7 @@ func TestOrderArrivalMovesAReaderStillAtTheStart(t *testing.T) {
 	if m.current().File != "api/c.go" || m.offset != 0 {
 		t.Fatalf("a reader still at the start follows the order: %+v offset %d", m.current(), m.offset)
 	}
-	m.Update(key("j"))
-	m.Update(key("j"))
+	m.seek(func(l line) bool { return l.File == "api/b.go" && l.Line == 3 })
 	was := m.current()
 	err = store.UpdateCurrent(func(r *state.Review) error {
 		r.File("a.go").Order = 1
@@ -256,5 +256,90 @@ func TestThreadOnAFileOutsideTheRoundSitsOnTop(t *testing.T) {
 	}
 	if !strings.Contains(top[0].Text, "elsewhere.go:7 (not in this round)") {
 		t.Fatalf("the first note says where the thread is: %q", top[0].Text)
+	}
+}
+
+func TestFocusSurvivesARebuildOnRemovedLinesAndNotes(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.rows = append(m.rows,
+		Row{Kind: RowRemoved, File: "a.go", OldLine: 7, Text: "gone"},
+		Row{Kind: RowRemoved, File: "a.go", OldLine: 8, Text: "gone too"},
+		Row{Kind: RowNote, File: "a.go", Line: 9, Text: "first", NoteKind: "mr", NoteLabel: "@kai"},
+		Row{Kind: RowNote, File: "a.go", Line: 9, Text: "second", NoteKind: "hotspot", NoteLabel: "DECIDE"},
+	)
+	m.showRemoved = true
+	m.relist()
+	m.seek(func(l line) bool { return l.Kind == RowRemoved && l.OldLine == 8 })
+	keep := m.current()
+	m.rows = append([]Row{{Kind: RowNote, File: "a.go", Line: 1, Text: "new on top", NoteKind: "note"}}, m.rows...)
+	m.relist()
+	if cur := m.current(); cur.Kind != RowRemoved || cur.OldLine != 8 {
+		t.Fatalf("a removed line keeps the cursor after a rebuild: %+v (was %+v)", cur.Row, keep.Row)
+	}
+	m.seek(func(l line) bool { return l.NoteKind == "hotspot" && l.NoteHead })
+	m.rows = append([]Row{{Kind: RowNote, File: "a.go", Line: 1, Text: "another", NoteKind: "spec"}}, m.rows...)
+	m.relist()
+	if cur := m.current(); cur.NoteKind != "hotspot" || !cur.NoteHead {
+		t.Fatalf("the same note keeps the cursor, not the first note on its line: %+v", cur.Row)
+	}
+}
+
+func TestReplyOnAnotherReviewersThread(t *testing.T) {
+	m, sent := newTestModel(t)
+	m.store = state.Store{Dir: t.TempDir()}
+	m.review.MR = &state.MR{Me: "me"}
+	m.review.Discussions = []state.Discussion{{ID: "d1", Author: "bob", Resolvable: true, File: "a.go", Line: 2,
+		Body: "why not an error?"}}
+	if err := m.store.Save(m.review); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.store.SetCurrent(m.review.ID); err != nil {
+		t.Fatal(err)
+	}
+	m.rows = append(m.rows, Row{Kind: RowNote, File: "a.go", Line: 2, Text: "why not an error?",
+		NoteKind: "mr", NoteLabel: "@bob", Thread: "d1"})
+	m.relist()
+	m.seek(func(l line) bool { return l.Thread == "d1" })
+	m.Update(key("enter"))
+	v := ansi.Strip(m.View())
+	for _, want := range []string{" 1  reply to the author", " 2  ask the agent for a reply, with directions",
+		" 3  discuss it with the agent"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("another reviewer's thread offers a reply:\n%s", v)
+		}
+	}
+	m.Update(key("2"))
+	typeText(m, "say it is a nit and we keep the panic")
+	m.Update(key("enter"))
+	if n := len(*sent); n != 1 || (*sent)[0].Kind != inbox.KindReply || (*sent)[0].Thread != "d1" ||
+		(*sent)[0].Text != "say it is a nit and we keep the panic" {
+		t.Fatalf("directions reach the agent as a reply request: %+v", *sent)
+	}
+	if got := (*sent)[0].String(); got != "[reply] thread d1: say it is a nit and we keep the panic" {
+		t.Fatalf("event line: %q", got)
+	}
+	err := m.store.UpdateCurrent(func(r *state.Review) error {
+		r.SetThread(state.Thread{ID: "d1", Proposed: state.VerdictOpen, ProposedReply: "A nit: the panic stays, it is unreachable."})
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.reload()
+	m.seek(func(l line) bool { return l.Thread == "d1" })
+	m.Update(key("enter"))
+	if v := ansi.Strip(m.View()); !strings.Contains(v, " 3  send the reply the agent suggests") {
+		t.Fatalf("the agent's draft becomes an item:\n%s", v)
+	}
+	m.Update(key("3"))
+	r, err := m.store.LoadCurrent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th := r.ThreadState(r.Discussions[0]); !th.Decided() || th.Reply != "A nit: the panic stays, it is unreachable." {
+		t.Fatalf("the reply is recorded for publishing: %+v", th)
+	}
+	if label, _ := m.threadBadge(m.review.Discussions[0]); label != "@bob ↩ your reply" {
+		t.Fatalf("the row shows the reply: %q", label)
 	}
 }

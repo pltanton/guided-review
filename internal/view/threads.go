@@ -12,7 +12,14 @@ import (
 	"github.com/pltanton/guided-review/internal/state"
 )
 
-const kindThreadReply = "thread-reply"
+const (
+	kindThreadReply = "thread-reply"
+	kindReplyAsk    = "reply-ask"
+	itemReply       = "reply to the author"
+	itemAskReply    = "ask the agent for a reply, with directions"
+	itemAgentReply  = "send the reply the agent suggests"
+	itemDiscuss     = "discuss it with the agent"
+)
 
 func (m *model) myThreads() []state.Discussion {
 	if m.review == nil {
@@ -134,22 +141,19 @@ func (m *model) decideThread(id, verdict, reply string) {
 	if verdict == state.VerdictNone {
 		return
 	}
-	found := m.seek(func(l line) bool {
-		if l.NoteKind != "hotspot" || !l.NoteHead || l.Thread == "" {
-			return false
-		}
-		d := m.review.Discussion(l.Thread)
-		return d != nil && m.review.Answered(*d) && !m.review.ThreadState(*d).Decided()
-	})
-	if !found {
+	if n := m.pendingThreads(); n > 0 {
+		m.status += fmt.Sprintf(" · %d more to decide, %s walks the notes", n, m.keys().key("next-note"))
+	} else {
 		m.status = "all answered threads decided"
 	}
-	m.clamp()
 }
 
 func (m *model) threadBadge(d state.Discussion) (label string, resolved bool) {
 	r := m.review
 	if r.MR == nil || d.Author != r.MR.Me {
+		if t := r.ThreadState(d); t.Decided() && t.Reply != "" {
+			return "@" + d.Author + " ↩ your reply", false
+		}
 		return "@" + d.Author, false
 	}
 	switch t := r.ThreadState(d); {
@@ -168,11 +172,18 @@ func (m *model) mine(d state.Discussion) bool {
 }
 
 func (m *model) threadCardItems(d state.Discussion) []string {
-	if !m.mine(d) {
-		return []string{"discuss it with the agent"}
-	}
 	t := m.review.ThreadState(d)
-	items := []string{"resolve", "keep open and reply to the author"}
+	if !m.mine(d) {
+		items := []string{itemReply, itemAskReply}
+		if t.ProposedReply != "" {
+			items = append(items, itemAgentReply)
+		}
+		if t.Decided() {
+			items = append(items, "undo the reply")
+		}
+		return append(items, itemDiscuss)
+	}
+	items := []string{"resolve", "keep open and reply to the author", itemAskReply}
 	if t.Proposed != "" {
 		items = append(items, "as the agent proposes: "+verdictWord(t.Proposed))
 	}
@@ -214,7 +225,7 @@ func (m *model) threadCardModal(w int) modalContent {
 			body = append(body, dimStyle.Render("reply it suggests: ")+t.ProposedReply)
 		}
 	}
-	if m.mine(d) {
+	if m.mine(d) || t.Decided() {
 		label, _ := threadDecision(m.review, d, t)
 		body = append(body, "", "now: "+label)
 	}
@@ -250,14 +261,20 @@ func (m *model) threadAction(d state.Discussion, item string) {
 	switch {
 	case item == "resolve":
 		m.decideThread(d.ID, state.VerdictResolve, "")
-	case item == "keep open and reply to the author":
+	case item == "keep open and reply to the author" || item == itemReply:
 		reply := cmp.Or(t.Reply, t.ProposedReply)
 		m.composing, m.composeKind, m.composeThread = true, kindThreadReply, d.ID
 		m.input, m.inputPos = []rune(reply), len([]rune(reply))
 		m.placeInline()
+	case item == itemAskReply:
+		m.composing, m.composeKind, m.composeThread = true, kindReplyAsk, d.ID
+		m.input, m.inputPos = nil, 0
+		m.placeInline()
 	case strings.HasPrefix(item, "as the agent proposes"):
 		m.decideThread(d.ID, t.Proposed, t.ProposedReply)
-	case item == "undo the decision":
+	case item == itemAgentReply:
+		m.decideThread(d.ID, state.VerdictOpen, t.ProposedReply)
+	case item == "undo the decision" || item == "undo the reply":
 		m.decideThread(d.ID, state.VerdictNone, "")
 	default:
 		m.startChat(true)

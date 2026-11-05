@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Replies on any MR thread from the viewer: `enter` on another reviewer's thread offers a
+  reply, or directions for the agent, whose draft comes back as «send the reply the agent
+  suggests»; your own threads get the same «ask the agent for a reply». Replies are
+  posted with the review.
+- The cursor no longer jumps after a thread decision or a comment: a removed line and a
+  note keep their place when the rows are rebuilt, and deciding a thread stays where you
+  are instead of moving to the next one.
 - A thread of yours on a file outside the round's diff no longer hides: it sits on top of the
   diff with where it is, and `enter` decides it.
 - The viewer no longer opens scrolled a few lines down: it waited for the terminal size

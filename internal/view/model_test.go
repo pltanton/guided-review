@@ -2201,7 +2201,8 @@ func TestThreadCardInCode(t *testing.T) {
 	m.Update(key("enter"))
 	v := ansi.Strip(m.View())
 	for _, want := range []string{"┌ thread · a.go:2 · @me", "alice │ fixed in b.go",
-		"agent: resolve — the error is returned now", " 3  as the agent proposes: resolve"} {
+		"agent: resolve — the error is returned now", " 3  ask the agent for a reply, with directions",
+		" 4  as the agent proposes: resolve"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("thread card lacks %q:\n%s", want, v)
 		}
