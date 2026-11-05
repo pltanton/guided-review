@@ -46,7 +46,7 @@ func TestTreeOrderAndMarks(t *testing.T) {
 			t.Fatalf("tree row %d lacks %q:\n%s", i, w, got)
 		}
 	}
-	if !strings.Contains(lines[1], "+0   −0 ● ⚑1  1") || !strings.Contains(lines[2], "●     2") ||
+	if !strings.Contains(lines[1], "   0 0   ● ⚑1  1") || !strings.Contains(lines[2], "●     2") ||
 		!strings.Contains(lines[4], "▸ boilerplate 1") {
 		t.Fatalf("stats, order, flags and the unseen dot:\n%s", got)
 	}
@@ -415,7 +415,7 @@ func TestSinceShowsTheLastCommitsOnly(t *testing.T) {
 	}
 	v := ansi.Strip(m.View())
 	if !strings.Contains(v, "since 1 commit (") || !strings.Contains(v, "▸ unch") ||
-		!strings.Contains(v, "+1   −1") {
+		!strings.Contains(v, "   1 1  ") {
 		t.Fatalf("the header names the scope, the tree folds the unchanged file and counts the scope:\n%s", v)
 	}
 	m.Update(key(":"))

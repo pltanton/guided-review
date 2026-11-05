@@ -20,10 +20,9 @@ func tierTitle(t state.Tier) string {
 	return string(t)
 }
 
-// stat is a fixed 10-column "+added −deleted", so the numbers line up down the tree.
+// stat is a fixed 8-column pair, added in green against deleted in red, no signs.
 func stat(added, deleted int) string {
-	return addStyle.Render(fmt.Sprintf("%5s", fmt.Sprintf("+%d", added))) + " " +
-		delStyle.Render(fmt.Sprintf("%4s", fmt.Sprintf("−%d", deleted)))
+	return addStyle.Render(fmt.Sprintf("%4d", added)) + " " + delStyle.Render(fmt.Sprintf("%-3d", deleted))
 }
 
 // treeMarks is the fixed tail of a tree row: unseen dot, flag count, order number.
