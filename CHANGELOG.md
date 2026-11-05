@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `n`/`N` step over a whole thread: from inside one they land on the next note outside it,
+  not on its next reply.
 - The last N commits only: `L` lists the change's commits, `enter` shows the change from
   the picked commit on, `:since 3` does it by count, `:since` alone brings the whole change
   back. Files with nothing in the range fold into an `unchanged` group; flags, notes and

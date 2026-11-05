@@ -203,7 +203,9 @@ func (m *model) nextNote(dir int) {
 		m.searchStep(dir)
 		return
 	}
-	m.jump(dir, func(l line) bool { return l.NoteHead })
+	// a thread is several notes: n/N leave it as a whole
+	cur := m.current().Thread
+	m.jump(dir, func(l line) bool { return l.NoteHead && (cur == "" || l.Thread != cur) })
 }
 
 func (m *model) messageOrOpen() {

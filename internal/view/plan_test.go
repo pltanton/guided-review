@@ -453,3 +453,29 @@ func TestCommitCardPicksAScope(t *testing.T) {
 		t.Fatal("whole change resets the scope")
 	}
 }
+
+func TestNextNoteLeavesTheWholeThread(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.rows = append(m.rows[:4:4],
+		Row{Kind: RowNote, File: "a.go", Line: 2, Text: "you", NoteKind: "comment", Thread: "d1"},
+		Row{Kind: RowNote, File: "a.go", Line: 2, Text: "kai", NoteKind: "mr", Thread: "d1"},
+		Row{Kind: RowNote, File: "a.go", Line: 2, Text: "decide", NoteKind: "hotspot", Thread: "d1"},
+		Row{Kind: RowCode, File: "a.go", Line: 3, Text: "y := 2"},
+		Row{Kind: RowNote, File: "a.go", Line: 3, Text: "other", NoteKind: "mr", Thread: "d2"},
+	)
+	m.relist()
+	m.cursor = 0
+	m.Update(key("n"))
+	m.Update(key("n"))
+	if m.current().Thread != "d1" {
+		t.Fatalf("n reaches the first thread: %+v", m.current().Row)
+	}
+	m.Update(key("n"))
+	if m.current().Thread != "d2" {
+		t.Fatalf("n from inside a thread lands on the next thread, not its next note: %+v", m.current().Row)
+	}
+	m.Update(key("N"))
+	if m.current().Thread != "d1" || m.current().Text != "decide" {
+		t.Fatalf("N goes back to the previous thread's last note: %+v", m.current().Row)
+	}
+}
