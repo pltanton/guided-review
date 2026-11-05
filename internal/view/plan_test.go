@@ -504,3 +504,46 @@ func TestThreadCardKeepsItsChoicesOnScreen(t *testing.T) {
 		t.Fatal("a digit still picks")
 	}
 }
+
+func TestSelectionSurvivesTheChatOpening(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width = 160
+	m.rows = append(m.rows[:4:4],
+		Row{Kind: RowNote, File: "a.go", Line: 2, Text: strings.Repeat("a note that wraps differently at every width ", 40), NoteKind: "note"},
+		Row{Kind: RowCode, File: "a.go", Line: 3, OldLine: 2, Text: "y := 2"},
+		Row{Kind: RowAdded, File: "a.go", Line: 9, Text: "z := 3", HunkStart: true},
+	)
+	m.relist()
+	m.seek(func(l line) bool { return l.Line == 3 && l.Kind == RowCode })
+	m.Update(key("v"))
+	m.Update(key("j"))
+	file, lines, _ := m.selection()
+	if file != "a.go" || lines != "3-9" {
+		t.Fatalf("selection before: %s:%s", file, lines)
+	}
+	m.Update(key("C"))
+	m.View()
+	if !m.chatOpen() || !m.visual {
+		t.Fatal("C opens the chat and keeps the selection")
+	}
+	if f, l, _ := m.selection(); f != "a.go" || l != "3-9" {
+		t.Fatalf("the selection keeps its lines when the column narrows: %s:%s", f, l)
+	}
+}
+
+func TestInlineComposerStaysOnItsLineWhenNotesArrive(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.seek(func(l line) bool { return l.Line == 9 })
+	m.Update(key("enter"))
+	if !m.inlineCompose() || m.lines[m.inlineAt].Line != 9 {
+		t.Fatalf("the box opens under line 9: at %d", m.inlineAt)
+	}
+	m.rows = append(m.rows[:2:2], append([]Row{
+		{Kind: RowNote, File: "a.go", Line: 2, Text: "a note that just arrived", NoteKind: "note"},
+		{Kind: RowNote, File: "a.go", Line: 2, Text: "and another", NoteKind: "spec"},
+	}, m.rows[2:]...)...)
+	m.relist()
+	if m.lines[m.inlineAt].Line != 9 {
+		t.Fatalf("the box follows its line when rows are added above: at %d, line %d", m.inlineAt, m.lines[m.inlineAt].Line)
+	}
+}

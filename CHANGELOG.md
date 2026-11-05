@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A selection no longer shifts when `c`/`C` open the chat, and the comment box no longer
+  jumps when the agent's notes arrive: both ends of a selection and the box's row are found
+  again after the rows are relaid, as the cursor already was.
 - No gate on your MR threads any more: `gr prepare` and the viewer no longer refuse to
   publish with an answered thread undecided, nor approve with your threads open; an
   undecided thread stays as it is on the MR.

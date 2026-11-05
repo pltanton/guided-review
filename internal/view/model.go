@@ -373,6 +373,13 @@ func (m *model) useSplit() bool {
 
 func (m *model) relist() {
 	keep := m.current()
+	var keepAnchor, keepInline line
+	if m.visual && m.anchor < len(m.lines) {
+		keepAnchor = m.lines[m.anchor]
+	}
+	if m.composing && m.inlineAt < len(m.lines) {
+		keepInline = m.lines[m.inlineAt]
+	}
 	m.listW = m.mainWidth()
 	width := m.listW - noteIndent
 	if m.useSplit() {
@@ -388,6 +395,13 @@ func (m *model) relist() {
 	}
 	if keep.File != "" {
 		m.focus(keep)
+	}
+	// the selection's other end is an index too: find it again after the rows changed
+	if i := m.find(keepAnchor); m.visual && i >= 0 {
+		m.anchor = i
+	}
+	if i := m.find(keepInline); m.composing && i >= 0 {
+		m.inlineAt = i
 	}
 	m.clamp()
 }
@@ -422,7 +436,14 @@ func (m *model) current() line {
 
 // focus puts the cursor back on the same row after the rows were rebuilt.
 func (m *model) focus(it line) {
-	m.seek(func(x line) bool {
+	if i := m.find(it); i >= 0 {
+		m.cursor = i
+	}
+}
+
+// find is the index of the same row in the current lines, -1 when it is gone.
+func (m *model) find(it line) int {
+	return slices.IndexFunc(m.lines, func(x line) bool {
 		if x.File != it.File || x.Kind != it.Kind || x.Pair != it.Pair {
 			return false
 		}
