@@ -547,3 +547,23 @@ func TestInlineComposerStaysOnItsLineWhenNotesArrive(t *testing.T) {
 		t.Fatalf("the box follows its line when rows are added above: at %d, line %d", m.inlineAt, m.lines[m.inlineAt].Line)
 	}
 }
+
+func TestNotesWrapAtAReadableWidth(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.width, m.height = 260, 30
+	long := strings.Repeat("word ", 60)
+	m.rows = append(m.rows[:4:4], Row{Kind: RowNote, File: "a.go", Line: 2, Text: long, NoteKind: "note"})
+	m.relist()
+	heads := 0
+	for _, l := range m.lines {
+		if l.Kind == RowNote && l.NoteKind == "note" && l.Text != "why x" {
+			heads++
+			if ansi.StringWidth(l.Text) > noteMaxWidth {
+				t.Fatalf("a note row wider than %d columns: %d", noteMaxWidth, ansi.StringWidth(l.Text))
+			}
+		}
+	}
+	if heads < 3 {
+		t.Fatalf("a long note wraps into several rows on a wide screen, got %d", heads)
+	}
+}

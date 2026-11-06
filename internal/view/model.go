@@ -381,7 +381,8 @@ func (m *model) relist() {
 		keepInline = m.lines[m.inlineAt]
 	}
 	m.listW = m.mainWidth()
-	width := m.listW - noteIndent
+	// a note reads best at a column's width, not a wide screen's
+	width := min(m.listW-noteIndent, noteMaxWidth)
 	if m.useSplit() {
 		m.lines = pairRows(expandNotes(m.rows, width, m.folded))
 	} else {

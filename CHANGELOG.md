@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Notes and comments wrap at 100 columns and their box ends there, instead of running the
+  width of a wide screen.
 - A selection no longer shifts when `c`/`C` open the chat, and the comment box no longer
   jumps when the agent's notes arrive: both ends of a selection and the box's row are found
   again after the rows are relaid, as the cursor already was.

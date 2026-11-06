@@ -652,10 +652,16 @@ func (m *model) paintRow(i int, line string) string {
 		return paint(line, selectTone)
 	case l.Kind == RowFile:
 		return paint(line, fileTone)
-	case l.Kind == RowNote && l.Dim:
-		return paint(line, surfaceTone)
 	case l.Kind == RowNote:
-		return paint(line, noteKinds[l.NoteKind].bg)
+		bg := noteKinds[l.NoteKind].bg
+		if l.Dim {
+			bg = surfaceTone
+		}
+		// the box ends where the note's text can, not at the screen's edge
+		if box := noteIndent + noteMaxWidth + 1; ansi.StringWidth(line) > box {
+			return paint(ansi.Truncate(line, box, ""), bg) + ansi.TruncateLeft(line, box, "")
+		}
+		return paint(line, bg)
 	case l.Pair:
 	case l.Kind == RowAdded:
 		return paint(line, addLineTone)
@@ -789,7 +795,8 @@ func emphasize(text string, emph [][2]int, kind RowKind) string {
 }
 
 const (
-	noteIndent = 1 + 7 + 2
+	noteIndent   = 1 + 7 + 2
+	noteMaxWidth = 100
 )
 
 type noteKind struct {
