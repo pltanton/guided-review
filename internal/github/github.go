@@ -60,7 +60,10 @@ func Gh(ctx context.Context, args ...string) ([]byte, error) {
 type PR struct {
 	Title string `json:"title"`
 	URL   string `json:"html_url"`
-	Head  struct {
+	User  struct {
+		Login string `json:"login"`
+	} `json:"user"`
+	Head struct {
 		SHA string `json:"sha"`
 	} `json:"head"`
 	Base struct {

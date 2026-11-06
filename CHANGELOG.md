@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `gr notify set <target>` records where the result is announced, a chat thread, a channel
+  or a person named at the start; `gr notify` prints the facts of what went out as JSON,
+  and the notify skill fills a fixed message from them instead of writing its own. The MR
+  author is stored at `gr init`.
 - Notes and comments wrap at 100 columns and their box ends there, instead of running the
   width of a wide screen.
 - A selection no longer shifts when `c`/`C` open the chat, and the comment box no longer

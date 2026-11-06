@@ -208,6 +208,7 @@ func resolveTarget(
 				Project: ref.Project,
 				IID:     ref.IID,
 				Title:   mr.Title,
+				Author:  mr.Author.Username, AuthorName: mr.Author.Name,
 			},
 		}, nil
 	case strings.Contains(arg, ".."):
@@ -553,7 +554,7 @@ func githubTarget(ctx context.Context, e env, repo gitx.Repo, arg string) (targe
 		head:   pr.Head.SHA,
 		mr: &state.MR{
 			Provider: state.ProviderGitHub, URL: pr.URL, Host: ref.Host,
-			Project: ref.Project, IID: ref.Number, Title: pr.Title,
+			Project: ref.Project, IID: ref.Number, Title: pr.Title, Author: pr.User.Login,
 		},
 	}, nil
 }

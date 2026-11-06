@@ -1,7 +1,9 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -107,4 +109,55 @@ func printThreads(e env, r *state.Review) {
 		}
 		e.println()
 	}
+}
+
+// cmdNotify keeps where the result is announced and prints the facts for the message.
+func cmdNotify(ctx context.Context, e env, args []string) error {
+	if len(args) > 0 {
+		if args[0] != "set" || len(args) < 2 {
+			return errors.New("usage: gr notify [set TARGET]")
+		}
+		_, _, err := updateReview(ctx, e.dir, func(_ session, r *state.Review) error {
+			r.Notify = strings.Join(args[1:], " ")
+			return nil
+		})
+		return err
+	}
+	_, r, err := loadReview(ctx, e.dir)
+	if err != nil {
+		return err
+	}
+	if r.MR == nil {
+		return errors.New("no merge request: nothing to announce")
+	}
+	round := max(r.Round, 1)
+	counts := map[string]int{}
+	for _, c := range r.Comments {
+		if c.Published && max(c.Round, 1) == round {
+			counts[string(c.Severity)]++
+		}
+	}
+	replies, resolves := 0, 0
+	for _, t := range r.Threads {
+		if t.ReplyPosted {
+			replies++
+		}
+		if t.Published && t.Verdict == state.VerdictResolve {
+			resolves++
+		}
+	}
+	out := map[string]any{
+		"to": r.Notify, "author": r.MR.Author, "author_name": r.MR.AuthorName,
+		"url": r.MR.URL, "label": r.MR.Label(), "title": r.MR.Title, "round": round,
+		"comments": counts, "replies": replies, "resolves": resolves,
+	}
+	if p := cmp.Or(r.Publish, r.Published); p != nil {
+		out["verdict"], out["approved"] = p.Verdict, p.Approved
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	e.println(string(data))
+	return nil
 }

@@ -694,6 +694,7 @@ func (h *harness) stubGitLab() *[]string {
 			return []byte(`[]`), nil
 		}
 		return fmt.Appendf(nil, `{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7",
+			"author":{"username":"kai","name":"Kai"},
 			"source_branch":"feature","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
 			base, base, head), nil
 	}
@@ -1092,6 +1093,7 @@ func TestThreads(t *testing.T) {
 			return []byte(discussions), nil
 		}
 		return fmt.Appendf(nil, `{"title":"Add guard","web_url":"https://h/g/p/-/merge_requests/7",
+			"author":{"username":"kai","name":"Kai"},
 			"source_branch":"feature","diff_refs":{"base_sha":%q,"start_sha":%q,"head_sha":%q}}`,
 			base, base, head), nil
 	}
@@ -1464,4 +1466,26 @@ func TestExportRepliesOnAnyThread(t *testing.T) {
 	h.mustRun("", "prepare", "--verdict", "approve", "--decisions", "-")
 	out := h.mustRun("", "export", "--dry-run")
 	assertContains(t, out, "--- thread keep open api/transfer.go:4 d9\nBecause the guard runs first.")
+}
+
+func TestNotify(t *testing.T) {
+	h, _ := mrHarness(t)
+	h.seeAll()
+	h.mustRun("", "comment", "add", "--file", "api/transfer.go", "--lines", "4", "--severity", "major", "x")
+	h.mustRun("", "prepare", "--verdict", "changes", "--decisions", "-")
+	h.publishAll()
+	h.mustRun("", "notify", "set", "https://slack/archives/C1/p1")
+	out := h.mustRun("", "notify")
+	var got struct {
+		To, Author, Verdict, Label string
+		Comments                   map[string]int
+		Round                      int
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err, out)
+	}
+	if got.To != "https://slack/archives/C1/p1" || got.Author != "kai" || got.Verdict != "changes" ||
+		got.Label != "MR !7" || got.Comments["major"] != 1 || got.Round != 1 {
+		t.Fatalf("notify facts: %+v", got)
+	}
 }

@@ -353,7 +353,7 @@ func cmdMarkPublished(ctx context.Context, e env, _ []string) error {
 			r.SetThread(t)
 		}
 		if len(missing) == 0 {
-			r.Publish = nil
+			r.Published, r.Publish = r.Publish, nil
 		}
 		return nil
 	})

@@ -31,6 +31,10 @@ type MR struct {
 	Title    string   `json:"title"`
 	WebURL   string   `json:"web_url"`
 	DiffRefs DiffRefs `json:"diff_refs"`
+	Author   struct {
+		Username string `json:"username"`
+		Name     string `json:"name"`
+	} `json:"author"`
 }
 
 type Runner func(ctx context.Context, args ...string) ([]byte, error)

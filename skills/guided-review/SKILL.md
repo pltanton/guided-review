@@ -52,6 +52,8 @@ plugin defines `gr` as `git remote`), write `command gr` everywhere this skill s
    - "state of review … is unreadable": show the human the error as gr printed it (here
      in the terminal, the viewer is not open yet) and offer «start over (--force)» or
      «I'll sort it out». Run `gr init --force` only after they chose it.
+   If the human said where to announce the result — a chat thread link, a channel, a
+   person — run `gr notify set <that>` now; without it the result goes to the MR author.
 2. `gr open` at once, before you read anything — the viewer needs nothing from you: the
    human starts reading the diff while you work. It opens the viewer full screen in a
    tmux window `review-<id>` next to you, restarting it if it is already there. It finds
@@ -344,11 +346,13 @@ list` prints it (and `gr status` while the review is open), so any agent in this
    by hand. GitHub refuses APPROVE and REQUEST_CHANGES on your own PR: then set
    `"event": "COMMENT"` in `review-request.json` and run `gr publish` again without
    `gr export`. After success give the link.
-3. Tell the author. If a `guided-review-notify` skill is available, follow it with the
-   MR link, the verdict, whether the MR was approved (`approve` in `review.json`) and the
-   counts of what was actually published — that is where a team keeps its own way of
-   pinging people. Without one, print a one-line message the human can forward
+3. Tell the author. Run `gr notify`: it prints JSON with `to` (where the human said to
+   announce it, empty for the author), `author`, `author_name`, `url`, `label`, `verdict`,
+   `approved`, the `comments` counts by severity that actually went out, `replies` and
+   `resolves`. If a `guided-review-notify` skill is available, follow it with that JSON:
+   it holds the team's fixed message shape and its way of sending; write nothing of your
+   own. Without one, print one line the human can forward
    (`reviewed !69: changes requested — 1 blocker, 2 major, 3 nit`). Verdict `approve`
-   without approving reads `no blockers, not approved`, never `approve`.
+   with `approved` false reads `no blockers, not approved`, never `approve`.
 4. Ask «close the review?». On yes, `gr done` (removes the worktree, keeps the state for a
    re-review).

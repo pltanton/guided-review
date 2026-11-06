@@ -29,6 +29,8 @@ review
   comment list | resolve ID | delete ID | edit ID [--severity S] TEXT...
   discussions
   thread list | assess ID --propose resolve|open [--reply T] TEXT|-
+  notify [set TARGET]  where to tell about the result (a chat thread link, a channel, a person;
+                       default: the MR author), and the facts of what went out, as JSON
                        your MR threads; the reviewer decides them in the viewer
   prepare --verdict approve|changes|blocked [--decisions TEXT | --decisions-file F]
           [--approve]
@@ -63,6 +65,7 @@ var commands = map[string]command{
 	"comment":        cmdComment,
 	"discussions":    cmdDiscussions,
 	"thread":         cmdThread,
+	"notify":         cmdNotify,
 	"prepare":        cmdPrepare,
 	"export":         cmdExport,
 	"mark-published": cmdMarkPublished,

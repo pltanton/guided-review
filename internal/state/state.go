@@ -57,6 +57,7 @@ type Review struct {
 	Domain       string       `yaml:"domain,omitempty"`
 	Files        []File       `yaml:"files"`
 	Briefing     string       `yaml:"briefing,omitempty"`
+	Notify       string       `yaml:"notify,omitempty"`
 	Hotspots     []Hotspot    `yaml:"hotspots,omitempty"`
 	Annotations  []Annotation `yaml:"annotations,omitempty"`
 	Comments     []Comment    `yaml:"comments,omitempty"`
@@ -66,6 +67,7 @@ type Review struct {
 	Progress     *Progress    `yaml:"progress,omitempty"`
 	SummaryRound int          `yaml:"summary_round,omitempty"`
 	Publish      *PublishPlan `yaml:"publish,omitempty"`
+	Published    *PublishPlan `yaml:"published,omitempty"`
 }
 
 type Message struct {
@@ -133,13 +135,15 @@ type Thread struct {
 }
 
 type MR struct {
-	Provider string `yaml:"provider,omitempty"`
-	URL      string `yaml:"url"`
-	Host     string `yaml:"host"`
-	Project  string `yaml:"project"`
-	IID      int    `yaml:"iid"`
-	Title    string `yaml:"title"`
-	Me       string `yaml:"me,omitempty"`
+	Provider   string `yaml:"provider,omitempty"`
+	URL        string `yaml:"url"`
+	Host       string `yaml:"host"`
+	Project    string `yaml:"project"`
+	IID        int    `yaml:"iid"`
+	Title      string `yaml:"title"`
+	Me         string `yaml:"me,omitempty"`
+	Author     string `yaml:"author,omitempty"`
+	AuthorName string `yaml:"author_name,omitempty"`
 }
 
 type File struct {
